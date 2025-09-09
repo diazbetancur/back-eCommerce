@@ -7,6 +7,5 @@ namespace CC.Domain.Dto
         public Guid ProductId { get; set; }
         public Guid CategoryId { get; set; }
         public bool IsPrimary { get; set; }
-        public CategoryDto Category { get; set; }
     }
 }

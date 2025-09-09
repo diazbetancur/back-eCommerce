@@ -23,13 +23,14 @@ namespace Api_eCommerce.Controllers
         }
 
         /// <summary>
-        /// GET api/Category
+        /// GET api/Product
         /// </summary>
         /// <returns></returns>
         [HttpGet]
         public async Task<IActionResult> GetAllAsync()
         {
-            return Ok(await _productService.GetAllAsync(x => !x.IsDeleted).ConfigureAwait(false));
+            var include = "ProductCategories.Category,ProductImages";
+            return Ok(await _productService.GetAllAsync(x => !x.IsDeleted, includeProperties: include).ConfigureAwait(false));
         }
     }
 }
