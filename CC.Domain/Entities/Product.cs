@@ -1,4 +1,6 @@
-﻿namespace CC.Domain.Entities
+﻿using System.Text.Json;
+
+namespace CC.Domain.Entities
 {
     public class Product : EntityBase<Guid>
     {
@@ -9,7 +11,7 @@
         public decimal Discount { get; set; } = 0;
 
         // Propiedades dinámicas
-        public Dictionary<string, object> DynamicAttributes { get; set; } = new();
+        public JsonDocument? DynamicAttributes { get; set; }
 
         // Múltiples categorías
         public List<ProductCategory> ProductCategories { get; set; } = new();

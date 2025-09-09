@@ -1,6 +1,7 @@
 using CC.Domain.Entities;
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace CC.Domain.Dto
 {
@@ -11,9 +12,9 @@ namespace CC.Domain.Dto
         public string Description { get; set; }
         public decimal Price { get; set; }
         public decimal Discount { get; set; }
-        public Dictionary<string, object> DynamicAttributes { get; set; }
+        public JsonDocument? DynamicAttributes { get; set; }
         public List<ProductCategoryDto>? ProductCategories { get; set; }
-        public List<ProductImage>? ProductImages { get; set; }
+        public List<ProductImageDto>? ProductImages { get; set; }
         public string SearchableText { get; set; }
         public bool IsDeleted { get; set; }
     }
