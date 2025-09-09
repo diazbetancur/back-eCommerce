@@ -29,7 +29,7 @@ namespace Api_eCommerce.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAllAsync()
         {
-            return Ok(await _productService.GetAllAsync(x => !x.IsDeleted, includeProperties: "Category").ConfigureAwait(false));
+            return Ok(await _productService.GetAllAsync(x => !x.IsDeleted).ConfigureAwait(false));
         }
     }
 }

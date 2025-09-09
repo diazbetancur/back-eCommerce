@@ -13,6 +13,8 @@ namespace CC.Domain
             CreateMap<ProductCategory, ProductCategoryDto>().ReverseMap();
             CreateMap<Category, CategoryDto>().ReverseMap();
             CreateMap<ProductProperty, ProductPropertyDto>().ReverseMap();
+            CreateMap<ProductImage, ProductImageDto>().ReverseMap();
+            CreateMap<Banner, BannerDto>().ReverseMap();
         }
     }
 }
