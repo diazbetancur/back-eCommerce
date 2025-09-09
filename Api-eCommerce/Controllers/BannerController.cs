@@ -24,7 +24,10 @@ namespace Api_eCommerce.Controllers
         public async Task<IActionResult> GetAllAsync()
         {
             return Ok(await _bannerService
-                .GetAllAsync(x => x.IsActive && x.StartDate >= DateTime.UtcNow && x.EndDate >= DateTime.UtcNow)
+                .GetAllAsync(x =>
+                    x.IsActive &&
+                    (x.StartDate == null || x.StartDate <= DateTime.UtcNow) &&
+                    (x.EndDate == null || x.EndDate >= DateTime.UtcNow))
                 .ConfigureAwait(false));
         }
     }
