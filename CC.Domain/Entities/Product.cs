@@ -14,6 +14,8 @@
         // Múltiples categorías
         public List<ProductCategory> ProductCategories { get; set; } = new();
 
+        public List<ProductImage> ProductImages { get; set; } = new();
+
         public string SearchableText { get; set; }
         public bool IsDeleted { get; set; } = false;
     }
