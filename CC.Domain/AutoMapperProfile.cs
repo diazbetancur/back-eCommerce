@@ -15,6 +15,9 @@ namespace CC.Domain
             CreateMap<ProductProperty, ProductPropertyDto>().ReverseMap();
             CreateMap<ProductImage, ProductImageDto>().ReverseMap();
             CreateMap<Banner, BannerDto>().ReverseMap();
+            CreateMap<Billing, BillingDto>().ReverseMap();
+            CreateMap<ProductsBilling, ProductsBillingDto>().ReverseMap();
+            CreateMap<LoyalityBilling, LoyalityBillingDto>().ReverseMap();
         }
     }
 }
