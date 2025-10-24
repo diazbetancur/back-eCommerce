@@ -1,8 +1,15 @@
+using Api_eCommerce.Endpoints;
 using Api_eCommerce.Handlers;
+using Api_eCommerce.Metering;
+using Api_eCommerce.Middleware;
 using CC.Domain.Entities;
+using CC.Infraestructure.Admin;
 using CC.Infraestructure.Configurations;
+using CC.Infraestructure.Tenancy;
+using CC.Infraestructure.Tenant;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text.Json.Serialization;
 
@@ -11,7 +18,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddDbContext<AdminDbContext>(opt => opt.UseNpgsql(builder.Configuration.GetConnectionString("ADMIN_PG")));
+builder.Services.AddDataProtection();
+builder.Services.AddScoped<ITenantConnectionProtector, TenantConnectionProtector>();
+builder.Services.AddScoped<ITenantResolver, TenantResolver>();
+builder.Services.AddSingleton<TenantDbContextFactory>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -79,38 +91,10 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseHsts();
-
-    #region Headers
-
-    app.Use(async (context, next) =>
-    {
-        context.Response.Headers.Clear();
-
-        context.Response.Headers.Add("Content-Security-Policy",
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:");
-        context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
-        context.Response.Headers.Add("X-Frame-Options", "DENY");
-        context.Response.Headers.Add("X-Permitted-Cross-Domain-Policies", "master-only");
-        context.Response.Headers.Add("X-XSS-Protection", "1; mode=block");
-        context.Response.Headers.Add("Cache-Control", "no-cache,no-store,must-revalidate");
-        context.Response.Headers.Add("Pragma", "no-cache");
-        context.Response.Headers.Remove("X-Powered-By");
-        context.Response.Headers.Remove("Server");
-        context.Response.Headers.Add("Referrer-Policy", "no-referrer");
-        context.Response.Headers.Add("Permissions-Policy", "fullscreen=(), geolocation=()");
-        context.Request.Headers.Add("X-Content-Type-Options", "nosniff");
-
-        await next();
-    });
-
-    #endregion Headers
 }
 
-app.UseCors(x => x
-.AllowAnyMethod()
-.AllowAnyHeader()
-.SetIsOriginAllowed(origin => true)
-.AllowCredentials());
+app.UseMiddleware<MeteringMiddleware>();
+app.UseMiddleware<TenantResolutionMiddleware>();
 
 app.UseHttpsRedirection();
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
@@ -118,5 +102,8 @@ app.UseAuthentication();
 app.UseMiddleware<ActivityLoggingMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
+
+app.MapSuperAdminTenants();
+app.MapPublicTenantConfig();
 
 app.Run();
