@@ -1,10 +1,14 @@
+using Api_eCommerce.Auth;
 using Api_eCommerce.Endpoints;
 using Api_eCommerce.Handlers;
 using Api_eCommerce.Metering;
 using Api_eCommerce.Middleware;
+using Api_eCommerce.Workers;
 using CC.Domain.Entities;
-using CC.Infraestructure.Admin;
+using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Configurations;
+using CC.Infraestructure.Provisioning;
+using CC.Infraestructure.Sql;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -18,11 +22,29 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
-builder.Services.AddDbContext<AdminDbContext>(opt => opt.UseNpgsql(builder.Configuration.GetConnectionString("ADMIN_PG")));
+#region Admin DB Configuration
+// Configuración de Admin DB - Base de datos central para gestión de tenants
+builder.Services.AddDbContext<AdminDbContext>(opt => 
+    opt.UseNpgsql(builder.Configuration.GetConnectionString("AdminDb"),
+        npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "admin")));
+
+// Configuración para multi-tenancy
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<ITenantConnectionProtector, TenantConnectionProtector>();
 builder.Services.AddScoped<ITenantResolver, TenantResolver>();
 builder.Services.AddSingleton<TenantDbContextFactory>();
+#endregion
+
+#region Provisioning Services
+// Servicios para aprovisionamiento de tenants
+builder.Services.AddScoped<IConfirmTokenService, ConfirmTokenService>();
+builder.Services.AddScoped<ITenantDatabaseCreator, TenantDatabaseCreator>();
+builder.Services.AddScoped<ITenantProvisioner, TenantProvisioner>();
+
+// Worker para procesamiento en background
+builder.Services.AddSingleton<TenantProvisioningWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TenantProvisioningWorker>());
+#endregion
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -67,20 +89,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         ClockSkew = TimeSpan.Zero
     });
 
-#endregion Swagger
+#endregion JWT
 
 var app = builder.Build();
-
-//SeedData(app);
-
-void SeedData(WebApplication app)
-{
-    // Solo se usa si trabajamos con una semilla de datos
-    //var scopedFactory = app.Services.GetService<IServiceScopeFactory>();
-    //using var scope = scopedFactory!.CreateScope();
-    //var service = scope.ServiceProvider.GetService<SeedDB>();
-    //service!.SeedAsync().Wait();
-}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -103,7 +114,9 @@ app.UseMiddleware<ActivityLoggingMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 
+// Mapear endpoints de administración y aprovisionamiento
 app.MapSuperAdminTenants();
 app.MapPublicTenantConfig();
+app.MapProvisioningEndpoints();
 
 app.Run();
