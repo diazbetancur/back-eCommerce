@@ -1,5 +1,5 @@
 using CC.Domain.Tenancy;
-using CC.Infraestructure.AdminDb;
+using CC.Infraestructure.Admin;
 using CC.Infraestructure.Cache;
 using CC.Infraestructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -96,6 +96,7 @@ namespace CC.Aplication.Services
         private async Task<TenantFeatureFlags> LoadFeaturesFromDatabaseAsync(Guid tenantId, CancellationToken ct)
         {
             var tenant = await _adminDb.Tenants
+                .Include(t => t.Plan)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
 
@@ -123,8 +124,9 @@ namespace CC.Aplication.Services
             }
 
             // Si no hay feature flags personalizados, usar los defaults del plan
-            var defaultFlags = DefaultFeatureFlags.GetForPlan(tenant.Plan);
-            _logger.LogDebug("Using default feature flags for plan {Plan} for tenant {TenantId}", tenant.Plan, tenantId);
+            var planCode = tenant.Plan?.Code ?? "Basic";
+            var defaultFlags = DefaultFeatureFlags.GetForPlan(planCode);
+            _logger.LogDebug("Using default feature flags for plan {Plan} for tenant {TenantId}", planCode, tenantId);
             return defaultFlags;
         }
     }

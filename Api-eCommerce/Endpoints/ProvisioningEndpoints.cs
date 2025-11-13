@@ -1,8 +1,7 @@
 using Api_eCommerce.Auth;
 using Api_eCommerce.Workers;
-using CC.Aplication.Provisioning;
-using CC.Domain.Tenancy;
-using CC.Infraestructure.AdminDb;
+using CC.Infraestructure.Admin;
+using CC.Infraestructure.Admin.Entities;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -76,16 +75,27 @@ namespace Api_eCommerce.Endpoints
                         statusCode: StatusCodes.Status409Conflict);
                 }
 
-                // Crear tenant en estado PENDING_VALIDATION
+                // Buscar plan en la base de datos
+                var plan = await adminDb.Plans.FirstOrDefaultAsync(p => p.Code == request.Plan);
+                if (plan == null)
+                {
+                    return Results.Problem(
+                        title: "Plan Not Found",
+                        detail: $"Plan '{request.Plan}' not found in database",
+                        statusCode: StatusCodes.Status400BadRequest);
+                }
+
+                // Crear tenant en estado PENDING
                 var dbName = $"ecom_tenant_{request.Slug.ToLower()}";
                 var tenant = new Tenant
                 {
                     Id = Guid.NewGuid(),
                     Name = request.Name,
                     Slug = request.Slug.ToLower(),
-                    Plan = request.Plan,
+                    PlanId = plan.Id,
                     DbName = dbName,
-                    Status = "PENDING_VALIDATION",
+                    Status = TenantStatus.Pending,
+                    EncryptedConnection = "", // Se llenará durante el aprovisionamiento
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -110,18 +120,14 @@ namespace Api_eCommerce.Endpoints
 
                 logger.LogInformation(
                     "Tenant provisioning initialized. TenantId: {TenantId}, Slug: {Slug}, Plan: {Plan}",
-                    tenant.Id, tenant.Slug, tenant.Plan);
+                    tenant.Id, tenant.Slug, plan.Code);
 
-                // TODO: Implementar rate limiting
-                // TODO: Implementar captcha/hmac validation
-
-                var response = new InitProvisioningResponse
-                {
-                    ProvisioningId = tenant.Id,
-                    ConfirmToken = confirmToken,
-                    Next = "/provision/tenants/confirm",
-                    Message = "Provisioning initialized. Use the confirmation token within 15 minutes to proceed."
-                };
+                var response = new InitProvisioningResponse(
+                    ProvisioningId: tenant.Id,
+                    ConfirmToken: confirmToken,
+                    Next: "/provision/tenants/confirm",
+                    Message: "Provisioning initialized. Use the confirmation token within 15 minutes to proceed."
+                );
 
                 return Results.Ok(response);
             }
@@ -186,7 +192,7 @@ namespace Api_eCommerce.Endpoints
                 }
 
                 // Verificar estado
-                if (tenant.Status != "PENDING_VALIDATION")
+                if (tenant.Status != TenantStatus.Pending)
                 {
                     return Results.Problem(
                         title: "Invalid State",
@@ -194,8 +200,8 @@ namespace Api_eCommerce.Endpoints
                         statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                // Cambiar estado a QUEUED
-                tenant.Status = "QUEUED";
+                // Cambiar estado a SEEDING (será procesado por el worker)
+                tenant.Status = TenantStatus.Seeding;
                 tenant.UpdatedAt = DateTime.UtcNow;
                 await adminDb.SaveChangesAsync();
 
@@ -206,13 +212,12 @@ namespace Api_eCommerce.Endpoints
                     "Tenant provisioning confirmed and queued. TenantId: {TenantId}, Slug: {Slug}",
                     tenant.Id, tenant.Slug);
 
-                var response = new ConfirmProvisioningResponse
-                {
-                    ProvisioningId = tenant.Id,
-                    Status = "QUEUED",
-                    Message = "Provisioning confirmed and queued for processing",
-                    StatusEndpoint = $"/provision/tenants/{tenant.Id}/status"
-                };
+                var response = new ConfirmProvisioningResponse(
+                    ProvisioningId: tenant.Id,
+                    Status: "QUEUED",
+                    Message: "Provisioning confirmed and queued for processing",
+                    StatusEndpoint: $"/provision/tenants/{tenant.Id}/status"
+                );
 
                 return Results.Ok(response);
             }
@@ -234,7 +239,6 @@ namespace Api_eCommerce.Endpoints
             try
             {
                 var tenant = await adminDb.Tenants
-                    .Include(t => t.ProvisioningHistory)
                     .FirstOrDefaultAsync(t => t.Id == provisioningId);
 
                 if (tenant == null)
@@ -245,26 +249,25 @@ namespace Api_eCommerce.Endpoints
                         statusCode: StatusCodes.Status404NotFound);
                 }
 
-                var steps = tenant.ProvisioningHistory
+                var steps = await adminDb.TenantProvisionings
+                    .Where(p => p.TenantId == provisioningId)
                     .OrderBy(p => p.StartedAt)
-                    .Select(p => new ProvisioningStepDto
-                    {
-                        Step = p.Step,
-                        Status = p.Status,
-                        StartedAt = p.StartedAt,
-                        CompletedAt = p.CompletedAt,
-                        Log = p.Message,
-                        ErrorMessage = p.ErrorMessage
-                    })
-                    .ToList();
+                    .Select(p => new ProvisioningStepDto(
+                        p.Step,
+                        p.Status,
+                        p.StartedAt,
+                        p.CompletedAt,
+                        p.Message,
+                        p.ErrorMessage
+                    ))
+                    .ToListAsync();
 
-                var response = new ProvisioningStatusResponse
-                {
-                    Status = tenant.Status,
-                    TenantSlug = tenant.Status == "Active" ? tenant.Slug : null,
-                    DbName = tenant.Status == "Active" ? tenant.DbName : null,
-                    Steps = steps
-                };
+                var response = new ProvisioningStatusResponse(
+                    tenant.Status.ToString(),
+                    tenant.Status == TenantStatus.Ready ? tenant.Slug : null,
+                    tenant.Status == TenantStatus.Ready ? tenant.DbName : null,
+                    steps
+                );
 
                 return Results.Ok(response);
             }
@@ -278,4 +281,11 @@ namespace Api_eCommerce.Endpoints
             }
         }
     }
+
+    // DTOs
+    public record InitProvisioningRequest(string Slug, string Name, string Plan);
+    public record InitProvisioningResponse(Guid ProvisioningId, string ConfirmToken, string Next, string Message);
+    public record ConfirmProvisioningResponse(Guid ProvisioningId, string Status, string Message, string StatusEndpoint);
+    public record ProvisioningStatusResponse(string Status, string? TenantSlug, string? DbName, List<ProvisioningStepDto> Steps);
+    public record ProvisioningStepDto(string Step, string Status, DateTime StartedAt, DateTime? CompletedAt, string? Log, string? ErrorMessage);
 }

@@ -23,16 +23,18 @@ namespace CC.Infraestructure.Admin.Entities
  [Required]
  [MaxLength(200)]
  public string Name { get; set; }
+ [Required]
+ [MaxLength(100)]
+ public string DbName { get; set; }
  public TenantStatus Status { get; set; }
  [Required]
  public string EncryptedConnection { get; set; }
  public Guid? PlanId { get; set; }
  public Plan? Plan { get; set; }
+ public string? FeatureFlagsJson { get; set; }
+ public string? AllowedOrigins { get; set; }
  public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
  public DateTime? UpdatedAt { get; set; }
  public string? LastError { get; set; }
- 
- // CSV de orígenes permitidos para CORS por tenant (e.g. "https://app.com,http://localhost:5173")
- public string? AllowedOrigins { get; set; }
  }
 }

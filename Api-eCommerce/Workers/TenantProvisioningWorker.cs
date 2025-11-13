@@ -1,4 +1,5 @@
-using CC.Infraestructure.AdminDb;
+using CC.Infraestructure.Admin;
+using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.Provisioning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -53,11 +54,11 @@ namespace Api_eCommerce.Workers
                     var provisioner = scope.ServiceProvider.GetRequiredService<ITenantProvisioner>();
                     var adminDb = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
 
-                    // Actualizar estado a "Provisioning"
+                    // Actualizar estado a "Seeding"
                     var tenant = await adminDb.Tenants.FindAsync(new object[] { tenantId }, stoppingToken);
                     if (tenant != null)
                     {
-                        tenant.Status = "Provisioning";
+                        tenant.Status = TenantStatus.Seeding;
                         tenant.UpdatedAt = DateTime.UtcNow;
                         await adminDb.SaveChangesAsync(stoppingToken);
                     }
@@ -86,7 +87,7 @@ namespace Api_eCommerce.Workers
                         var tenant = await adminDb.Tenants.FindAsync(new object[] { tenantId }, stoppingToken);
                         if (tenant != null)
                         {
-                            tenant.Status = "Failed";
+                            tenant.Status = TenantStatus.Failed;
                             tenant.LastError = ex.Message;
                             tenant.UpdatedAt = DateTime.UtcNow;
                             await adminDb.SaveChangesAsync(stoppingToken);

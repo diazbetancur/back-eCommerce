@@ -13,6 +13,7 @@ namespace CC.Infraestructure.Admin
  public DbSet<PlanFeature> PlanFeatures => Set<PlanFeature>();
  public DbSet<TenantFeatureOverride> TenantFeatureOverrides => Set<TenantFeatureOverride>();
  public DbSet<TenantUsageDaily> TenantUsageDaily => Set<TenantUsageDaily>();
+ public DbSet<TenantProvisioning> TenantProvisionings => Set<TenantProvisioning>();
 
  protected override void OnModelCreating(ModelBuilder modelBuilder)
  {
@@ -27,6 +28,13 @@ namespace CC.Infraestructure.Admin
  modelBuilder.Entity<PlanFeature>().HasKey(x => new { x.PlanId, x.FeatureId });
  modelBuilder.Entity<TenantFeatureOverride>().HasKey(x => new { x.TenantId, x.FeatureId });
  modelBuilder.Entity<TenantUsageDaily>().HasKey(x => new { x.TenantId, x.Date });
+ 
+ // Configurar relación TenantProvisioning -> Tenant
+ modelBuilder.Entity<TenantProvisioning>()
+ .HasOne(tp => tp.Tenant)
+ .WithMany()
+ .HasForeignKey(tp => tp.TenantId)
+ .OnDelete(DeleteBehavior.Cascade);
  }
  }
 }

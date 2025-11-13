@@ -7,7 +7,7 @@ using Api_eCommerce.Middleware;
 using Api_eCommerce.Workers;
 using CC.Aplication.Services;
 using CC.Domain.Entities;
-using CC.Infraestructure.AdminDb;
+using CC.Infraestructure.Admin; // ? CORRECTO: Usar Admin en lugar de AdminDb
 using CC.Infraestructure.Configurations;
 using CC.Infraestructure.EF;
 using CC.Infraestructure.Provisioning;
@@ -30,6 +30,13 @@ builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.Re
 builder.Services.AddDbContext<AdminDbContext>(opt => 
     opt.UseNpgsql(builder.Configuration.GetConnectionString("AdminDb"),
         npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "admin")));
+#endregion
+
+#region Legacy DB Context Configuration
+// ?? LEGACY: DBContext para compatibilidad con código anterior (Identity)
+// Este contexto usa la base de datos PgSQL configurada
+builder.Services.AddDbContext<DBContext>(opt => 
+    opt.UseNpgsql(builder.Configuration.GetConnectionString("PgSQL")));
 #endregion
 
 #region Caching
@@ -80,10 +87,11 @@ builder.Services.AddMultiTenantSwagger();
 
 #region Register (dependency injection)
 DependencyInyectionHandler.DepencyInyectionConfig(builder.Services);
-#endregion Register (dependency injection)
+#endregion
 
 #region IdentityCore
-
+// ?? NOTA: Identity está configurado para usar DBContext legacy
+// En el futuro, esto debe migrarse a usar TenantDbContext por tenant
 builder.Services.AddIdentity<User, Role>(opt =>
 {
     opt.Tokens.AuthenticatorTokenProvider = TokenOptions.DefaultAuthenticatorProvider;
@@ -95,10 +103,9 @@ builder.Services.AddIdentity<User, Role>(opt =>
     opt.Password.RequiredUniqueChars = 1;
     opt.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(30);
 }).AddRoles<Role>().AddEntityFrameworkStores<DBContext>().AddDefaultTokenProviders();
+#endregion
 
-#endregion IdentityCore
-
-# region JWT
+#region JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(x => x.TokenValidationParameters = new TokenValidationParameters
     {
@@ -109,8 +116,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(builder.Configuration["jwtKey"]!)),
         ClockSkew = TimeSpan.Zero
     });
-
-#endregion JWT
+#endregion
 
 var app = builder.Build();
 

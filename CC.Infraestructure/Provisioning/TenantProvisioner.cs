@@ -1,11 +1,11 @@
-using CC.Infraestructure.AdminDb;
+using CC.Infraestructure.Admin;
+using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.EF;
 using CC.Infraestructure.Sql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using TenantEntity = CC.Domain.Tenancy.Tenant;
-using TenantProvisioningEntity = CC.Domain.Tenancy.TenantProvisioning;
+using AdminTenant = CC.Infraestructure.Admin.Entities.Tenant;
 
 namespace CC.Infraestructure.Provisioning
 {
@@ -62,7 +62,7 @@ namespace CC.Infraestructure.Provisioning
                 await SeedDataStepAsync(tenant, cancellationToken);
 
                 // Marcar como completado
-                tenant.Status = "Active";
+                tenant.Status = TenantStatus.Ready;
                 tenant.UpdatedAt = DateTime.UtcNow;
                 await _adminDb.SaveChangesAsync(cancellationToken);
 
@@ -73,7 +73,7 @@ namespace CC.Infraestructure.Provisioning
             {
                 _logger.LogError(ex, "Error provisioning tenant {TenantId} ({Slug})", tenantId, tenant.Slug);
                 
-                tenant.Status = "Failed";
+                tenant.Status = TenantStatus.Failed;
                 tenant.LastError = ex.Message;
                 tenant.UpdatedAt = DateTime.UtcNow;
                 await _adminDb.SaveChangesAsync(cancellationToken);
@@ -82,9 +82,9 @@ namespace CC.Infraestructure.Provisioning
             }
         }
 
-        private async Task CreateDatabaseStepAsync(TenantEntity tenant, CancellationToken cancellationToken)
+        private async Task CreateDatabaseStepAsync(AdminTenant tenant, CancellationToken cancellationToken)
         {
-            var step = new TenantProvisioningEntity
+            var step = new TenantProvisioning
             {
                 TenantId = tenant.Id,
                 Step = "CreateDatabase",
@@ -117,9 +117,9 @@ namespace CC.Infraestructure.Provisioning
             }
         }
 
-        private async Task ApplyMigrationsStepAsync(TenantEntity tenant, CancellationToken cancellationToken)
+        private async Task ApplyMigrationsStepAsync(AdminTenant tenant, CancellationToken cancellationToken)
         {
-            var step = new TenantProvisioningEntity
+            var step = new TenantProvisioning
             {
                 TenantId = tenant.Id,
                 Step = "ApplyMigrations",
@@ -160,9 +160,9 @@ namespace CC.Infraestructure.Provisioning
             }
         }
 
-        private async Task SeedDataStepAsync(TenantEntity tenant, CancellationToken cancellationToken)
+        private async Task SeedDataStepAsync(AdminTenant tenant, CancellationToken cancellationToken)
         {
-            var step = new TenantProvisioningEntity
+            var step = new TenantProvisioning
             {
                 TenantId = tenant.Id,
                 Step = "SeedData",
@@ -198,7 +198,7 @@ namespace CC.Infraestructure.Provisioning
             }
         }
 
-        private async Task SeedTenantDataAsync(string connectionString, TenantEntity tenant, CancellationToken cancellationToken)
+        private async Task SeedTenantDataAsync(string connectionString, AdminTenant tenant, CancellationToken cancellationToken)
         {
             var optionsBuilder = new DbContextOptionsBuilder<Tenant.TenantDbContext>();
             optionsBuilder.UseNpgsql(connectionString);
@@ -266,7 +266,9 @@ namespace CC.Infraestructure.Provisioning
             }
 
             // Seed Demo Categories (opcional)
-            if (!await db.Categories.AnyAsync(cancellationToken) && tenant.Plan != "Basic")
+            // Obtener el código del plan si existe
+            var planCode = tenant.Plan?.Code ?? "Basic";
+            if (!await db.Categories.AnyAsync(cancellationToken) && planCode != "Basic")
             {
                 _logger.LogInformation("Seeding demo categories for tenant {TenantId}", tenant.Id);
                 db.Categories.AddRange(
