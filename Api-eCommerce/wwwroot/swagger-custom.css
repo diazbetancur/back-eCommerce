@@ -1,0 +1,463 @@
+/* ========================================
+   Swagger UI - Estilos Personalizados
+   eCommerce Multi-Tenant API
+   ======================================== */
+
+/* ========================================
+   Variables de color personalizadas
+   ======================================== */
+:root {
+    --primary-color: #3b82f6;
+    --primary-dark: #2563eb;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --dark-bg: #1f2937;
+    --dark-card: #374151;
+}
+
+/* ========================================
+   Topbar personalizada
+   ======================================== */
+.swagger-ui .topbar {
+    background-color: var(--dark-bg);
+    border-bottom: 3px solid var(--primary-color);
+    padding: 10px 0;
+}
+
+.swagger-ui .topbar .download-url-wrapper {
+    display: none; /* Ocultar selector de spec */
+}
+
+/* Logo personalizado */
+.swagger-ui .topbar-wrapper::before {
+    content: '??';
+    font-size: 2rem;
+    margin-right: 10px;
+}
+
+.swagger-ui .topbar-wrapper .link {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: white;
+}
+
+/* ========================================
+   Información de la API
+   ======================================== */
+.swagger-ui .info {
+    margin: 30px 0;
+}
+
+.swagger-ui .info .title {
+    font-size: 2.5rem;
+    color: var(--dark-bg);
+    font-weight: 700;
+}
+
+.swagger-ui .info .description {
+    font-size: 1rem;
+    line-height: 1.8;
+}
+
+.swagger-ui .info .description h2,
+.swagger-ui .info .description h3 {
+    color: var(--primary-color);
+    margin-top: 25px;
+    font-weight: 600;
+}
+
+.swagger-ui .info .description code {
+    background-color: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #dc2626;
+    font-size: 0.9em;
+}
+
+/* ========================================
+   Tags (grupos de endpoints)
+   ======================================== */
+.swagger-ui .opblock-tag {
+    font-size: 1.3rem;
+    font-weight: 600;
+    padding: 15px 20px;
+    margin: 10px 0;
+    background: linear-gradient(to right, var(--primary-color), var(--primary-dark));
+    color: white !important;
+    border-radius: 8px;
+    border: none;
+}
+
+.swagger-ui .opblock-tag:hover {
+    background: linear-gradient(to right, var(--primary-dark), var(--primary-color));
+}
+
+.swagger-ui .opblock-tag small {
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: normal;
+}
+
+/* Iconos de colapsar/expandir */
+.swagger-ui .opblock-tag svg {
+    fill: white;
+}
+
+/* ========================================
+   Operaciones (endpoints)
+   ======================================== */
+
+/* GET - Azul */
+.swagger-ui .opblock.opblock-get {
+    border-color: #3b82f6;
+    background-color: rgba(59, 130, 246, 0.05);
+}
+
+.swagger-ui .opblock.opblock-get .opblock-summary-method {
+    background-color: #3b82f6;
+}
+
+/* POST - Verde */
+.swagger-ui .opblock.opblock-post {
+    border-color: #10b981;
+    background-color: rgba(16, 185, 129, 0.05);
+}
+
+.swagger-ui .opblock.opblock-post .opblock-summary-method {
+    background-color: #10b981;
+}
+
+/* PUT - Naranja */
+.swagger-ui .opblock.opblock-put {
+    border-color: #f59e0b;
+    background-color: rgba(245, 158, 11, 0.05);
+}
+
+.swagger-ui .opblock.opblock-put .opblock-summary-method {
+    background-color: #f59e0b;
+}
+
+/* PATCH - Morado */
+.swagger-ui .opblock.opblock-patch {
+    border-color: #8b5cf6;
+    background-color: rgba(139, 92, 246, 0.05);
+}
+
+.swagger-ui .opblock.opblock-patch .opblock-summary-method {
+    background-color: #8b5cf6;
+}
+
+/* DELETE - Rojo */
+.swagger-ui .opblock.opblock-delete {
+    border-color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.05);
+}
+
+.swagger-ui .opblock.opblock-delete .opblock-summary-method {
+    background-color: #ef4444;
+}
+
+/* Bordes redondeados */
+.swagger-ui .opblock {
+    border-radius: 8px;
+    border-width: 2px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.swagger-ui .opblock-summary-method {
+    border-radius: 6px;
+    font-weight: 600;
+    min-width: 70px;
+}
+
+.swagger-ui .opblock-summary-path {
+    font-weight: 500;
+    font-family: 'Courier New', monospace;
+}
+
+/* ========================================
+   Parámetros (headers, query, body)
+   ======================================== */
+.swagger-ui .parameters-col_description {
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.swagger-ui .parameter__name {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.swagger-ui .parameter__type {
+    font-weight: 500;
+    color: #6b7280;
+}
+
+/* Headers requeridos destacados */
+.swagger-ui .parameter__name.required::after {
+    content: ' *';
+    color: var(--danger-color);
+    font-weight: bold;
+}
+
+/* ========================================
+   Respuestas (responses)
+   ======================================== */
+.swagger-ui .responses-inner {
+    padding: 20px;
+    background-color: #f9fafb;
+    border-radius: 6px;
+}
+
+.swagger-ui .response-col_status {
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+/* Códigos de respuesta coloreados */
+.swagger-ui .response-col_status[data-code^="2"] {
+    color: var(--success-color);
+}
+
+.swagger-ui .response-col_status[data-code^="4"] {
+    color: var(--warning-color);
+}
+
+.swagger-ui .response-col_status[data-code^="5"] {
+    color: var(--danger-color);
+}
+
+/* ========================================
+   Ejemplos de código
+   ======================================== */
+.swagger-ui .highlight-code {
+    background-color: #1f2937;
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.swagger-ui .highlight-code .microlight {
+    color: #e5e7eb;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+/* JSON syntax highlighting */
+.swagger-ui .highlight-code .microlight .string {
+    color: #86efac;
+}
+
+.swagger-ui .highlight-code .microlight .number {
+    color: #fbbf24;
+}
+
+.swagger-ui .highlight-code .microlight .boolean {
+    color: #93c5fd;
+}
+
+/* ========================================
+   Botones
+   ======================================== */
+.swagger-ui .btn {
+    border-radius: 6px;
+    font-weight: 600;
+    padding: 10px 20px;
+    transition: all 0.2s ease;
+}
+
+.swagger-ui .btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.swagger-ui .btn-primary:hover {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
+}
+
+.swagger-ui .authorize {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
+}
+
+.swagger-ui .authorize:hover {
+    background-color: #059669;
+    border-color: #059669;
+}
+
+/* Botón "Try it out" */
+.swagger-ui .try-out__btn {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.swagger-ui .try-out__btn:hover {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+}
+
+/* ========================================
+   Modal de autorización
+   ======================================== */
+.swagger-ui .modal-ux {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.swagger-ui .modal-ux-header {
+    background-color: var(--dark-bg);
+    color: white;
+    padding: 20px;
+}
+
+.swagger-ui .modal-ux-content {
+    padding: 30px;
+}
+
+/* ========================================
+   Input fields
+   ======================================== */
+.swagger-ui input[type="text"],
+.swagger-ui input[type="password"],
+.swagger-ui textarea {
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px;
+    transition: border-color 0.2s ease;
+}
+
+.swagger-ui input[type="text"]:focus,
+.swagger-ui input[type="password"]:focus,
+.swagger-ui textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* ========================================
+   Scrollbar personalizada
+   ======================================== */
+.swagger-ui ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.swagger-ui ::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 10px;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 10px;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
+}
+
+/* ========================================
+   Badges personalizadas
+   ======================================== */
+.swagger-ui .opblock-summary-description {
+    font-size: 0.95rem;
+    color: #6b7280;
+}
+
+/* Deprecated endpoints */
+.swagger-ui .opblock-deprecated {
+    opacity: 0.6;
+}
+
+.swagger-ui .opblock-deprecated .opblock-summary-description::before {
+    content: '?? DEPRECATED - ';
+    color: var(--warning-color);
+    font-weight: bold;
+}
+
+/* ========================================
+   Footer personalizado
+   ======================================== */
+.swagger-ui::after {
+    content: '?? eCommerce Multi-Tenant API • Made with ??';
+    display: block;
+    text-align: center;
+    padding: 40px 20px;
+    font-size: 0.9rem;
+    color: #6b7280;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 50px;
+}
+
+/* ========================================
+   Mejoras de legibilidad
+   ======================================== */
+.swagger-ui .markdown p,
+.swagger-ui .markdown li {
+    line-height: 1.8;
+    color: #374151;
+}
+
+.swagger-ui .markdown h1,
+.swagger-ui .markdown h2,
+.swagger-ui .markdown h3 {
+    color: var(--dark-bg);
+    margin-top: 25px;
+    margin-bottom: 15px;
+}
+
+.swagger-ui .markdown code {
+    background-color: #f3f4f6;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: #dc2626;
+    font-size: 0.9em;
+}
+
+.swagger-ui .markdown pre {
+    background-color: #1f2937;
+    border-radius: 8px;
+    padding: 20px;
+    overflow-x: auto;
+}
+
+.swagger-ui .markdown pre code {
+    background: none;
+    color: #e5e7eb;
+    padding: 0;
+}
+
+/* ========================================
+   Animaciones suaves
+   ======================================== */
+.swagger-ui .opblock {
+    transition: all 0.3s ease;
+}
+
+.swagger-ui .opblock:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+@media (max-width: 768px) {
+    .swagger-ui .info .title {
+        font-size: 2rem;
+    }
+
+    .swagger-ui .opblock-tag {
+        font-size: 1.1rem;
+        padding: 10px 15px;
+    }
+
+    .swagger-ui .opblock-summary-method {
+        min-width: 60px;
+        font-size: 0.9rem;
+    }
+}

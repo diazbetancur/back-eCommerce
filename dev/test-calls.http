@@ -1,0 +1,500 @@
+###############################################################################
+# eCommerce Multi-Tenant API - Test Calls
+# Para usar con VS Code REST Client extension
+###############################################################################
+
+# Variables globales
+@baseUrl = http://localhost:5000
+@tenantSlug = test-tenant-1
+@sessionId = {{$guid}}
+@idempotencyKey = {{$guid}}
+
+###############################################################################
+# HEALTH CHECKS
+###############################################################################
+
+### Global Health Check (no requiere tenant)
+GET {{baseUrl}}/health
+Content-Type: application/json
+
+### Tenant Health Check
+GET {{baseUrl}}/health/tenant
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+###############################################################################
+# PROVISIONING - Registro de Nuevos Tenants
+###############################################################################
+
+### Iniciar Provisioning de Tenant
+POST {{baseUrl}}/provision/tenants/init
+Content-Type: application/json
+
+{
+  "slug": "cafe-diaz",
+  "name": "Café Diaz",
+  "plan": "Premium",
+  "adminEmail": "admin@cafediaz.com",
+  "adminPassword": "SecurePass123!@#"
+}
+
+### Confirmar Provisioning (después de recibir email)
+POST {{baseUrl}}/provision/tenants/confirm
+Content-Type: application/json
+
+{
+  "token": "your-confirmation-token-here"
+}
+
+###############################################################################
+# SUPERADMIN - Gestión de Tenants
+###############################################################################
+
+### Listar todos los tenants
+GET {{baseUrl}}/superadmin/tenants
+Content-Type: application/json
+
+### Obtener tenant específico
+GET {{baseUrl}}/superadmin/tenants/{{tenantSlug}}
+Content-Type: application/json
+
+### Crear tenant (SuperAdmin)
+POST {{baseUrl}}/superadmin/tenants
+Content-Type: application/json
+
+{
+  "slug": "new-tenant",
+  "name": "New Tenant Store",
+  "planCode": "Premium"
+}
+
+### Reparar tenant
+POST {{baseUrl}}/superadmin/tenants/repair?tenant={{tenantSlug}}
+Content-Type: application/json
+
+###############################################################################
+# SUPERADMIN - Feature Flags
+###############################################################################
+
+### Obtener feature flags de un tenant
+GET {{baseUrl}}/superadmin/tenants/{{$guid}}/features
+Content-Type: application/json
+
+### Actualizar feature flags de un tenant
+PATCH {{baseUrl}}/superadmin/tenants/{{$guid}}/features
+Content-Type: application/json
+
+{
+  "features": {
+    "allowGuestCheckout": false,
+    "requirePhoneNumber": true,
+    "enableExpressCheckout": false,
+    "showStock": true,
+    "hasVariants": true,
+    "enableWishlist": true,
+    "enableReviews": true,
+    "payments": {
+      "wompiEnabled": true,
+      "stripeEnabled": true,
+      "payPalEnabled": false,
+      "cashOnDelivery": true
+    },
+    "enableCartSave": true,
+    "maxCartItems": 150,
+    "enableAdvancedSearch": true,
+    "enableFilters": true,
+    "enableAnalytics": true,
+    "enableNewsletterSignup": true
+  }
+}
+
+### Resetear feature flags a defaults del plan
+DELETE {{baseUrl}}/superadmin/tenants/{{$guid}}/features
+Content-Type: application/json
+
+###############################################################################
+# PUBLIC - Configuración del Tenant
+###############################################################################
+
+### Obtener configuración pública del tenant
+GET {{baseUrl}}/public/tenant-config
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+###############################################################################
+# AUTHENTICATION
+###############################################################################
+
+### Login
+POST {{baseUrl}}/auth/login
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "password": "password123"
+}
+
+### Cambiar contraseña (requiere autenticación)
+POST {{baseUrl}}/auth/change-password
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{$dotenv TOKEN}}
+Content-Type: application/json
+
+{
+  "currentPassword": "password123",
+  "newPassword": "newPassword456"
+}
+
+###############################################################################
+# CATALOG - Productos
+###############################################################################
+
+### Listar productos (paginado)
+GET {{baseUrl}}/api/catalog/products?page=1&pageSize=24
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+### Buscar productos
+GET {{baseUrl}}/api/catalog/products/search?q=cafe&page=1&pageSize=12
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+### Obtener producto por ID
+GET {{baseUrl}}/api/catalog/products/{{$guid}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+### Listar categorías
+GET {{baseUrl}}/api/catalog/categories
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+### Obtener categoría por ID
+GET {{baseUrl}}/api/catalog/categories/{{$guid}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+### Productos por categoría
+GET {{baseUrl}}/api/catalog/categories/{{$guid}}/products?page=1&pageSize=24
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+###############################################################################
+# CART - Carrito de Compras
+###############################################################################
+
+### Obtener carrito actual
+GET {{baseUrl}}/api/cart
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Content-Type: application/json
+
+### Agregar producto al carrito
+POST {{baseUrl}}/api/cart/add
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Content-Type: application/json
+
+{
+  "productId": "550e8400-e29b-41d4-a716-446655440000",
+  "quantity": 2
+}
+
+### Actualizar cantidad de un item
+PUT {{baseUrl}}/api/cart/items/{{$guid}}
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Content-Type: application/json
+
+{
+  "quantity": 5
+}
+
+### Remover item del carrito
+DELETE {{baseUrl}}/api/cart/items/{{$guid}}
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Content-Type: application/json
+
+### Limpiar todo el carrito
+DELETE {{baseUrl}}/api/cart
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Content-Type: application/json
+
+###############################################################################
+# CHECKOUT - Proceso de Compra
+###############################################################################
+
+### Obtener cotización (quote)
+POST {{baseUrl}}/api/checkout/quote
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "fullName": "Juan Pérez",
+    "phone": "+573001234567",
+    "address": "Calle 123 #45-67",
+    "city": "Bogotá",
+    "state": "Cundinamarca",
+    "country": "CO",
+    "postalCode": "110111"
+  }
+}
+
+### Crear orden (Place Order) - CON Idempotency
+POST {{baseUrl}}/api/checkout/place-order
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Idempotency-Key: {{idempotencyKey}}
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "fullName": "Juan Pérez",
+    "phone": "+573001234567",
+    "address": "Calle 123 #45-67",
+    "city": "Bogotá",
+    "state": "Cundinamarca",
+    "country": "CO",
+    "postalCode": "110111"
+  },
+  "paymentMethod": "cash"
+}
+
+### Crear orden con Wompi
+POST {{baseUrl}}/api/checkout/place-order
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "fullName": "María García",
+    "phone": "+573009876543",
+    "address": "Carrera 45 #67-89",
+    "city": "Medellín",
+    "state": "Antioquia",
+    "country": "CO",
+    "postalCode": "050001"
+  },
+  "paymentMethod": "wompi",
+  "paymentDetails": {
+    "cardToken": "tok_test_12345"
+  }
+}
+
+###############################################################################
+# FEATURES - Feature Flags del Tenant Actual
+###############################################################################
+
+### Obtener todos los feature flags del tenant
+GET {{baseUrl}}/api/features
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+### Verificar feature específica
+GET {{baseUrl}}/api/features/allowGuestCheckout
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+### Verificar feature anidada
+GET {{baseUrl}}/api/features/payments.wompiEnabled
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+###############################################################################
+# TESTING - Escenarios de Error
+###############################################################################
+
+### Error: Tenant no proporcionado
+GET {{baseUrl}}/api/catalog/products
+Content-Type: application/json
+# Esperado: 400 Bad Request
+
+### Error: Tenant no existe
+GET {{baseUrl}}/api/catalog/products
+X-Tenant-Slug: nonexistent-tenant-xyz
+Content-Type: application/json
+# Esperado: 404 Not Found
+
+### Error: Tenant no activo
+GET {{baseUrl}}/api/catalog/products
+X-Tenant-Slug: test-tenant-pending
+Content-Type: application/json
+# Esperado: 403 Forbidden
+
+### Error: Session ID no proporcionado en cart
+POST {{baseUrl}}/api/cart/add
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "productId": "{{$guid}}",
+  "quantity": 1
+}
+# Esperado: 400 Bad Request
+
+### Error: Idempotency Key no proporcionado en checkout
+POST {{baseUrl}}/api/checkout/place-order
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "fullName": "Test User",
+    "phone": "+123456789",
+    "address": "Test St",
+    "city": "Test City",
+    "country": "US"
+  },
+  "paymentMethod": "cash"
+}
+# Esperado: 400 Bad Request
+
+### Error: Checkout sin JWT cuando allowGuestCheckout = false
+# (Primero deshabilitar guest checkout en feature flags)
+POST {{baseUrl}}/api/checkout/place-order
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: {{sessionId}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "fullName": "Guest User",
+    "phone": "+123456789",
+    "address": "Guest St",
+    "city": "Guest City",
+    "country": "US"
+  },
+  "paymentMethod": "cash"
+}
+# Esperado: 401 Unauthorized (si allowGuestCheckout = false)
+
+###############################################################################
+# TESTING - Idempotencia
+###############################################################################
+
+### Test Idempotencia: Primera request
+@firstIdempotencyKey = order-test-{{$timestamp}}
+POST {{baseUrl}}/api/checkout/place-order
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: idempotency-test-session
+Idempotency-Key: {{firstIdempotencyKey}}
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "fullName": "Idempotency Test",
+    "phone": "+1234567890",
+    "address": "Idempotency St 123",
+    "city": "Test City",
+    "country": "US",
+    "postalCode": "12345"
+  },
+  "paymentMethod": "cash"
+}
+
+### Test Idempotencia: Segunda request (misma key)
+# Ejecutar inmediatamente después de la primera
+POST {{baseUrl}}/api/checkout/place-order
+X-Tenant-Slug: {{tenantSlug}}
+X-Session-Id: idempotency-test-session
+Idempotency-Key: {{firstIdempotencyKey}}
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "fullName": "Idempotency Test",
+    "phone": "+1234567890",
+    "address": "Idempotency St 123",
+    "city": "Test City",
+    "country": "US",
+    "postalCode": "12345"
+  },
+  "paymentMethod": "cash"
+}
+# Esperado: Misma respuesta que la primera request (o 409 Conflict)
+
+###############################################################################
+# TESTING - Aislamiento de Tenants
+###############################################################################
+
+### Tenant 1: Agregar producto al carrito
+@tenant1Slug = test-tenant-1
+@tenant1SessionId = tenant1-session-{{$guid}}
+POST {{baseUrl}}/api/cart/add
+X-Tenant-Slug: {{tenant1Slug}}
+X-Session-Id: {{tenant1SessionId}}
+Content-Type: application/json
+
+{
+  "productId": "{{$guid}}",
+  "quantity": 3
+}
+
+### Tenant 2: Agregar producto al carrito (mismo session ID)
+@tenant2Slug = test-tenant-2
+POST {{baseUrl}}/api/cart/add
+X-Tenant-Slug: {{tenant2Slug}}
+X-Session-Id: {{tenant1SessionId}}
+Content-Type: application/json
+
+{
+  "productId": "{{$guid}}",
+  "quantity": 5
+}
+
+### Verificar carrito Tenant 1
+GET {{baseUrl}}/api/cart
+X-Tenant-Slug: {{tenant1Slug}}
+X-Session-Id: {{tenant1SessionId}}
+Content-Type: application/json
+
+### Verificar carrito Tenant 2
+GET {{baseUrl}}/api/cart
+X-Tenant-Slug: {{tenant2Slug}}
+X-Session-Id: {{tenant1SessionId}}
+Content-Type: application/json
+# Los carritos deberían ser independientes
+
+###############################################################################
+# NOTAS DE USO
+###############################################################################
+
+# 1. Variables:
+#    - {{$guid}}: Genera un GUID único
+#    - {{$timestamp}}: Timestamp actual
+#    - {{$dotenv VARIABLE}}: Lee variable de archivo .env
+#
+# 2. Guardar respuestas:
+#    Después de ejecutar un request, puedes guardar valores de la respuesta:
+#    @token = {{login.response.body.token}}
+#
+# 3. Archivo .env (opcional):
+#    Crear archivo .env en la raíz con:
+#    TOKEN=tu-jwt-token-aqui
+#    BASE_URL=http://localhost:5000
+#
+# 4. Extensión requerida:
+#    VS Code REST Client por Huachao Mao
+#    https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+#
+# 5. Shortcuts útiles:
+#    - Ctrl+Alt+R (Windows/Linux): Ejecutar request
+#    - Cmd+Alt+R (Mac): Ejecutar request
+#    - Ctrl+Alt+E: Ejecutar todos los requests en el archivo
+#
+# 6. Tips:
+#    - Usa ### para separar requests
+#    - Los comentarios empiezan con #
+#    - Las variables se definen con @nombre = valor
+#    - Puedes usar variables de entorno o generar valores dinámicos
+
+###############################################################################

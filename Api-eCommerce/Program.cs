@@ -1,12 +1,15 @@
 using Api_eCommerce.Auth;
 using Api_eCommerce.Endpoints;
+using Api_eCommerce.Extensions;
 using Api_eCommerce.Handlers;
 using Api_eCommerce.Metering;
 using Api_eCommerce.Middleware;
 using Api_eCommerce.Workers;
+using CC.Aplication.Services;
 using CC.Domain.Entities;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Configurations;
+using CC.Infraestructure.EF;
 using CC.Infraestructure.Provisioning;
 using CC.Infraestructure.Sql;
 using CC.Infraestructure.Tenancy;
@@ -27,12 +30,28 @@ builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.Re
 builder.Services.AddDbContext<AdminDbContext>(opt => 
     opt.UseNpgsql(builder.Configuration.GetConnectionString("AdminDb"),
         npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "admin")));
+#endregion
 
-// Configuración para multi-tenancy
+#region Caching
+// Memory cache para feature flags y otros
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<CC.Infraestructure.Cache.IFeatureCache, CC.Infraestructure.Cache.FeatureCache>();
+#endregion
+
+#region Tenancy Services
+// Servicios de multi-tenancy
+builder.Services.AddScoped<ITenantAccessor, TenantAccessor>();
+builder.Services.AddScoped<TenantDbContextFactory>();
+
+// Legacy services (mantener por compatibilidad si es necesario)
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<ITenantConnectionProtector, TenantConnectionProtector>();
 builder.Services.AddScoped<ITenantResolver, TenantResolver>();
-builder.Services.AddSingleton<TenantDbContextFactory>();
+#endregion
+
+#region EF Core Services
+// Servicios para migraciones EF Core
+builder.Services.AddScoped<IMigrationRunner, MigrationRunner>();
 #endregion
 
 #region Provisioning Services
@@ -46,19 +65,21 @@ builder.Services.AddSingleton<TenantProvisioningWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TenantProvisioningWorker>());
 #endregion
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+#region Business Services
+// Servicios de negocio del tenant
+builder.Services.AddScoped<ICatalogService, CatalogService>();
+builder.Services.AddScoped<ICartService, CartService>();
+builder.Services.AddScoped<ICheckoutService, CheckoutService>();
+builder.Services.AddScoped<IFeatureService, FeatureService>();
+#endregion
 
-#region Swagger
-
-SwaggerHandler.SwaggerConfig(builder.Services);
-
-# endregion
+#region Swagger Configuration
+// Configuración de Swagger con soporte multi-tenant
+builder.Services.AddMultiTenantSwagger();
+#endregion
 
 #region Register (dependency injection)
-
 DependencyInyectionHandler.DepencyInyectionConfig(builder.Services);
-
 #endregion Register (dependency injection)
 
 #region IdentityCore
@@ -96,27 +117,42 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseMultiTenantSwaggerUI();
 }
 else
 {
     app.UseHsts();
 }
 
+// Middlewares - ORDEN IMPORTANTE
+app.UseHttpsRedirection();
+
+// 1. Metering debe ir primero para capturar todas las requests
 app.UseMiddleware<MeteringMiddleware>();
+
+// 2. Tenant resolution - resuelve el tenant antes de autenticación
 app.UseMiddleware<TenantResolutionMiddleware>();
 
-app.UseHttpsRedirection();
+// 3. Error handling
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
+
+// 4. Autenticación y autorización
 app.UseAuthentication();
 app.UseMiddleware<ActivityLoggingMiddleware>();
 app.UseAuthorization();
+
+// Mapear controladores y endpoints
 app.MapControllers();
 
-// Mapear endpoints de administración y aprovisionamiento
+// Endpoints de administración
 app.MapSuperAdminTenants();
 app.MapPublicTenantConfig();
 app.MapProvisioningEndpoints();
+app.MapFeatureFlagsEndpoints();
+
+// Endpoints de negocio (requieren tenant)
+app.MapCatalogEndpoints();
+app.MapCartEndpoints();
+app.MapCheckoutEndpoints();
 
 app.Run();
