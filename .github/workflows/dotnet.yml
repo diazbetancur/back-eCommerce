@@ -1,0 +1,379 @@
+name: .NET CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+  workflow_dispatch:
+    inputs:
+      deploy_environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  SOLUTION_PATH: './back.eCommerce.sln'
+  API_PROJECT_PATH: './Api-eCommerce/Api-eCommerce.csproj'
+  TEST_PROJECT_PATH: './Tests/Api-eCommerce.Tests.csproj'
+  ARTIFACT_NAME: 'ecommerce-api'
+
+jobs:
+  # ============================================
+  # Job 1: Build y Test
+  # ============================================
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: ?? Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Para SonarCloud/CodeQL
+      
+      - name: ?? Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: ?? Cache NuGet packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      
+      - name: ?? Restore dependencies
+        run: dotnet restore
+      
+      - name: ??? Build solution
+        run: dotnet build --no-restore --configuration Release
+      
+      - name: ?? Run tests
+        run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./TestResults
+      
+      - name: ?? Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: ./TestResults
+      
+      - name: ?? Code Coverage Report
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./TestResults/**/coverage.cobertura.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  # ============================================
+  # Job 2: Publish API
+  # ============================================
+  publish-api:
+    name: Publish API
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name != 'pull_request'
+    
+    steps:
+      - name: ?? Checkout code
+        uses: actions/checkout@v4
+      
+      - name: ?? Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: ?? Publish API
+        run: |
+          dotnet publish ${{ env.API_PROJECT_PATH }} \
+            --configuration Release \
+            --output ./publish \
+            --no-self-contained \
+            --runtime linux-x64
+      
+      - name: ?? Generate Swagger JSON
+        run: |
+          cd ./publish
+          # El Swagger JSON se genera en tiempo de ejecución
+          # Aquí podríamos usar Swashbuckle.AspNetCore.Cli para generarlo
+          echo "Swagger will be generated at runtime"
+      
+      - name: ?? Upload API artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ./publish
+          retention-days: 30
+
+  # ============================================
+  # Job 3: Migrations - Admin DB
+  # ============================================
+  migrations-admin:
+    name: Admin DB Migrations
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - name: ?? Checkout code
+        uses: actions/checkout@v4
+      
+      - name: ?? Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: ?? Install EF Core tools
+        run: dotnet tool install --global dotnet-ef --version 8.0.*
+      
+      - name: ??? Generate Admin DB migration script
+        run: |
+          dotnet ef migrations script \
+            --project ./CC.Infraestructure/CC.Infraestructure.csproj \
+            --startup-project ./Api-eCommerce/Api-eCommerce.csproj \
+            --context CC.Infraestructure.AdminDb.AdminDbContext \
+            --output ./migrations/admin-db.sql \
+            --idempotent
+      
+      - name: ?? Upload Admin migration script
+        uses: actions/upload-artifact@v3
+        with:
+          name: admin-db-migrations
+          path: ./migrations/admin-db.sql
+          retention-days: 30
+
+  # ============================================
+  # Job 4: Migrations - Tenant DB Template
+  # ============================================
+  migrations-tenant:
+    name: Tenant DB Migrations
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - name: ?? Checkout code
+        uses: actions/checkout@v4
+      
+      - name: ?? Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: ?? Install EF Core tools
+        run: dotnet tool install --global dotnet-ef --version 8.0.*
+      
+      - name: ??? Generate Tenant DB migration script
+        run: |
+          dotnet ef migrations script \
+            --project ./CC.Infraestructure/CC.Infraestructure.csproj \
+            --startup-project ./Api-eCommerce/Api-eCommerce.csproj \
+            --context CC.Infraestructure.Tenant.TenantDbContext \
+            --output ./migrations/tenant-db.sql \
+            --idempotent
+      
+      - name: ?? Upload Tenant migration script
+        uses: actions/upload-artifact@v3
+        with:
+          name: tenant-db-migrations
+          path: ./migrations/tenant-db.sql
+          retention-days: 30
+
+  # ============================================
+  # Job 5: Security Scan (opcional)
+  # ============================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: ?? Checkout code
+        uses: actions/checkout@v4
+      
+      - name: ?? Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: ?? Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ============================================
+  # Job 6: Deploy to Development
+  # ============================================
+  deploy-development:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: [publish-api, migrations-admin, migrations-tenant]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: development
+      url: https://dev-api.yourdomain.com
+    
+    steps:
+      - name: ?? Download API artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ./publish
+      
+      - name: ?? Download Admin migrations
+        uses: actions/download-artifact@v3
+        with:
+          name: admin-db-migrations
+          path: ./migrations
+      
+      - name: ?? Download Tenant migrations
+        uses: actions/download-artifact@v3
+        with:
+          name: tenant-db-migrations
+          path: ./migrations
+      
+      - name: ??? Apply Admin DB migrations
+        run: |
+          echo "Applying Admin DB migrations to Development"
+          # Aquí ejecutarías el script SQL contra tu base de datos
+          # Ejemplo con psql:
+          # psql ${{ secrets.DEV_ADMIN_DB_CONNECTION }} -f ./migrations/admin-db.sql
+      
+      - name: ?? Deploy to Azure Web App / AWS / Server
+        run: |
+          echo "Deploying to Development environment"
+          # Aquí configurarías tu deployment específico
+          # Ejemplos:
+          # - Azure Web App: azure/webapps-deploy@v2
+          # - AWS: aws-actions/configure-aws-credentials
+          # - FTP: SamKirkland/FTP-Deploy-Action
+      
+      - name: ?? Health check
+        run: |
+          echo "Running health check..."
+          # curl https://dev-api.yourdomain.com/health
+
+  # ============================================
+  # Job 7: Deploy to Staging
+  # ============================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [publish-api, migrations-admin, migrations-tenant]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging-api.yourdomain.com
+    
+    steps:
+      - name: ?? Download API artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ./publish
+      
+      - name: ??? Apply migrations
+        run: |
+          echo "Applying migrations to Staging"
+          # Similar al deploy de development
+      
+      - name: ?? Deploy to Staging
+        run: |
+          echo "Deploying to Staging environment"
+
+  # ============================================
+  # Job 8: Deploy to Production
+  # ============================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://api.yourdomain.com
+    
+    steps:
+      - name: ?? Download API artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ./publish
+      
+      - name: ?? Download migrations
+        uses: actions/download-artifact@v3
+        with:
+          name: admin-db-migrations
+          path: ./migrations
+      
+      - name: ??? Apply Admin DB migrations
+        run: |
+          echo "Applying Admin DB migrations to Production"
+          # IMPORTANTE: Hacer backup antes de aplicar migraciones en producción
+          # psql ${{ secrets.PROD_ADMIN_DB_CONNECTION }} -f ./migrations/admin-db.sql
+      
+      - name: ?? Deploy to Production
+        run: |
+          echo "Deploying to Production environment"
+      
+      - name: ?? Smoke tests
+        run: |
+          echo "Running smoke tests..."
+          # curl https://api.yourdomain.com/health
+      
+      - name: ?? Notify deployment
+        if: success()
+        run: |
+          echo "Production deployment successful!"
+          # Aquí puedes enviar notificaciones a Slack, Discord, Email, etc.
+
+  # ============================================
+  # Job 9: Create Release (opcional)
+  # ============================================
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: ?? Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: ??? Get version from tag
+        id: get_version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: ?? Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body: |
+            ## Changes in this Release
+            - Automated deployment via GitHub Actions
+            - Check commit history for detailed changes
+          draft: false
+          prerelease: false
