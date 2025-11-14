@@ -1,4 +1,4 @@
-using CC.Infraestructure.AdminDb;
+using CC.Infraestructure.Admin;
 using CC.Infraestructure.Tenancy;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -9,21 +9,24 @@ namespace Api_eCommerce.Middleware
 {
     /// <summary>
     /// Middleware que resuelve el tenant actual basado en el slug y configura el contexto
+    /// ?? IMPORTANTE: Este middleware SOLO debe ejecutarse en rutas tenant-scoped
+    /// NO debe ejecutarse en rutas administrativas (/admin, /provision, /superadmin, /health)
     /// </summary>
     public class TenantResolutionMiddleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<TenantResolutionMiddleware> _logger;
 
-        // Rutas que no requieren resolución de tenant
+        // ?? RUTAS EXCLUIDAS - NO requieren resolución de tenant
         private static readonly string[] ExcludedPaths = 
         {
             "/swagger",
             "/health",
-            "/provision/tenants/init",
-            "/provision/tenants/confirm",
-            "/provision/tenants",
-            "/superadmin"
+            "/admin",                    // ? Panel administrativo (NO usa tenant)
+            "/provision",                // ? Provisioning (usa AdminDb)
+            "/superadmin",               // ? SuperAdmin (usa AdminDb)
+            "/_framework",               // ? Blazor/framework routes
+            "/_vs"                       // ? Visual Studio routes
         };
 
         public TenantResolutionMiddleware(
@@ -40,16 +43,17 @@ namespace Api_eCommerce.Middleware
             ITenantAccessor tenantAccessor,
             IConfiguration configuration)
         {
-            // Verificar si la ruta está excluida
+            // ==================== VERIFICAR SI LA RUTA ESTÁ EXCLUIDA ====================
             if (IsExcludedPath(context.Request.Path))
             {
+                _logger.LogDebug("Path {Path} is excluded from tenant resolution", context.Request.Path);
                 await _next(context);
                 return;
             }
 
             try
             {
-                // Obtener slug del header o query string
+                // ==================== OBTENER SLUG ====================
                 var slug = GetTenantSlug(context);
 
                 if (string.IsNullOrWhiteSpace(slug))
@@ -58,14 +62,16 @@ namespace Api_eCommerce.Middleware
                     context.Response.StatusCode = StatusCodes.Status400BadRequest;
                     await context.Response.WriteAsJsonAsync(new
                     {
-                        error = "Tenant slug is required",
-                        detail = "Provide tenant slug via X-Tenant-Slug header or ?tenant query parameter"
+                        error = "Tenant Required",
+                        detail = "This endpoint requires a tenant. Provide tenant slug via X-Tenant-Slug header or ?tenant query parameter",
+                        path = context.Request.Path.Value
                     });
                     return;
                 }
 
-                // Buscar tenant en Admin DB
+                // ==================== BUSCAR TENANT EN ADMIN DB ====================
                 var tenant = await adminDb.Tenants
+                    .Include(t => t.Plan) // ? Incluir plan para tener info completa
                     .AsNoTracking()
                     .FirstOrDefaultAsync(t => t.Slug == slug.ToLower());
 
@@ -75,64 +81,74 @@ namespace Api_eCommerce.Middleware
                     context.Response.StatusCode = StatusCodes.Status404NotFound;
                     await context.Response.WriteAsJsonAsync(new
                     {
-                        error = "Tenant not found",
-                        detail = $"No tenant found with slug '{slug}'"
+                        error = "Tenant Not Found",
+                        detail = $"No tenant found with slug '{slug}'",
+                        slug
                     });
                     return;
                 }
 
-                // Verificar que el tenant esté activo
-                if (tenant.Status != "Active")
+                // ==================== VERIFICAR STATUS ====================
+                // Solo permitir tenants en status "Ready"
+                if (tenant.Status != CC.Infraestructure.Admin.Entities.TenantStatus.Ready)
                 {
-                    _logger.LogWarning("Tenant not active. Slug: {Slug}, Status: {Status}", slug, tenant.Status);
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    _logger.LogWarning(
+                        "Tenant not available. Slug: {Slug}, Status: {Status}", 
+                        slug, tenant.Status);
+                    
+                    context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
                     await context.Response.WriteAsJsonAsync(new
                     {
-                        error = "Tenant not available",
-                        detail = $"Tenant '{slug}' is in '{tenant.Status}' status",
-                        status = tenant.Status
+                        error = "Tenant Not Available",
+                        detail = $"Tenant '{slug}' is currently unavailable",
+                        status = tenant.Status.ToString(),
+                        slug
                     });
                     return;
                 }
 
-                // Construir connection string desde template
+                // ==================== CONSTRUIR CONNECTION STRING ====================
                 var connectionString = BuildConnectionString(configuration, tenant.DbName);
 
-                // Crear TenantInfo y guardarlo en el accessor
+                // ==================== CREAR TENANT INFO ====================
                 var tenantInfo = new TenantInfo
                 {
                     Id = tenant.Id,
                     Slug = tenant.Slug,
                     DbName = tenant.DbName,
-                    Plan = tenant.Plan,
+                    Plan = tenant.Plan?.Name ?? "Unknown",
                     ConnectionString = connectionString
                 };
 
+                // Guardar en el accessor para que esté disponible en todo el request
                 tenantAccessor.SetTenant(tenantInfo);
 
                 _logger.LogInformation(
-                    "Tenant resolved successfully. Slug: {Slug}, DbName: {DbName}, Plan: {Plan}",
-                    tenant.Slug, tenant.DbName, tenant.Plan);
+                    "? Tenant resolved: {Slug} ? {DbName} (Plan: {Plan})",
+                    tenant.Slug, tenant.DbName, tenantInfo.Plan);
 
-                // Continuar con el pipeline
+                // ==================== CONTINUAR CON EL PIPELINE ====================
                 await _next(context);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error resolving tenant");
+                _logger.LogError(ex, "? Error resolving tenant for path: {Path}", context.Request.Path);
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 await context.Response.WriteAsJsonAsync(new
                 {
-                    error = "Internal server error",
-                    detail = "An error occurred while resolving tenant"
+                    error = "Internal Server Error",
+                    detail = "An error occurred while resolving tenant",
+                    path = context.Request.Path.Value
                 });
             }
         }
 
+        // ==================== PRIVATE HELPERS ====================
+
         private static bool IsExcludedPath(PathString path)
         {
             var pathValue = path.Value?.ToLower() ?? string.Empty;
-            return ExcludedPaths.Any(excluded => pathValue.StartsWith(excluded));
+            return ExcludedPaths.Any(excluded => pathValue.StartsWith(excluded, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string GetTenantSlug(HttpContext context)
@@ -154,7 +170,9 @@ namespace Api_eCommerce.Middleware
             
             if (string.IsNullOrWhiteSpace(template))
             {
-                throw new InvalidOperationException("Tenancy:TenantDbTemplate configuration is missing");
+                throw new InvalidOperationException(
+                    "Tenancy:TenantDbTemplate configuration is missing. " +
+                    "Example: 'Host=localhost;Database={DbName};Username=postgres;Password=...'");
             }
 
             // Reemplazar {DbName} en el template

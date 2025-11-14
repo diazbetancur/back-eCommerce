@@ -1,52 +1,241 @@
-using Api_eCommerce.Auth;
+using CC.Aplication.Auth;
 using CC.Infraestructure.Tenancy;
-using CC.Infraestructure.Tenant;
-using CC.Infraestructure.Tenant.Entities;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace Api_eCommerce.Auth
 {
- public static class TenantAuthEndpoints
- {
- public static IEndpointRouteBuilder MapTenantAuth(this IEndpointRouteBuilder app)
- {
- var group = app.MapGroup("/auth");
- group.MapPost("/login", Login);
- group.MapPost("/change-password", ChangePassword).RequireAuthorization();
- return app;
- }
+    public static class TenantAuthEndpoints
+    {
+        public static IEndpointRouteBuilder MapTenantAuth(this IEndpointRouteBuilder app)
+        {
+            var group = app.MapGroup("/auth")
+                .WithTags("Authentication");
 
- private static async Task<IResult> Login(HttpContext http, ITenantResolver resolver, TenantDbContextFactory factory, IPasswordHasher hasher, ITokenService tokens, string email, string password)
- {
- var ctx = await resolver.ResolveAsync(http);
- if (ctx == null) return Results.Problem(statusCode:409, detail: "Tenant not resolved or not ready");
- await using var db = factory.Create(ctx.ConnectionString);
- var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
- if (user == null || !hasher.Verify(user.PasswordHash, password)) return Results.Unauthorized();
- var expires = DateTime.UtcNow.AddMinutes(60);
- var claims = new List<Claim>{ new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()), new Claim(ClaimTypes.Email, user.Email), new Claim("tenant_slug", ctx.Slug)};
- var token = tokens.CreateToken(claims, expires);
- return Results.Ok(new { token, expiresAt = expires });
- }
+            group.MapPost("/register", Register)
+                .WithName("Register")
+                .WithSummary("Register a new user account")
+                .WithDescription("Creates a new user account for the tenant")
+                .Produces<AuthResponse>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+                .Produces<ProblemDetails>(StatusCodes.Status409Conflict);
 
- private static async Task<IResult> ChangePassword(HttpContext http, ITenantResolver resolver, TenantDbContextFactory factory, IPasswordHasher hasher, string currentPassword, string newPassword)
- {
- var ctx = await resolver.ResolveAsync(http);
- if (ctx == null) return Results.Problem(statusCode:409, detail: "Tenant not resolved or not ready");
- var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? http.User.FindFirstValue(ClaimTypes.NameIdentifier);
- if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
- await using var db = factory.Create(ctx.ConnectionString);
- var user = await db.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
- if (user == null) return Results.Unauthorized();
- if (!hasher.Verify(user.PasswordHash, currentPassword)) return Results.Unauthorized();
- user.PasswordHash = hasher.Hash(newPassword);
- await db.SaveChangesAsync();
- return Results.NoContent();
- }
- }
+            group.MapPost("/login", Login)
+                .WithName("Login")
+                .WithSummary("Authenticate user")
+                .WithDescription("Authenticates user and returns JWT token")
+                .Produces<AuthResponse>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
+
+            group.MapGet("/me", GetProfile)
+                .RequireAuthorization()
+                .WithName("GetProfile")
+                .WithSummary("Get current user profile")
+                .WithDescription("Returns the authenticated user's profile information")
+                .Produces<UserProfileDto>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
+
+            return app;
+        }
+
+        private static async Task<IResult> Register(
+            HttpContext context,
+            [FromBody] RegisterRequest request,
+            IAuthService authService,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                // Validar tenant
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status409Conflict,
+                        title: "Tenant Not Resolved",
+                        detail: "Unable to resolve tenant from request"
+                    );
+                }
+
+                // Validaciones básicas
+                if (string.IsNullOrWhiteSpace(request.Email))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "Email is required"
+                    );
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "Password must be at least 8 characters long"
+                    );
+                }
+
+                if (string.IsNullOrWhiteSpace(request.FirstName) || string.IsNullOrWhiteSpace(request.LastName))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "First name and last name are required"
+                    );
+                }
+
+                // Registrar usuario
+                var response = await authService.RegisterAsync(request);
+                return Results.Ok(response);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Email already registered"))
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Email Already Exists",
+                    detail: ex.Message
+                );
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Registration Failed",
+                    detail: ex.Message
+                );
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Internal Server Error",
+                    detail: "An error occurred during registration"
+                );
+            }
+        }
+
+        private static async Task<IResult> Login(
+            HttpContext context,
+            [FromBody] LoginRequest request,
+            IAuthService authService,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                // Validar tenant
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status409Conflict,
+                        title: "Tenant Not Resolved",
+                        detail: "Unable to resolve tenant from request"
+                    );
+                }
+
+                // Validaciones básicas
+                if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "Email and password are required"
+                    );
+                }
+
+                // Autenticar usuario
+                var response = await authService.LoginAsync(request);
+                return Results.Ok(response);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status401Unauthorized,
+                    title: "Authentication Failed",
+                    detail: ex.Message
+                );
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Login Failed",
+                    detail: ex.Message
+                );
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Internal Server Error",
+                    detail: "An error occurred during login"
+                );
+            }
+        }
+
+        private static async Task<IResult> GetProfile(
+            HttpContext context,
+            IAuthService authService,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                // Validar tenant
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status409Conflict,
+                        title: "Tenant Not Resolved",
+                        detail: "Unable to resolve tenant from request"
+                    );
+                }
+
+                // Obtener user ID del token JWT
+                var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)
+                    ?? context.User.FindFirst("sub");
+
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        title: "Invalid Token",
+                        detail: "User ID not found in token"
+                    );
+                }
+
+                // Obtener perfil
+                var profile = await authService.GetUserProfileAsync(userId);
+                return Results.Ok(profile);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("User not found"))
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "User Not Found",
+                    detail: ex.Message
+                );
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Profile Retrieval Failed",
+                    detail: ex.Message
+                );
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Internal Server Error",
+                    detail: "An error occurred while retrieving profile"
+                );
+            }
+        }
+    }
 }

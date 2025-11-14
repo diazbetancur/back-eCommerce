@@ -129,10 +129,14 @@ namespace Api_eCommerce.Endpoints
         /// </summary>
         private static Guid? GetUserIdFromJwt(HttpContext context)
         {
-            // TODO: Implementar extracción real del JWT
-            // var userIdClaim = context.User.FindFirst("sub")?.Value;
-            // if (Guid.TryParse(userIdClaim, out var userId))
-            //     return userId;
+            // Intentar obtener el claim del usuario autenticado
+            var userIdClaim = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)
+                ?? context.User.FindFirst("sub");
+            
+            if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
+            {
+                return userId;
+            }
             
             return null;
         }

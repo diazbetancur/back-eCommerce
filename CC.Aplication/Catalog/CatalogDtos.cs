@@ -134,6 +134,7 @@ namespace CC.Aplication.Catalog
         public decimal Total { get; set; }
         public string Status { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        public int? LoyaltyPointsEarned { get; set; }  // Puntos ganados (si loyalty está habilitado)
     }
     #endregion
 }

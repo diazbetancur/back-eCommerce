@@ -1,4 +1,5 @@
 using CC.Aplication.Catalog;
+using CC.Aplication.Loyalty;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -19,17 +20,20 @@ namespace CC.Aplication.Services
         private readonly IConfiguration _configuration;
         private readonly IFeatureService _featureService;
         private readonly ILogger<CheckoutService> _logger;
+        private readonly ILoyaltyService? _loyaltyService;
 
         public CheckoutService(
             TenantDbContextFactory dbFactory,
             IConfiguration configuration,
             IFeatureService featureService,
-            ILogger<CheckoutService> logger)
+            ILogger<CheckoutService> logger,
+            ILoyaltyService? loyaltyService = null)
         {
             _dbFactory = dbFactory;
             _configuration = configuration;
             _featureService = featureService;
             _logger = logger;
+            _loyaltyService = loyaltyService;
         }
 
         public async Task<CheckoutQuoteResponse> GetQuoteAsync(string sessionId, CheckoutQuoteRequest request, CancellationToken ct = default)
@@ -122,7 +126,8 @@ namespace CC.Aplication.Services
                     OrderNumber = existingOrder.OrderNumber,
                     Total = existingOrder.Total,
                     Status = existingOrder.Status,
-                    CreatedAt = existingOrder.CreatedAt
+                    CreatedAt = existingOrder.CreatedAt,
+                    LoyaltyPointsEarned = null // No se otorgan puntos duplicados
                 };
             }
 
@@ -224,13 +229,44 @@ namespace CC.Aplication.Services
             _logger.LogInformation("Order placed: {OrderId} - {OrderNumber}. Total: {Total}", 
                 order.Id, order.OrderNumber, order.Total);
 
+            // ==================== LOYALTY: Agregar puntos ====================
+            int? loyaltyPointsEarned = null;
+            
+            if (userId.HasValue && _loyaltyService != null)
+            {
+                try
+                {
+                    var pointsEarned = await _loyaltyService.AddPointsForOrderAsync(
+                        userId.Value, 
+                        order.Id, 
+                        order.Total, 
+                        ct);
+
+                    if (pointsEarned > 0)
+                    {
+                        loyaltyPointsEarned = pointsEarned;
+                        _logger.LogInformation(
+                            "Awarded {Points} loyalty points for order {OrderNumber}",
+                            pointsEarned, order.OrderNumber);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // No fallar el checkout si falla loyalty
+                    _logger.LogError(ex, 
+                        "Failed to award loyalty points for order {OrderNumber}. Continuing with checkout.",
+                        order.OrderNumber);
+                }
+            }
+
             return new PlaceOrderResponse
             {
                 OrderId = order.Id,
                 OrderNumber = order.OrderNumber,
                 Total = order.Total,
                 Status = order.Status,
-                CreatedAt = order.CreatedAt
+                CreatedAt = order.CreatedAt,
+                LoyaltyPointsEarned = loyaltyPointsEarned
             };
         }
 
