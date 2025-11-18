@@ -23,6 +23,22 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
+// ==================== CORS ====================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(
+                "https://pwaecommercee.netlify.app",   // Producción
+                "http://localhost:4200"                 // Desarrollo local
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials()
+            .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
+    });
+});
+
 // ==================== ADMIN DB ====================
 builder.Services.AddDbContext<AdminDbContext>(opt => 
     opt.UseNpgsql(builder.Configuration.GetConnectionString("AdminDb"),
@@ -92,7 +108,7 @@ using (var scope = app.Services.CreateScope())
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         
         logger.LogInformation("?? Applying AdminDb migrations...");
-        await adminDb.Database.MigrateAsync();  // ? AUTO MIGRATE
+        await adminDb.Database.MigrateAsync();
         
         logger.LogInformation("?? Seeding AdminDb...");
         await CC.Infraestructure.Admin.AdminDbSeeder.SeedAsync(adminDb, logger);
@@ -101,11 +117,11 @@ using (var scope = app.Services.CreateScope())
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "? Error during startup migration/seed");
-        throw; // ? Fail fast en MVP
+        throw;
     }
 }
 
-// Configure the HTTP request pipeline.
+// ==================== HTTP PIPELINE ====================
 if (app.Environment.IsDevelopment())
 {
     app.UseMultiTenantSwaggerUI();
@@ -116,6 +132,10 @@ else
 }
 
 app.UseHttpsRedirection();
+
+// ? CORS debe ir ANTES de Authentication
+app.UseCors("AllowFrontend");
+
 app.UseMiddleware<MeteringMiddleware>();
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
 app.UseAuthentication();
