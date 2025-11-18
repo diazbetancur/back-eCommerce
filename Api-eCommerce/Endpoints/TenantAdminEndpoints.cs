@@ -193,10 +193,10 @@ namespace Api_eCommerce.Endpoints
 
         private static async Task<IResult> CreateProduct(
             HttpContext context,
-            [FromBody] CreateProductRequest request,
+            [FromBody] AdminCreateProductRequest request,  // ? ACTUALIZADO
             TenantDbContextFactory dbFactory,
             ITenantResolver tenantResolver,
-            CC.Aplication.Plans.IPlanLimitService planLimitService)  // ? NUEVO
+            CC.Aplication.Plans.IPlanLimitService planLimitService)
         {
             try
             {
@@ -240,10 +240,10 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.Created($"/admin/products/{product.Id}", dto);
             }
-            catch (CC.Aplication.Plans.PlanLimitExceededException ex)  // ? CATCH ESPECÍFICO
+            catch (CC.Aplication.Plans.PlanLimitExceededException ex)
             {
                 return Results.Problem(
-                    statusCode: StatusCodes.Status402PaymentRequired,  // 402 = Payment Required
+                    statusCode: StatusCodes.Status402PaymentRequired,
                     title: "Plan Limit Exceeded",
                     detail: ex.Message,
                     extensions: new Dictionary<string, object?>
@@ -263,7 +263,7 @@ namespace Api_eCommerce.Endpoints
         private static async Task<IResult> UpdateProduct(
             HttpContext context,
             Guid id,
-            [FromBody] UpdateProductRequest request,
+            [FromBody] AdminUpdateProductRequest request,  // ? ACTUALIZADO
             TenantDbContextFactory dbFactory,
             ITenantResolver tenantResolver)
         {
@@ -711,14 +711,16 @@ namespace Api_eCommerce.Endpoints
         public DateTime CreatedAt { get; set; }
     }
 
-    public record CreateProductRequest(
+    // ? RENOMBRADO: AdminCreateProductRequest
+    public record AdminCreateProductRequest(
         string Name,
         string Description,
         decimal Price,
         int Stock
     );
 
-    public record UpdateProductRequest(
+    // ? RENOMBRADO: AdminUpdateProductRequest
+    public record AdminUpdateProductRequest(
         string? Name,
         string? Description,
         decimal? Price,
