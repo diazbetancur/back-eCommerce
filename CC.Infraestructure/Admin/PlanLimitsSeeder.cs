@@ -6,8 +6,9 @@ using Microsoft.Extensions.Logging;
 namespace CC.Infraestructure.Admin
 {
     /// <summary>
-    /// Seeder para planes y sus límites
-    /// Define los planes disponibles (Basic, Premium, Enterprise) con sus restricciones
+    /// Seeder para planes y sus límites (MVP)
+    /// Solo 2 planes: Basic ($5/mes) y Premium ($15/mes)
+    /// Los planes NO tienen CRUD por API - solo configurables en DB
     /// </summary>
     public static class PlanLimitsSeeder
     {
@@ -37,19 +38,13 @@ namespace CC.Infraestructure.Admin
                 {
                     Id = Guid.Parse("11111111-0000-0000-0000-000000000001"),
                     Code = "Basic",
-                    Name = "Plan Básico"
+                    Name = "Plan Básico - $5/mes"
                 },
                 new Plan
                 {
                     Id = Guid.Parse("22222222-0000-0000-0000-000000000002"),
                     Code = "Premium",
-                    Name = "Plan Premium"
-                },
-                new Plan
-                {
-                    Id = Guid.Parse("33333333-0000-0000-0000-000000000003"),
-                    Code = "Enterprise",
-                    Name = "Plan Enterprise"
+                    Name = "Plan Premium - $15/mes"
                 }
             };
 
@@ -71,20 +66,33 @@ namespace CC.Infraestructure.Admin
 
             var basicPlanId = Guid.Parse("11111111-0000-0000-0000-000000000001");
             var premiumPlanId = Guid.Parse("22222222-0000-0000-0000-000000000002");
-            var enterprisePlanId = Guid.Parse("33333333-0000-0000-0000-000000000003");
 
             var limits = new List<PlanLimit>();
 
-            // ==================== PLAN BASIC ====================
+            // ==================== PLAN BASIC ($5/mes) ====================
             limits.AddRange(new[]
             {
-                // Productos
+                // ?? Productos
+                new PlanLimit
+                {
+                    PlanId = basicPlanId,
+                    LimitCode = PlanLimitCodes.MaxProducts,
+                    LimitValue = 500,
+                    Description = "Máximo 500 productos"
+                },
+                new PlanLimit
+                {
+                    PlanId = basicPlanId,
+                    LimitCode = PlanLimitCodes.MaxCategories,
+                    LimitValue = 100,
+                    Description = "Máximo 100 categorías"
+                },
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxProductImages,
-                    LimitValue = 3,
-                    Description = "Máximo 3 imágenes por producto"
+                    LimitValue = 4,
+                    Description = "Máximo 4 imágenes por producto"
                 },
                 new PlanLimit
                 {
@@ -96,50 +104,43 @@ namespace CC.Infraestructure.Admin
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
-                    LimitCode = PlanLimitCodes.MaxProducts,
-                    LimitValue = 100,
-                    Description = "Máximo 100 productos"
-                },
-                new PlanLimit
-                {
-                    PlanId = basicPlanId,
-                    LimitCode = PlanLimitCodes.MaxCategories,
-                    LimitValue = 10,
-                    Description = "Máximo 10 categorías"
+                    LimitCode = "max_video_duration_seconds",
+                    LimitValue = 30,
+                    Description = "Videos de máximo 30 segundos"
                 },
 
-                // Usuarios
-                new PlanLimit
-                {
-                    PlanId = basicPlanId,
-                    LimitCode = PlanLimitCodes.MaxUsers,
-                    LimitValue = 5,
-                    Description = "Máximo 5 usuarios"
-                },
+                // ?? Usuarios Admin/Staff
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxAdminUsers,
-                    LimitValue = 2,
-                    Description = "Máximo 2 usuarios admin"
+                    LimitValue = 3,
+                    Description = "Máximo 3 usuarios admin/staff"
+                },
+                new PlanLimit
+                {
+                    PlanId = basicPlanId,
+                    LimitCode = "max_customer_inactivity_days",
+                    LimitValue = 90,  // 3 meses
+                    Description = "Clientes eliminados después de 90 días de inactividad"
                 },
 
-                // Órdenes
+                // ?? Órdenes (Ilimitadas)
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxOrdersPerMonth,
-                    LimitValue = 500,
-                    Description = "Máximo 500 órdenes por mes"
+                    LimitValue = -1,  // Ilimitado
+                    Description = "Órdenes ilimitadas por mes"
                 },
 
-                // Almacenamiento
+                // ?? Almacenamiento
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxStorageMB,
-                    LimitValue = 1024,  // 1 GB
-                    Description = "1 GB de almacenamiento"
+                    LimitValue = 2048,  // 2 GB
+                    Description = "2 GB de almacenamiento"
                 },
                 new PlanLimit
                 {
@@ -150,16 +151,30 @@ namespace CC.Infraestructure.Admin
                 }
             });
 
-            // ==================== PLAN PREMIUM ====================
+            // ==================== PLAN PREMIUM ($15/mes) ====================
             limits.AddRange(new[]
             {
-                // Productos
+                // ?? Productos
+                new PlanLimit
+                {
+                    PlanId = premiumPlanId,
+                    LimitCode = PlanLimitCodes.MaxProducts,
+                    LimitValue = 5000,
+                    Description = "Máximo 5000 productos"
+                },
+                new PlanLimit
+                {
+                    PlanId = premiumPlanId,
+                    LimitCode = PlanLimitCodes.MaxCategories,
+                    LimitValue = 1000,
+                    Description = "Máximo 1000 categorías"
+                },
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxProductImages,
-                    LimitValue = 10,
-                    Description = "Máximo 10 imágenes por producto"
+                    LimitValue = 20,
+                    Description = "Máximo 20 imágenes por producto"
                 },
                 new PlanLimit
                 {
@@ -171,50 +186,43 @@ namespace CC.Infraestructure.Admin
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
-                    LimitCode = PlanLimitCodes.MaxProducts,
-                    LimitValue = 1000,
-                    Description = "Máximo 1000 productos"
-                },
-                new PlanLimit
-                {
-                    PlanId = premiumPlanId,
-                    LimitCode = PlanLimitCodes.MaxCategories,
-                    LimitValue = 50,
-                    Description = "Máximo 50 categorías"
+                    LimitCode = "max_video_duration_seconds",
+                    LimitValue = 60,
+                    Description = "Videos de máximo 60 segundos"
                 },
 
-                // Usuarios
-                new PlanLimit
-                {
-                    PlanId = premiumPlanId,
-                    LimitCode = PlanLimitCodes.MaxUsers,
-                    LimitValue = 50,
-                    Description = "Máximo 50 usuarios"
-                },
+                // ?? Usuarios Admin/Staff
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxAdminUsers,
-                    LimitValue = 10,
-                    Description = "Máximo 10 usuarios admin"
+                    LimitValue = 15,
+                    Description = "Máximo 15 usuarios admin/staff"
+                },
+                new PlanLimit
+                {
+                    PlanId = premiumPlanId,
+                    LimitCode = "max_customer_inactivity_days",
+                    LimitValue = 365,  // 12 meses
+                    Description = "Clientes eliminados después de 365 días de inactividad"
                 },
 
-                // Órdenes
+                // ?? Órdenes (Ilimitadas)
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxOrdersPerMonth,
-                    LimitValue = 5000,
-                    Description = "Máximo 5000 órdenes por mes"
+                    LimitValue = -1,  // Ilimitado
+                    Description = "Órdenes ilimitadas por mes"
                 },
 
-                // Almacenamiento
+                // ?? Almacenamiento
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxStorageMB,
-                    LimitValue = 10240,  // 10 GB
-                    Description = "10 GB de almacenamiento"
+                    LimitValue = 20480,  // 20 GB
+                    Description = "20 GB de almacenamiento"
                 },
                 new PlanLimit
                 {
@@ -222,99 +230,6 @@ namespace CC.Infraestructure.Admin
                     LimitCode = PlanLimitCodes.MaxFileUploadMB,
                     LimitValue = 20,
                     Description = "Máximo 20 MB por archivo"
-                },
-
-                // Loyalty
-                new PlanLimit
-                {
-                    PlanId = premiumPlanId,
-                    LimitCode = PlanLimitCodes.MaxLoyaltyPointsPerOrder,
-                    LimitValue = 1000,
-                    Description = "Máximo 1000 puntos por orden"
-                }
-            });
-
-            // ==================== PLAN ENTERPRISE ====================
-            limits.AddRange(new[]
-            {
-                // Productos
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxProductImages,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Imágenes ilimitadas por producto"
-                },
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxProductVideos,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Videos ilimitados por producto"
-                },
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxProducts,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Productos ilimitados"
-                },
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxCategories,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Categorías ilimitadas"
-                },
-
-                // Usuarios
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxUsers,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Usuarios ilimitados"
-                },
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxAdminUsers,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Usuarios admin ilimitados"
-                },
-
-                // Órdenes
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxOrdersPerMonth,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Órdenes ilimitadas por mes"
-                },
-
-                // Almacenamiento
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxStorageMB,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Almacenamiento ilimitado"
-                },
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxFileUploadMB,
-                    LimitValue = 100,
-                    Description = "Máximo 100 MB por archivo"
-                },
-
-                // Loyalty
-                new PlanLimit
-                {
-                    PlanId = enterprisePlanId,
-                    LimitCode = PlanLimitCodes.MaxLoyaltyPointsPerOrder,
-                    LimitValue = -1,  // Ilimitado
-                    Description = "Puntos ilimitados por orden"
                 }
             });
 

@@ -76,8 +76,9 @@ builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IFeatureService, FeatureService>();
 
 // Auth services
-// builder.Services.AddScoped<CC.Aplication.Auth.IAuthService, CC.Aplication.Auth.AuthService>();  // ? DEPRECATED
-// builder.Services.AddScoped<CC.Aplication.TenantAuth.ITenantAuthService, CC.Aplication.TenantAuth.TenantAuthService>();  // ? DEPRECATED
+// ? DEPRECATED - Ahora usamos UnifiedAuthService
+// builder.Services.AddScoped<CC.Aplication.Auth.IAuthService, CC.Aplication.Auth.AuthService>();
+// builder.Services.AddScoped<CC.Aplication.TenantAuth.ITenantAuthService, CC.Aplication.TenantAuth.TenantAuthService>();
 
 // ? NUEVO: Servicio unificado de autenticación
 builder.Services.AddScoped<CC.Aplication.Auth.IUnifiedAuthService, CC.Aplication.Auth.UnifiedAuthService>();
@@ -160,6 +161,7 @@ app.UseAuthorization();
 app.MapAdminEndpoints();
 app.MapProvisioningEndpoints();
 app.MapSuperAdminTenants();
+app.MapSuperAdminPlans();  // ? Endpoint de planes (solo lectura)
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
     .WithName("HealthCheck")

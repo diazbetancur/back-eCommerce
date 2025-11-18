@@ -50,12 +50,14 @@ namespace CC.Infraestructure.Admin.Entities
         // Productos
         public const string MaxProductImages = "max_product_images";
         public const string MaxProductVideos = "max_product_videos";
+        public const string MaxVideoDurationSeconds = "max_video_duration_seconds";  // ? NUEVO
         public const string MaxProducts = "max_products";
         public const string MaxCategories = "max_categories";
 
         // Usuarios
         public const string MaxUsers = "max_users";
         public const string MaxAdminUsers = "max_admin_users";
+        public const string MaxCustomerInactivityDays = "max_customer_inactivity_days";  // ? NUEVO
 
         // Órdenes
         public const string MaxOrdersPerMonth = "max_orders_per_month";

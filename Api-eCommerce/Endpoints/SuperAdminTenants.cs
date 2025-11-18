@@ -26,6 +26,41 @@ namespace Api_eCommerce.Endpoints
             return app;
         }
 
+        // ? NUEVO: Endpoints de planes (solo lectura)
+        public static IEndpointRouteBuilder MapSuperAdminPlans(this IEndpointRouteBuilder app)
+        {
+            var group = app.MapGroup("/superadmin/plans")
+                .WithTags("Plans");
+
+            group.MapGet("/", GetPlans)
+                .WithName("GetPlans")
+                .WithSummary("List available plans (read-only)")
+                .Produces<List<PlanDetailDto>>(StatusCodes.Status200OK);
+
+            return app;
+        }
+
+        private static async Task<IResult> GetPlans(AdminDbContext adminDb)
+        {
+            var plans = await adminDb.Plans
+                .Include(p => p.Limits)
+                .Select(p => new PlanDetailDto
+                {
+                    Id = p.Id,
+                    Code = p.Code,
+                    Name = p.Name,
+                    Limits = p.Limits.Select(l => new PlanLimitDto
+                    {
+                        LimitCode = l.LimitCode,
+                        LimitValue = l.LimitValue,
+                        Description = l.Description
+                    }).ToList()
+                })
+                .ToListAsync();
+
+            return Results.Ok(plans);
+        }
+
         private static async Task<IResult> CreateTenant(
             AdminDbContext adminDb,
             ITenantConnectionProtector protector,
@@ -203,5 +238,21 @@ namespace Api_eCommerce.Endpoints
                 return Results.Problem(statusCode: 500, detail: ex.Message);
             }
         }
+    }
+
+    // ==================== DTOs ====================
+    public record PlanDetailDto
+    {
+        public Guid Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public List<PlanLimitDto> Limits { get; set; } = new();
+    }
+
+    public record PlanLimitDto
+    {
+        public string LimitCode { get; set; } = string.Empty;
+        public int LimitValue { get; set; }
+        public string? Description { get; set; }
     }
 }
