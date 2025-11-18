@@ -52,7 +52,7 @@ namespace Api_eCommerce.Auth
         private static async Task<IResult> Register(
             HttpContext context,
             [FromBody] RegisterRequest request,
-            IAuthService authService,
+            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService,  // ? CAMBIO
             ITenantResolver tenantResolver)
         {
             try
@@ -97,7 +97,7 @@ namespace Api_eCommerce.Auth
                 }
 
                 // Registrar usuario
-                var response = await authService.RegisterAsync(request);
+                var response = await unifiedAuthService.RegisterAsync(request);
                 return Results.Ok(response);
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("Email already registered"))
@@ -129,7 +129,7 @@ namespace Api_eCommerce.Auth
         private static async Task<IResult> Login(
             HttpContext context,
             [FromBody] LoginRequest request,
-            IAuthService authService,
+            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService,  // ? CAMBIO
             ITenantResolver tenantResolver)
         {
             try
@@ -155,8 +155,8 @@ namespace Api_eCommerce.Auth
                     );
                 }
 
-                // Autenticar usuario
-                var response = await authService.LoginAsync(request);
+                // Autenticar usuario (detecta automáticamente si es admin o comprador)
+                var response = await unifiedAuthService.LoginAsync(request);
                 return Results.Ok(response);
             }
             catch (UnauthorizedAccessException ex)
@@ -247,7 +247,7 @@ namespace Api_eCommerce.Auth
 
         private static async Task<IResult> GetProfile(
             HttpContext context,
-            IAuthService authService,
+            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService,  // ? CAMBIO
             ITenantResolver tenantResolver)
         {
             try
@@ -277,7 +277,7 @@ namespace Api_eCommerce.Auth
                 }
 
                 // Obtener perfil
-                var profile = await authService.GetUserProfileAsync(userId);
+                var profile = await unifiedAuthService.GetUserProfileAsync(userId);
                 return Results.Ok(profile);
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("User not found"))

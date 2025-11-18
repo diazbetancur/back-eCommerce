@@ -76,8 +76,11 @@ builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IFeatureService, FeatureService>();
 
 // Auth services
-builder.Services.AddScoped<CC.Aplication.Auth.IAuthService, CC.Aplication.Auth.AuthService>();
-builder.Services.AddScoped<CC.Aplication.TenantAuth.ITenantAuthService, CC.Aplication.TenantAuth.TenantAuthService>();
+// builder.Services.AddScoped<CC.Aplication.Auth.IAuthService, CC.Aplication.Auth.AuthService>();  // ? DEPRECATED
+// builder.Services.AddScoped<CC.Aplication.TenantAuth.ITenantAuthService, CC.Aplication.TenantAuth.TenantAuthService>();  // ? DEPRECATED
+
+// ? NUEVO: Servicio unificado de autenticación
+builder.Services.AddScoped<CC.Aplication.Auth.IUnifiedAuthService, CC.Aplication.Auth.UnifiedAuthService>();
 
 // Permission service
 builder.Services.AddScoped<CC.Aplication.Permissions.IPermissionService, CC.Aplication.Permissions.PermissionService>();
