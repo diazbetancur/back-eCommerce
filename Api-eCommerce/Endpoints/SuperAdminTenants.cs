@@ -1,4 +1,4 @@
-using CC.Infraestructure.Admin;
+using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;

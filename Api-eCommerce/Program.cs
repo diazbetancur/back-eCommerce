@@ -6,16 +6,14 @@ using Api_eCommerce.Metering;
 using Api_eCommerce.Middleware;
 using Api_eCommerce.Workers;
 using CC.Aplication.Services;
-using CC.Domain.Entities;
+using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin;
-using CC.Infraestructure.Configurations;
 using CC.Infraestructure.EF;
 using CC.Infraestructure.Provisioning;
 using CC.Infraestructure.Sql;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text.Json.Serialization;
@@ -25,106 +23,53 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
-#region Admin DB Configuration
-// Configuración de Admin DB - Base de datos central para gestión de tenants
+// ==================== ADMIN DB ====================
 builder.Services.AddDbContext<AdminDbContext>(opt => 
     opt.UseNpgsql(builder.Configuration.GetConnectionString("AdminDb"),
         npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "admin")));
-#endregion
 
-#region Legacy DB Context Configuration
-// ?? LEGACY: DBContext para compatibilidad con código anterior (Identity)
-// Este contexto usa la base de datos PgSQL configurada
-builder.Services.AddDbContext<DBContext>(opt => 
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("PgSQL")));
-#endregion
-
-#region Caching
-// Memory cache para feature flags y otros
+// ==================== CACHING ====================
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<CC.Infraestructure.Cache.IFeatureCache, CC.Infraestructure.Cache.FeatureCache>();
-#endregion
 
-#region Tenancy Services
-// Servicios de multi-tenancy (SOLO para rutas tenant-scoped)
+// ==================== TENANCY SERVICES ====================
 builder.Services.AddScoped<ITenantAccessor, TenantAccessor>();
 builder.Services.AddScoped<TenantDbContextFactory>();
-
-// Legacy services (mantener por compatibilidad si es necesario)
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<ITenantConnectionProtector, TenantConnectionProtector>();
 builder.Services.AddScoped<ITenantResolver, TenantResolver>();
-#endregion
 
-#region EF Core Services
-// Servicios para migraciones EF Core
+// ==================== EF CORE SERVICES ====================
 builder.Services.AddScoped<IMigrationRunner, MigrationRunner>();
-#endregion
 
-#region Provisioning Services
-// Servicios para aprovisionamiento de tenants (usan AdminDb)
+// ==================== PROVISIONING SERVICES ====================
 builder.Services.AddScoped<IConfirmTokenService, ConfirmTokenService>();
 builder.Services.AddScoped<ITenantDatabaseCreator, TenantDatabaseCreator>();
 builder.Services.AddScoped<ITenantProvisioner, TenantProvisioner>();
-
-// Worker para procesamiento en background
 builder.Services.AddSingleton<TenantProvisioningWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TenantProvisioningWorker>());
-#endregion
 
-#region Admin Services (NUEVO - SOLO AdminDb)
-// Servicios administrativos - NO usan TenantDbContext
+// ==================== ADMIN SERVICES ====================
 builder.Services.AddScoped<CC.Aplication.Admin.IAdminAuthService, CC.Aplication.Admin.AdminAuthService>();
 builder.Services.AddScoped<CC.Aplication.Admin.IAdminTenantService, CC.Aplication.Admin.AdminTenantService>();
-// TODO: Agregar AdminPlanService, AdminUserService, etc.
-#endregion
 
-#region Business Services (Tenant-Scoped)
-// Servicios de negocio del tenant (SOLO para rutas con X-Tenant-Slug)
+// ==================== BUSINESS SERVICES (TENANT) ====================
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IFeatureService, FeatureService>();
-
-// Servicio de autenticación de usuarios por tenant
 builder.Services.AddScoped<CC.Aplication.Auth.IAuthService, CC.Aplication.Auth.AuthService>();
-
-// Servicio de órdenes de usuarios
 builder.Services.AddScoped<CC.Aplication.Orders.IOrderService, CC.Aplication.Orders.OrderService>();
-
-// Servicio de favoritos (wishlist) de usuarios
 builder.Services.AddScoped<CC.Aplication.Favorites.IFavoritesService, CC.Aplication.Favorites.FavoritesService>();
-
-// Servicio de fidelización (loyalty points) de usuarios
 builder.Services.AddScoped<CC.Aplication.Loyalty.ILoyaltyService, CC.Aplication.Loyalty.LoyaltyService>();
-#endregion
 
-#region Swagger Configuration
-// Configuración de Swagger con soporte multi-tenant
+// ==================== SWAGGER ====================
 builder.Services.AddMultiTenantSwagger();
-#endregion
 
-#region Register (dependency injection)
+// ==================== LEGACY DI (Revisar y limpiar) ====================
 DependencyInyectionHandler.DepencyInyectionConfig(builder.Services);
-#endregion
 
-#region IdentityCore (Legacy)
-// ?? NOTA: Identity está configurado para usar DBContext legacy
-// En el futuro, esto debe migrarse a usar TenantDbContext por tenant
-builder.Services.AddIdentity<User, Role>(opt =>
-{
-    opt.Tokens.AuthenticatorTokenProvider = TokenOptions.DefaultAuthenticatorProvider;
-    opt.SignIn.RequireConfirmedEmail = false;
-    opt.Password.RequiredLength = 8;
-    opt.Password.RequireLowercase = true;
-    opt.Password.RequireUppercase = true;
-    opt.Password.RequireNonAlphanumeric = true;
-    opt.Password.RequiredUniqueChars = 1;
-    opt.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(30);
-}).AddRoles<Role>().AddEntityFrameworkStores<DBContext>().AddDefaultTokenProviders();
-#endregion
-
-#region JWT Authentication
+// ==================== JWT AUTHENTICATION ====================
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(x => x.TokenValidationParameters = new TokenValidationParameters
     {
@@ -135,9 +80,30 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(builder.Configuration["jwtKey"]!)),
         ClockSkew = TimeSpan.Zero
     });
-#endregion
 
 var app = builder.Build();
+
+// ==================== AUTO MIGRATE + SEED ====================
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var adminDb = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        logger.LogInformation("?? Applying AdminDb migrations...");
+        await adminDb.Database.MigrateAsync();  // ? AUTO MIGRATE
+        
+        logger.LogInformation("?? Seeding AdminDb...");
+        await CC.Infraestructure.Admin.AdminDbSeeder.SeedAsync(adminDb, logger);
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "? Error during startup migration/seed");
+        throw; // ? Fail fast en MVP
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -149,50 +115,26 @@ else
     app.UseHsts();
 }
 
-// ==================== GLOBAL MIDDLEWARES ====================
 app.UseHttpsRedirection();
-
-// 1. Metering debe ir primero para capturar todas las requests
 app.UseMiddleware<MeteringMiddleware>();
-
-// 2. Error handling global
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
-
-// 3. Autenticación y autorización (global)
 app.UseAuthentication();
 app.UseMiddleware<ActivityLoggingMiddleware>();
 app.UseAuthorization();
 
-// ==================== ADMIN ROUTES (NO TENANT) ====================
-// Estos endpoints NO requieren X-Tenant-Slug y usan SOLO AdminDb
-var adminGroup = app.MapGroup("/admin")
-    .WithTags("Administration");
-
-// Admin endpoints
+// ==================== ROUTES ====================
 app.MapAdminEndpoints();
-
-// Provisioning endpoints (usan AdminDb)
 app.MapProvisioningEndpoints();
-
-// SuperAdmin endpoints (usan AdminDb)
 app.MapSuperAdminTenants();
 
-// ==================== GLOBAL/PUBLIC ROUTES (NO TENANT) ====================
-// Health check global
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
     .WithName("HealthCheck")
     .WithTags("Health")
     .AllowAnonymous();
 
-// Public tenant config (usa AdminDb para buscar tenant)
 app.MapPublicTenantConfig();
 
-// ==================== TENANT-SCOPED ROUTES ====================
-// Estos endpoints REQUIEREN X-Tenant-Slug y usan TenantDbContext
-var tenantGroup = app.MapGroup("")
-    .RequireTenantResolution(); // ? Middleware personalizado
-
-// Mapear endpoints de tenant
+var tenantGroup = app.MapGroup("").RequireTenantResolution();
 tenantGroup.MapGroup("").MapFeatureFlagsEndpoints();
 tenantGroup.MapGroup("").MapTenantAuth();
 tenantGroup.MapGroup("").MapCatalogEndpoints();
@@ -202,7 +144,6 @@ tenantGroup.MapGroup("").MapOrdersEndpoints();
 tenantGroup.MapGroup("").MapFavoritesEndpoints();
 tenantGroup.MapGroup("").MapLoyaltyEndpoints();
 
-// Legacy controllers (revisar cuáles son tenant-scoped)
 app.MapControllers();
 
 app.Run();
@@ -216,7 +157,6 @@ public static class TenantMiddlewareExtensions
         {
             var httpContext = context.HttpContext;
             
-            // Aplicar TenantResolutionMiddleware manualmente
             var middleware = new TenantResolutionMiddleware(
                 async (ctx) => { await Task.CompletedTask; },
                 httpContext.RequestServices.GetRequiredService<ILogger<TenantResolutionMiddleware>>()
@@ -228,13 +168,11 @@ public static class TenantMiddlewareExtensions
 
             await middleware.InvokeAsync(httpContext, adminDb, tenantAccessor, configuration);
 
-            // Si TenantResolution falló, ya se escribió la respuesta
             if (httpContext.Response.HasStarted)
             {
                 return null;
             }
 
-            // Continuar con el endpoint
             return await next(context);
         });
     }

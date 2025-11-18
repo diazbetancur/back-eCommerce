@@ -1,4 +1,4 @@
-using CC.Infraestructure.Admin;
+using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Tenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

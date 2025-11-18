@@ -1,5 +1,5 @@
 using CC.Domain.Tenancy;
-using CC.Infraestructure.Admin;
+using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Cache;
 using CC.Infraestructure.Tenancy;
 using Microsoft.EntityFrameworkCore;

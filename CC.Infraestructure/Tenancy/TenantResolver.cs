@@ -1,4 +1,5 @@
-using CC.Infraestructure.Admin;
+using CC.Infraestructure.AdminDb;
+using CC.Infraestructure.Admin.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -27,7 +28,7 @@ namespace CC.Infraestructure.Tenancy
  var tenant = await _adminDb.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Slug == slug);
  if (tenant == null) return null;
 
- if (tenant.Status != Admin.Entities.TenantStatus.Ready)
+ if (tenant.Status != TenantStatus.Ready)
  {
  httpContext.Response.StatusCode = StatusCodes.Status423Locked;
  var payload = JsonSerializer.Serialize(new { errors = $"Tenant '{slug}' is not ready. Status={tenant.Status}" });

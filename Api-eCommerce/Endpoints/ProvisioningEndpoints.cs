@@ -1,7 +1,8 @@
 using Api_eCommerce.Auth;
 using Api_eCommerce.Workers;
-using CC.Infraestructure.Admin;
+using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
+using CC.Aplication.Admin;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -249,18 +250,23 @@ namespace Api_eCommerce.Endpoints
                         statusCode: StatusCodes.Status404NotFound);
                 }
 
-                var steps = await adminDb.TenantProvisionings
+                // Obtener los pasos de aprovisionamiento y materializarlos primero
+                var provisioningSteps = await adminDb.TenantProvisionings
                     .Where(p => p.TenantId == provisioningId)
                     .OrderBy(p => p.StartedAt)
+                    .ToListAsync();
+
+                // Ahora mapear a DTOs fuera del query de EF
+                var steps = provisioningSteps
                     .Select(p => new ProvisioningStepDto(
+                        p.Id,
                         p.Step,
                         p.Status,
                         p.StartedAt,
                         p.CompletedAt,
-                        p.Message,
-                        p.ErrorMessage
+                        p.Message ?? p.ErrorMessage
                     ))
-                    .ToListAsync();
+                    .ToList();
 
                 var response = new ProvisioningStatusResponse(
                     tenant.Status.ToString(),
@@ -282,10 +288,9 @@ namespace Api_eCommerce.Endpoints
         }
     }
 
-    // DTOs
+    // DTOs - solo para este endpoint, usando el ProvisioningStepDto del Application layer
     public record InitProvisioningRequest(string Slug, string Name, string Plan);
     public record InitProvisioningResponse(Guid ProvisioningId, string ConfirmToken, string Next, string Message);
     public record ConfirmProvisioningResponse(Guid ProvisioningId, string Status, string Message, string StatusEndpoint);
     public record ProvisioningStatusResponse(string Status, string? TenantSlug, string? DbName, List<ProvisioningStepDto> Steps);
-    public record ProvisioningStepDto(string Step, string Status, DateTime StartedAt, DateTime? CompletedAt, string? Log, string? ErrorMessage);
 }

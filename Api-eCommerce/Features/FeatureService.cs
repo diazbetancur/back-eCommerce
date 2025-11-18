@@ -1,4 +1,4 @@
-using CC.Infraestructure.Admin;
+using CC.Infraestructure.AdminDb;
 using Microsoft.EntityFrameworkCore;
 
 namespace Api_eCommerce.Features
@@ -41,5 +41,4 @@ namespace Api_eCommerce.Features
  .FirstOrDefaultAsync();
  return overrideLimit ?? planLimit;
  }
- }
-}
+}}

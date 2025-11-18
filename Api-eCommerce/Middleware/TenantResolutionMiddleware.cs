@@ -1,4 +1,5 @@
-using CC.Infraestructure.Admin;
+using CC.Infraestructure.AdminDb;
+using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.Tenancy;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -90,7 +91,7 @@ namespace Api_eCommerce.Middleware
 
                 // ==================== VERIFICAR STATUS ====================
                 // Solo permitir tenants en status "Ready"
-                if (tenant.Status != CC.Infraestructure.Admin.Entities.TenantStatus.Ready)
+                if (tenant.Status != TenantStatus.Ready)
                 {
                     _logger.LogWarning(
                         "Tenant not available. Slug: {Slug}, Status: {Status}", 

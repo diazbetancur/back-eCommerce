@@ -60,6 +60,7 @@ namespace Api_eCommerce.Endpoints
             [FromServices] ILogger<TenantFeaturesResponse> logger)
         {
             var tenant = await adminDb.Tenants
+                .Include(t => t.Plan)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.Id == tenantId);
 
@@ -74,7 +75,7 @@ namespace Api_eCommerce.Endpoints
             if (usingDefaults)
             {
                 // Usar defaults del plan
-                features = DefaultFeatureFlags.GetForPlan(tenant.Plan ?? "Basic");
+                features = DefaultFeatureFlags.GetForPlan(tenant.Plan?.Code ?? "Basic");
             }
             else
             {
@@ -86,7 +87,7 @@ namespace Api_eCommerce.Endpoints
                 catch (JsonException ex)
                 {
                     logger.LogError(ex, "Error deserializing feature flags for tenant {TenantId}", tenantId);
-                    features = DefaultFeatureFlags.GetForPlan(tenant.Plan ?? "Basic");
+                    features = DefaultFeatureFlags.GetForPlan(tenant.Plan?.Code ?? "Basic");
                     usingDefaults = true;
                 }
             }
@@ -95,7 +96,7 @@ namespace Api_eCommerce.Endpoints
             {
                 TenantId = tenant.Id,
                 Slug = tenant.Slug,
-                Plan = tenant.Plan ?? "Basic",
+                Plan = tenant.Plan?.Code ?? "Basic",
                 UsingDefaults = usingDefaults,
                 Features = features
             });
@@ -108,7 +109,7 @@ namespace Api_eCommerce.Endpoints
             [FromServices] IFeatureService featureService,
             [FromServices] ILogger<TenantFeaturesResponse> logger)
         {
-            var tenant = await adminDb.Tenants.FindAsync(tenantId);
+            var tenant = await adminDb.Tenants.Include(t => t.Plan).FirstOrDefaultAsync(t => t.Id == tenantId);
 
             if (tenant == null)
             {
@@ -141,7 +142,7 @@ namespace Api_eCommerce.Endpoints
                 {
                     TenantId = tenant.Id,
                     Slug = tenant.Slug,
-                    Plan = tenant.Plan ?? "Basic",
+                    Plan = tenant.Plan?.Code ?? "Basic",
                     UsingDefaults = false,
                     Features = request.Features
                 });
@@ -161,7 +162,7 @@ namespace Api_eCommerce.Endpoints
             [FromServices] IFeatureService featureService,
             [FromServices] ILogger<TenantFeaturesResponse> logger)
         {
-            var tenant = await adminDb.Tenants.FindAsync(tenantId);
+            var tenant = await adminDb.Tenants.Include(t => t.Plan).FirstOrDefaultAsync(t => t.Id == tenantId);
 
             if (tenant == null)
             {
@@ -179,13 +180,13 @@ namespace Api_eCommerce.Endpoints
 
             logger.LogInformation("Feature flags reset to defaults for tenant {TenantId}", tenantId);
 
-            var defaultFeatures = DefaultFeatureFlags.GetForPlan(tenant.Plan ?? "Basic");
+            var defaultFeatures = DefaultFeatureFlags.GetForPlan(tenant.Plan?.Code ?? "Basic");
 
             return Results.Ok(new TenantFeaturesResponse
             {
                 TenantId = tenant.Id,
                 Slug = tenant.Slug,
-                Plan = tenant.Plan ?? "Basic",
+                Plan = tenant.Plan?.Code ?? "Basic",
                 UsingDefaults = true,
                 Features = defaultFeatures
             });
