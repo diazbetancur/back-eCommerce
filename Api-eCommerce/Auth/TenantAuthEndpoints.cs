@@ -30,6 +30,14 @@ namespace Api_eCommerce.Auth
                 .Produces<AuthResponse>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
 
+            // ? NUEVO: Login para admins del tenant (con roles)
+            group.MapPost("/admin/login", AdminLogin)
+                .WithName("TenantAdminLogin")
+                .WithSummary("Authenticate tenant admin")
+                .WithDescription("Authenticates tenant admin user (TenantUser) with roles included in JWT")
+                .Produces<CC.Aplication.TenantAuth.TenantAuthResponse>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
+
             group.MapGet("/me", GetProfile)
                 .RequireAuthorization()
                 .WithName("GetProfile")
@@ -149,6 +157,66 @@ namespace Api_eCommerce.Auth
 
                 // Autenticar usuario
                 var response = await authService.LoginAsync(request);
+                return Results.Ok(response);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status401Unauthorized,
+                    title: "Authentication Failed",
+                    detail: ex.Message
+                );
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Login Failed",
+                    detail: ex.Message
+                );
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Internal Server Error",
+                    detail: "An error occurred during login"
+                );
+            }
+        }
+
+        // ? NUEVO: Admin Login con roles
+        private static async Task<IResult> AdminLogin(
+            HttpContext context,
+            [FromBody] CC.Aplication.TenantAuth.TenantLoginRequest request,
+            CC.Aplication.TenantAuth.ITenantAuthService tenantAuthService,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                // Validar tenant
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status409Conflict,
+                        title: "Tenant Not Resolved",
+                        detail: "Unable to resolve tenant from request"
+                    );
+                }
+
+                // Validaciones básicas
+                if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "Email and password are required"
+                    );
+                }
+
+                // Autenticar usuario (TenantUser con roles)
+                var response = await tenantAuthService.LoginAsync(request);
                 return Results.Ok(response);
             }
             catch (UnauthorizedAccessException ex)

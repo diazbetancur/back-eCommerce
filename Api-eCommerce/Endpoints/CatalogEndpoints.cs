@@ -70,7 +70,7 @@ namespace Api_eCommerce.Endpoints
         }
 
         private static async Task<IResult> CreateProduct(
-            [FromBody] CreateProductRequest request,
+            [FromBody] CC.Aplication.Catalog.CreateProductRequest request,  // Usar el correcto
             [FromServices] ICatalogService catalogService)
         {
             try

@@ -26,6 +26,9 @@ namespace CC.Infraestructure.Admin
             // ==================== 2. SEED SUPERADMIN USER ====================
             await SeedSuperAdminAsync(adminDb, logger);
 
+            // ==================== 3. SEED PLANS AND LIMITS ? NUEVO ====================
+            await PlanLimitsSeeder.SeedAsync(adminDb, logger);
+
             logger?.LogInformation("? AdminDb seed completed successfully");
         }
 

@@ -20,6 +20,7 @@ namespace CC.Infraestructure.AdminDb
         public DbSet<Plan> Plans => Set<Plan>();
         public DbSet<Feature> Features => Set<Feature>();
         public DbSet<PlanFeature> PlanFeatures => Set<PlanFeature>();
+        public DbSet<PlanLimit> PlanLimits => Set<PlanLimit>();  // ? NUEVO
         public DbSet<TenantFeatureOverride> TenantFeatureOverrides => Set<TenantFeatureOverride>();
         public DbSet<TenantUsageDaily> TenantUsageDaily => Set<TenantUsageDaily>();
 
@@ -42,6 +43,29 @@ namespace CC.Infraestructure.AdminDb
             modelBuilder.Entity<PlanFeature>().HasKey(x => new { x.PlanId, x.FeatureId });
             modelBuilder.Entity<TenantFeatureOverride>().HasKey(x => new { x.TenantId, x.FeatureId });
             modelBuilder.Entity<TenantUsageDaily>().HasKey(x => new { x.TenantId, x.Date });
+
+            // ? NUEVO: Configurar PlanLimit
+            modelBuilder.Entity<PlanLimit>(entity =>
+            {
+                entity.ToTable("PlanLimits", "admin");
+                entity.HasKey(e => e.Id);
+                
+                // Índice único: un plan no puede tener múltiples límites con el mismo código
+                entity.HasIndex(e => new { e.PlanId, e.LimitCode })
+                    .IsUnique()
+                    .HasDatabaseName("UQ_PlanLimits_PlanId_LimitCode");
+                
+                entity.Property(e => e.PlanId).IsRequired();
+                entity.Property(e => e.LimitCode).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.LimitValue).IsRequired();
+                entity.Property(e => e.Description).HasMaxLength(500);
+                entity.Property(e => e.CreatedAt).IsRequired();
+
+                entity.HasOne(pl => pl.Plan)
+                    .WithMany(p => p.Limits)
+                    .HasForeignKey(pl => pl.PlanId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             // Configurar relación TenantProvisioning -> Tenant
             modelBuilder.Entity<TenantProvisioning>()

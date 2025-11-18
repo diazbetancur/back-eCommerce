@@ -40,7 +40,7 @@ builder.Services.AddCors(options =>
 });
 
 // ==================== ADMIN DB ====================
-builder.Services.AddDbContext<AdminDbContext>(opt => 
+builder.Services.AddDbContext<AdminDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("AdminDb"),
         npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "admin")));
 
@@ -74,7 +74,18 @@ builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IFeatureService, FeatureService>();
+
+// Auth services
 builder.Services.AddScoped<CC.Aplication.Auth.IAuthService, CC.Aplication.Auth.AuthService>();
+builder.Services.AddScoped<CC.Aplication.TenantAuth.ITenantAuthService, CC.Aplication.TenantAuth.TenantAuthService>();
+
+// Permission service
+builder.Services.AddScoped<CC.Aplication.Permissions.IPermissionService, CC.Aplication.Permissions.PermissionService>();
+
+// Plan Limit service ? NUEVO
+builder.Services.AddScoped<CC.Aplication.Plans.IPlanLimitService, CC.Aplication.Plans.PlanLimitService>();
+
+// Other services
 builder.Services.AddScoped<CC.Aplication.Orders.IOrderService, CC.Aplication.Orders.OrderService>();
 builder.Services.AddScoped<CC.Aplication.Favorites.IFavoritesService, CC.Aplication.Favorites.FavoritesService>();
 builder.Services.AddScoped<CC.Aplication.Loyalty.ILoyaltyService, CC.Aplication.Loyalty.LoyaltyService>();
@@ -106,10 +117,10 @@ using (var scope = app.Services.CreateScope())
     {
         var adminDb = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        
+
         logger.LogInformation("?? Applying AdminDb migrations...");
         await adminDb.Database.MigrateAsync();
-        
+
         logger.LogInformation("?? Seeding AdminDb...");
         await CC.Infraestructure.Admin.AdminDbSeeder.SeedAsync(adminDb, logger);
     }
@@ -157,6 +168,8 @@ app.MapPublicTenantConfig();
 var tenantGroup = app.MapGroup("").RequireTenantResolution();
 tenantGroup.MapGroup("").MapFeatureFlagsEndpoints();
 tenantGroup.MapGroup("").MapTenantAuth();
+tenantGroup.MapGroup("").MapPermissionsEndpoints();
+tenantGroup.MapGroup("").MapTenantAdminEndpoints();
 tenantGroup.MapGroup("").MapCatalogEndpoints();
 tenantGroup.MapGroup("").MapCartEndpoints();
 tenantGroup.MapGroup("").MapCheckoutEndpoints();
@@ -176,7 +189,7 @@ public static class TenantMiddlewareExtensions
         return group.AddEndpointFilter(async (context, next) =>
         {
             var httpContext = context.HttpContext;
-            
+
             var middleware = new TenantResolutionMiddleware(
                 async (ctx) => { await Task.CompletedTask; },
                 httpContext.RequestServices.GetRequiredService<ILogger<TenantResolutionMiddleware>>()

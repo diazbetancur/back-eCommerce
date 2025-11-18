@@ -28,10 +28,12 @@ namespace CC.Infraestructure.Tenant
         public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
         #endregion
 
-        #region Authentication & Authorization (Legacy)
+        #region Authentication & Authorization
         public DbSet<TenantUser> Users => Set<TenantUser>();
         public DbSet<TenantRole> Roles => Set<TenantRole>();
         public DbSet<TenantUserRole> UserRoles => Set<TenantUserRole>();
+        public DbSet<Module> Modules => Set<Module>();
+        public DbSet<RoleModulePermission> RoleModulePermissions => Set<RoleModulePermission>();
         #endregion
 
         #region Settings & Configuration
@@ -166,10 +168,10 @@ namespace CC.Infraestructure.Tenant
             });
             #endregion
 
-            #region Authentication & Authorization (Legacy)
+            #region Authentication & Authorization
             modelBuilder.Entity<TenantUser>(entity =>
             {
-                entity.ToTable("Users");
+                entity.ToTable("TenantUsers");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Email).IsUnique();
                 entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
@@ -178,16 +180,70 @@ namespace CC.Infraestructure.Tenant
 
             modelBuilder.Entity<TenantRole>(entity =>
             {
-                entity.ToTable("Roles");
+                entity.ToTable("TenantRoles");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Name).IsUnique();
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.CreatedAt).IsRequired();
             });
 
             modelBuilder.Entity<TenantUserRole>(entity =>
             {
-                entity.ToTable("UserRoles");
+                entity.ToTable("TenantUserRoles");
                 entity.HasKey(e => new { e.UserId, e.RoleId });
+                entity.Property(e => e.AssignedAt).IsRequired();
+
+                entity.HasOne(ur => ur.User)
+                    .WithMany(u => u.UserRoles)
+                    .HasForeignKey(ur => ur.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(ur => ur.Role)
+                    .WithMany(r => r.UserRoles)
+                    .HasForeignKey(ur => ur.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<Module>(entity =>
+            {
+                entity.ToTable("Modules");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Code).IsUnique();
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Description).HasMaxLength(500);
+                entity.Property(e => e.IconName).HasMaxLength(50);
+                entity.Property(e => e.IsActive).IsRequired();
+                entity.Property(e => e.CreatedAt).IsRequired();
+            });
+
+            modelBuilder.Entity<RoleModulePermission>(entity =>
+            {
+                entity.ToTable("RoleModulePermissions");
+                entity.HasKey(e => e.Id);
+                
+                // Índice único: un rol no puede tener múltiples permisos para el mismo módulo
+                entity.HasIndex(e => new { e.RoleId, e.ModuleId })
+                    .IsUnique()
+                    .HasDatabaseName("UQ_RoleModulePermissions_RoleId_ModuleId");
+                
+                entity.Property(e => e.RoleId).IsRequired();
+                entity.Property(e => e.ModuleId).IsRequired();
+                entity.Property(e => e.CanView).IsRequired();
+                entity.Property(e => e.CanCreate).IsRequired();
+                entity.Property(e => e.CanUpdate).IsRequired();
+                entity.Property(e => e.CanDelete).IsRequired();
+                entity.Property(e => e.CreatedAt).IsRequired();
+
+                entity.HasOne(p => p.Role)
+                    .WithMany(r => r.ModulePermissions)
+                    .HasForeignKey(p => p.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(p => p.Module)
+                    .WithMany(m => m.RolePermissions)
+                    .HasForeignKey(p => p.ModuleId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
             #endregion
 
