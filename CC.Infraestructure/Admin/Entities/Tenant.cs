@@ -9,7 +9,8 @@ namespace CC.Infraestructure.Admin.Entities
         Seeding = 1,
         Ready = 2,
         Suspended = 3,
-        Failed = 4
+        Failed = 4,
+        Disabled = 5
     }
 
     [Table("Tenants", Schema = "admin")]
@@ -32,7 +33,7 @@ namespace CC.Infraestructure.Admin.Entities
 
         public TenantStatus Status { get; set; }
 
-        // ? CAMBIAR: Nullable porque se asigna después de crear la DB
+        // ? CAMBIAR: Nullable porque se asigna despuï¿½s de crear la DB
         public string? EncryptedConnection { get; set; }
 
         public Guid? PlanId { get; set; }

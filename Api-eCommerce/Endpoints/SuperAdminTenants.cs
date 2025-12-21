@@ -18,9 +18,25 @@ namespace Api_eCommerce.Endpoints
     {
         public static IEndpointRouteBuilder MapSuperAdminTenants(this IEndpointRouteBuilder app)
         {
-            var group = app.MapGroup("/superadmin/tenants");
+            var group = app.MapGroup("/superadmin/tenants")
+                .WithTags("SuperAdmin - Tenants");
 
-            group.MapPost("/", CreateTenant);
+            group.MapPost("/", CreateTenant)
+                .WithName("CreateTenant")
+                .WithSummary("Crear nuevo tenant con base de datos y usuario admin");
+
+            group.MapGet("/", ListTenants)
+                .WithName("ListTenants")
+                .WithSummary("Listar todos los tenants");
+
+            group.MapDelete("/{slug}", DeleteTenant)
+                .WithName("DeleteTenant")
+                .WithSummary("Eliminar tenant (soft delete)");
+
+            group.MapPatch("/{slug}/plan", ChangeTenantPlan)
+                .WithName("ChangeTenantPlan")
+                .WithSummary("Cambiar plan de un tenant");
+
             group.MapPost("/repair", RepairTenant);
 
             return app;
@@ -68,7 +84,8 @@ namespace Api_eCommerce.Endpoints
             ILoggerFactory loggerFactory,
             string slug,
             string name,
-            string planCode)
+            string planCode,
+            string? adminEmail = null)
         {
             var logger = loggerFactory.CreateLogger("SuperAdminTenants");
             var regex = new Regex("^[a-z0-9-]{3,}$");
@@ -77,6 +94,11 @@ namespace Api_eCommerce.Endpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]> { { "slug", new[] { "invalid format" } } });
             }
+
+            // Usar adminEmail proporcionado o generar uno por defecto
+            var finalAdminEmail = string.IsNullOrWhiteSpace(adminEmail)
+                ? $"admin@{slug}"
+                : adminEmail.Trim().ToLower();
 
             var plan = await adminDb.Plans.FirstOrDefaultAsync(p => p.Code == planCode);
             if (plan == null)
@@ -101,7 +123,7 @@ namespace Api_eCommerce.Endpoints
             {
                 adminDb.Tenants.Add(tenant);
                 await adminDb.SaveChangesAsync();
-                
+
                 // 1. Crear base de datos
                 var adminConn = adminDb.Database.GetConnectionString();
                 var csb = new NpgsqlConnectionStringBuilder(adminConn);
@@ -147,7 +169,7 @@ namespace Api_eCommerce.Endpoints
                         logger.LogInformation("? Roles created");
                     }
 
-                    // Seed mÛdulos y permisos
+                    // Seed mÔøΩdulos y permisos
                     await TenantModulesSeeder.SeedAsync(tenantDb, logger);
 
                     // Crear usuario admin y asignar rol
@@ -160,9 +182,10 @@ namespace Api_eCommerce.Endpoints
                         var adminUser = new TenantUser
                         {
                             Id = Guid.NewGuid(),
-                            Email = $"admin@{slug}",
+                            Email = finalAdminEmail,
                             PasswordHash = hash,
-                            IsActive = true
+                            IsActive = true,
+                            MustChangePassword = true  // Forzar cambio en primer login
                         };
 
                         tenantDb.Users.Add(adminUser);
@@ -178,8 +201,8 @@ namespace Api_eCommerce.Endpoints
                         });
                         await tenantDb.SaveChangesAsync();
 
-                        logger.LogInformation("? Admin user created: {Email}", adminUser.Email);
-                        logger.LogWarning("??  TEMP PASSWORD: {Password}", tempPass);
+                        logger.LogInformation("‚úÖ Admin user created: {Email}", adminUser.Email);
+                        logger.LogWarning("‚ö†Ô∏è  TEMP PASSWORD: {Password}", tempPass);
                     }
                 }
 
@@ -236,7 +259,7 @@ namespace Api_eCommerce.Endpoints
                     // Reemplazar {DbName} con el nombre real
                     cs = template.Replace("{DbName}", t.DbName);
 
-                    // Guardar la conexiÛn encriptada
+                    // Guardar la conexiÔøΩn encriptada
                     t.EncryptedConnection = protector.Protect(cs);
                 }
                 else
@@ -268,6 +291,92 @@ namespace Api_eCommerce.Endpoints
                 return Results.Problem(statusCode: 500, detail: ex.Message);
             }
         }
+
+        // ==================== LIST TENANTS ====================
+        private static async Task<IResult> ListTenants(AdminDbContext adminDb)
+        {
+            var tenants = await adminDb.Tenants
+                .Include(t => t.Plan)
+                .OrderByDescending(t => t.CreatedAt)
+                .Select(t => new TenantListDto
+                {
+                    Id = t.Id,
+                    Slug = t.Slug,
+                    Name = t.Name,
+                    Status = t.Status.ToString(),
+                    PlanCode = t.Plan != null ? t.Plan.Code : null,
+                    PlanName = t.Plan != null ? t.Plan.Name : null,
+                    CreatedAt = t.CreatedAt,
+                    UpdatedAt = t.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Results.Ok(tenants);
+        }
+
+        // ==================== DELETE TENANT ====================
+        private static async Task<IResult> DeleteTenant(
+            AdminDbContext adminDb,
+            string slug)
+        {
+            var tenant = await adminDb.Tenants.FirstOrDefaultAsync(t => t.Slug == slug);
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { error = $"Tenant '{slug}' not found" });
+            }
+
+            // Soft delete: cambiar status a Disabled
+            tenant.Status = TenantStatus.Disabled;
+            tenant.UpdatedAt = DateTime.UtcNow;
+            await adminDb.SaveChangesAsync();
+
+            return Results.Ok(new { message = $"Tenant '{slug}' disabled successfully" });
+        }
+
+        // ==================== CHANGE TENANT PLAN ====================
+        private static async Task<IResult> ChangeTenantPlan(
+            AdminDbContext adminDb,
+            string slug,
+            string newPlanCode)
+        {
+            var tenant = await adminDb.Tenants
+                .Include(t => t.Plan)
+                .FirstOrDefaultAsync(t => t.Slug == slug);
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { error = $"Tenant '{slug}' not found" });
+            }
+
+            var newPlan = await adminDb.Plans
+                .Include(p => p.Limits)
+                .FirstOrDefaultAsync(p => p.Code == newPlanCode);
+
+            if (newPlan == null)
+            {
+                return Results.NotFound(new { error = $"Plan '{newPlanCode}' not found" });
+            }
+
+            var oldPlanCode = tenant.Plan?.Code ?? "none";
+            tenant.PlanId = newPlan.Id;
+            tenant.UpdatedAt = DateTime.UtcNow;
+            await adminDb.SaveChangesAsync();
+
+            return Results.Ok(new TenantPlanChangedResponse
+            {
+                TenantSlug = slug,
+                OldPlanCode = oldPlanCode,
+                NewPlanCode = newPlan.Code,
+                NewPlanName = newPlan.Name,
+                Limits = newPlan.Limits.Select(l => new PlanLimitDto
+                {
+                    LimitCode = l.LimitCode,
+                    LimitValue = l.LimitValue,
+                    Description = l.Description
+                }).ToList()
+            });
+        }
     }
 
     // ==================== DTOs ====================
@@ -284,5 +393,26 @@ namespace Api_eCommerce.Endpoints
         public string LimitCode { get; set; } = string.Empty;
         public int LimitValue { get; set; }
         public string? Description { get; set; }
+    }
+
+    public record TenantListDto
+    {
+        public Guid Id { get; set; }
+        public string Slug { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string? PlanCode { get; set; }
+        public string? PlanName { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    public record TenantPlanChangedResponse
+    {
+        public string TenantSlug { get; set; } = string.Empty;
+        public string OldPlanCode { get; set; } = string.Empty;
+        public string NewPlanCode { get; set; } = string.Empty;
+        public string NewPlanName { get; set; } = string.Empty;
+        public List<PlanLimitDto> Limits { get; set; } = new();
     }
 }

@@ -11,7 +11,7 @@ using System.Text;
 namespace CC.Aplication.Auth
 {
     /// <summary>
-    /// Servicio unificado de autenticación para el tenant
+    /// Servicio unificado de autenticaciï¿½n para el tenant
     /// Soporta tanto usuarios compradores (UserAccount) como staff/admin (TenantUser)
     /// </summary>
     public interface IUnifiedAuthService
@@ -19,6 +19,7 @@ namespace CC.Aplication.Auth
         Task<UnifiedAuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default);
         Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken ct = default);
         Task<UserProfileDto> GetUserProfileAsync(Guid userId, CancellationToken ct = default);
+        Task<ChangePasswordResponse> ChangePasswordAsync(ChangePasswordRequest request, Guid userId, CancellationToken ct = default);
     }
 
     public class UnifiedAuthService : IUnifiedAuthService
@@ -38,7 +39,7 @@ namespace CC.Aplication.Auth
         }
 
         /// <summary>
-        /// Login unificado: detecta automáticamente si es TenantUser (admin/staff) o UserAccount (comprador)
+        /// Login unificado: detecta automï¿½ticamente si es TenantUser (admin/staff) o UserAccount (comprador)
         /// </summary>
         public async Task<UnifiedAuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
         {
@@ -104,7 +105,7 @@ namespace CC.Aplication.Auth
             // Obtener roles
             var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
 
-            // Obtener permisos por módulo
+            // Obtener permisos por mï¿½dulo
             var permissions = user.UserRoles
                 .SelectMany(ur => ur.Role.ModulePermissions)
                 .Where(mp => mp.Module.IsActive)
@@ -121,7 +122,7 @@ namespace CC.Aplication.Auth
                 })
                 .ToList();
 
-            // Generar JWT con roles y módulos
+            // Generar JWT con roles y mï¿½dulos
             var modules = await GetUserModulesAsync(user.Id, db);
             var token = GenerateJwtTokenForTenantUser(user.Id, user.Email, roles, modules);
             var expiresAt = DateTime.UtcNow.AddHours(24);
@@ -401,6 +402,51 @@ namespace CC.Aplication.Auth
             string hash = Convert.ToBase64String(hashBytes);
             return hash == storedHash;
         }
+
+        /// <summary>
+        /// Cambio de contraseÃ±a para TenantUser (admin/staff)
+        /// Resetea MustChangePassword a false despuÃ©s del cambio exitoso
+        /// </summary>
+        public async Task<ChangePasswordResponse> ChangePasswordAsync(ChangePasswordRequest request, Guid userId, CancellationToken ct = default)
+        {
+            if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
+            {
+                throw new InvalidOperationException("No tenant context available");
+            }
+
+            await using var db = _dbFactory.Create();
+
+            // Buscar el usuario (TenantUser)
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+
+            if (user == null)
+            {
+                throw new UnauthorizedAccessException("User not found");
+            }
+
+            // Verificar contraseÃ±a actual
+            var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
+            var result = hasher.VerifyHashedPassword(null!, user.PasswordHash, request.CurrentPassword);
+
+            if (result == Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
+            {
+                throw new UnauthorizedAccessException("Current password is incorrect");
+            }
+
+            // Validar nueva contraseÃ±a
+            if (request.NewPassword.Length < 8)
+            {
+                throw new ArgumentException("New password must be at least 8 characters long");
+            }
+
+            // Actualizar contraseÃ±a
+            user.PasswordHash = hasher.HashPassword(null!, request.NewPassword);
+            user.MustChangePassword = false;  // Resetear flag despuÃ©s del cambio exitoso
+
+            await db.SaveChangesAsync(ct);
+
+            return new ChangePasswordResponse(true, "Password changed successfully");
+        }
     }
 
     // ==================== DTOs ====================
@@ -421,6 +467,7 @@ namespace CC.Aplication.Auth
         public List<string> Roles { get; set; } = new();
         public List<ModulePermissionDto> Permissions { get; set; } = new();
         public bool IsActive { get; set; }
+        public bool MustChangePassword { get; set; }  // Indica si debe cambiar contraseÃ±a
     }
 
     public class ModulePermissionDto
@@ -433,4 +480,15 @@ namespace CC.Aplication.Auth
         public bool CanUpdate { get; set; }
         public bool CanDelete { get; set; }
     }
+
+    // ==================== CHANGE PASSWORD DTOs ====================
+    public record ChangePasswordRequest(
+        string CurrentPassword,
+        string NewPassword
+    );
+
+    public record ChangePasswordResponse(
+        bool Success,
+        string Message
+    );
 }

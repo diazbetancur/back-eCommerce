@@ -38,6 +38,15 @@ namespace Api_eCommerce.Auth
                 .Produces<UserProfileDto>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
 
+            group.MapPost("/change-password", ChangePassword)
+                .RequireAuthorization()
+                .WithName("ChangePassword")
+                .WithSummary("Change user password")
+                .WithDescription("Changes the current user's password. Required when MustChangePassword is true after first login.")
+                .Produces<ChangePasswordResponse>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+                .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
+
             return app;
         }
 
@@ -60,7 +69,7 @@ namespace Api_eCommerce.Auth
                     );
                 }
 
-                // Validaciones básicas
+                // Validaciones bï¿½sicas
                 if (string.IsNullOrWhiteSpace(request.Email))
                 {
                     return Results.Problem(
@@ -137,7 +146,7 @@ namespace Api_eCommerce.Auth
                     );
                 }
 
-                // Validaciones básicas
+                // Validaciones bï¿½sicas
                 if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
                 {
                     return Results.Problem(
@@ -147,7 +156,7 @@ namespace Api_eCommerce.Auth
                     );
                 }
 
-                // Autenticar usuario (detecta automáticamente si es admin o comprador)
+                // Autenticar usuario (detecta automï¿½ticamente si es admin o comprador)
                 var response = await unifiedAuthService.LoginAsync(request);
                 return Results.Ok(response);
             }
@@ -234,6 +243,87 @@ namespace Api_eCommerce.Auth
                     statusCode: StatusCodes.Status500InternalServerError,
                     title: "Internal Server Error",
                     detail: "An error occurred while retrieving profile"
+                );
+            }
+        }
+
+        private static async Task<IResult> ChangePassword(
+            HttpContext context,
+            [FromBody] ChangePasswordRequest request,
+            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                // Validar tenant
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status409Conflict,
+                        title: "Tenant Not Resolved",
+                        detail: "Unable to resolve tenant from request"
+                    );
+                }
+
+                // Obtener user ID del token JWT
+                var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)
+                    ?? context.User.FindFirst("sub");
+
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        title: "Invalid Token",
+                        detail: "User ID not found in token"
+                    );
+                }
+
+                // Validaciones bÃ¡sicas
+                if (string.IsNullOrWhiteSpace(request.CurrentPassword))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "Current password is required"
+                    );
+                }
+
+                if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "New password must be at least 8 characters long"
+                    );
+                }
+
+                // Cambiar contraseÃ±a
+                var response = await unifiedAuthService.ChangePasswordAsync(request, userId);
+                return Results.Ok(response);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status401Unauthorized,
+                    title: "Password Change Failed",
+                    detail: ex.Message
+                );
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Validation Error",
+                    detail: ex.Message
+                );
+            }
+            catch (Exception)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Internal Server Error",
+                    detail: "An error occurred while changing password"
                 );
             }
         }
