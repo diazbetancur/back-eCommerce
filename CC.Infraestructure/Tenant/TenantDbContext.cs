@@ -6,345 +6,400 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CC.Infraestructure.Tenant
 {
-    /// <summary>
-    /// DbContext para bases de datos de tenants individuales
-    /// Contiene el esquema de negocio: catálogo, carrito, pedidos, usuarios
-    /// </summary>
-    public class TenantDbContext : DbContext
+  /// <summary>
+  /// DbContext para bases de datos de tenants individuales
+  /// Contiene el esquema de negocio: catï¿½logo, carrito, pedidos, usuarios
+  /// </summary>
+  public class TenantDbContext : DbContext
+  {
+    public TenantDbContext(DbContextOptions<TenantDbContext> options) : base(options) { }
+
+    #region User Authentication (New)
+    public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
+    public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
+    #endregion
+
+    #region Favorites (New)
+    public DbSet<FavoriteProduct> FavoriteProducts => Set<FavoriteProduct>();
+    #endregion
+
+    #region Loyalty Program (New)
+    public DbSet<LoyaltyAccount> LoyaltyAccounts => Set<LoyaltyAccount>();
+    public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
+    #endregion
+
+    #region Authentication & Authorization
+    public DbSet<TenantUser> Users => Set<TenantUser>();
+    public DbSet<TenantRole> Roles => Set<TenantRole>();
+    public DbSet<TenantUserRole> UserRoles => Set<TenantUserRole>();
+    public DbSet<Module> Modules => Set<Module>();
+    public DbSet<RoleModulePermission> RoleModulePermissions => Set<RoleModulePermission>();
+    #endregion
+
+    #region Settings & Configuration
+    public DbSet<TenantSetting> Settings => Set<TenantSetting>();
+    public DbSet<WebPushSubscription> WebPushSubscriptions => Set<WebPushSubscription>();
+    #endregion
+
+    #region Catalog
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
+    public DbSet<ProductImage> ProductImages => Set<ProductImage>();
+    public DbSet<Banner> Banners => Set<Banner>();
+    #endregion
+
+    #region Shopping Cart
+    public DbSet<Cart> Carts => Set<Cart>();
+    public DbSet<CartItem> CartItems => Set<CartItem>();
+    #endregion
+
+    #region Orders
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<OrderStatus> OrderStatuses => Set<OrderStatus>();
+    #endregion
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        public TenantDbContext(DbContextOptions<TenantDbContext> options) : base(options) { }
+      base.OnModelCreating(modelBuilder);
 
-        #region User Authentication (New)
-        public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
-        public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
-        #endregion
+      // Schema por defecto
+      modelBuilder.HasDefaultSchema("public");
 
-        #region Favorites (New)
-        public DbSet<FavoriteProduct> FavoriteProducts => Set<FavoriteProduct>();
-        #endregion
+      #region User Authentication (New)
+      modelBuilder.Entity<UserAccount>(entity =>
+      {
+        entity.ToTable("UserAccounts");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.Email).IsUnique();
+        entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
+        entity.Property(e => e.PasswordHash).IsRequired().HasMaxLength(500);
+        entity.Property(e => e.PasswordSalt).IsRequired().HasMaxLength(500);
+        entity.Property(e => e.IsActive).IsRequired();
+        entity.Property(e => e.CreatedAt).IsRequired();
 
-        #region Loyalty Program (New)
-        public DbSet<LoyaltyAccount> LoyaltyAccounts => Set<LoyaltyAccount>();
-        public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
-        #endregion
+        // Relaciï¿½n 1:1 con UserProfile
+        entity.HasOne(u => u.Profile)
+                  .WithOne(p => p.UserAccount)
+                  .HasForeignKey<UserProfile>(p => p.Id)
+                  .OnDelete(DeleteBehavior.Cascade);
+      });
 
-        #region Authentication & Authorization
-        public DbSet<TenantUser> Users => Set<TenantUser>();
-        public DbSet<TenantRole> Roles => Set<TenantRole>();
-        public DbSet<TenantUserRole> UserRoles => Set<TenantUserRole>();
-        public DbSet<Module> Modules => Set<Module>();
-        public DbSet<RoleModulePermission> RoleModulePermissions => Set<RoleModulePermission>();
-        #endregion
+      modelBuilder.Entity<UserProfile>(entity =>
+      {
+        entity.ToTable("UserProfiles");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
+        entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
+        entity.Property(e => e.PhoneNumber).HasMaxLength(50);
+        entity.Property(e => e.DocumentType).HasMaxLength(50);
+        entity.Property(e => e.DocumentNumber).HasMaxLength(100);
+        entity.Property(e => e.Address).HasMaxLength(500);
+        entity.Property(e => e.City).HasMaxLength(100);
+        entity.Property(e => e.Country).HasMaxLength(100);
+      });
+      #endregion
 
-        #region Settings & Configuration
-        public DbSet<TenantSetting> Settings => Set<TenantSetting>();
-        public DbSet<WebPushSubscription> WebPushSubscriptions => Set<WebPushSubscription>();
-        #endregion
+      #region Favorites (New)
+      modelBuilder.Entity<FavoriteProduct>(entity =>
+      {
+        entity.ToTable("FavoriteProducts");
+        entity.HasKey(e => e.Id);
 
-        #region Catalog
-        public DbSet<Product> Products => Set<Product>();
-        public DbSet<Category> Categories => Set<Category>();
-        public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
-        public DbSet<ProductImage> ProductImages => Set<ProductImage>();
-        #endregion
+        // ï¿½ndice ï¿½nico compuesto: un usuario no puede tener el mismo producto favorito dos veces
+        entity.HasIndex(e => new { e.UserId, e.ProductId })
+                  .IsUnique()
+                  .HasDatabaseName("UQ_FavoriteProducts_UserId_ProductId");
 
-        #region Shopping Cart
-        public DbSet<Cart> Carts => Set<Cart>();
-        public DbSet<CartItem> CartItems => Set<CartItem>();
-        #endregion
+        // ï¿½ndices para bï¿½squedas
+        entity.HasIndex(e => e.UserId).HasDatabaseName("IX_FavoriteProducts_UserId");
+        entity.HasIndex(e => e.ProductId).HasDatabaseName("IX_FavoriteProducts_ProductId");
 
-        #region Orders
-        public DbSet<Order> Orders => Set<Order>();
-        public DbSet<OrderItem> OrderItems => Set<OrderItem>();
-        public DbSet<OrderStatus> OrderStatuses => Set<OrderStatus>();
-        #endregion
+        entity.Property(e => e.UserId).IsRequired();
+        entity.Property(e => e.ProductId).IsRequired();
+        entity.Property(e => e.CreatedAt).IsRequired();
+      });
+      #endregion
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-            
-            // Schema por defecto
-            modelBuilder.HasDefaultSchema("public");
+      #region Loyalty Program (New)
+      modelBuilder.Entity<LoyaltyAccount>(entity =>
+      {
+        entity.ToTable("LoyaltyAccounts");
+        entity.HasKey(e => e.Id);
 
-            #region User Authentication (New)
-            modelBuilder.Entity<UserAccount>(entity =>
-            {
-                entity.ToTable("UserAccounts");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Email).IsUnique();
-                entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-                entity.Property(e => e.PasswordHash).IsRequired().HasMaxLength(500);
-                entity.Property(e => e.PasswordSalt).IsRequired().HasMaxLength(500);
-                entity.Property(e => e.IsActive).IsRequired();
-                entity.Property(e => e.CreatedAt).IsRequired();
+        // ï¿½ndice ï¿½nico: un usuario solo puede tener una cuenta de loyalty
+        entity.HasIndex(e => e.UserId)
+                  .IsUnique()
+                  .HasDatabaseName("UQ_LoyaltyAccounts_UserId");
 
-                // Relación 1:1 con UserProfile
-                entity.HasOne(u => u.Profile)
-                    .WithOne(p => p.UserAccount)
-                    .HasForeignKey<UserProfile>(p => p.Id)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+        entity.Property(e => e.UserId).IsRequired();
+        entity.Property(e => e.PointsBalance).IsRequired();
+        entity.Property(e => e.CreatedAt).IsRequired();
+        entity.Property(e => e.UpdatedAt).IsRequired();
 
-            modelBuilder.Entity<UserProfile>(entity =>
-            {
-                entity.ToTable("UserProfiles");
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.PhoneNumber).HasMaxLength(50);
-                entity.Property(e => e.DocumentType).HasMaxLength(50);
-                entity.Property(e => e.DocumentNumber).HasMaxLength(100);
-                entity.Property(e => e.Address).HasMaxLength(500);
-                entity.Property(e => e.City).HasMaxLength(100);
-                entity.Property(e => e.Country).HasMaxLength(100);
-            });
-            #endregion
+        // Relaciï¿½n 1:N con transacciones
+        entity.HasMany(a => a.Transactions)
+                  .WithOne(t => t.LoyaltyAccount)
+                  .HasForeignKey(t => t.LoyaltyAccountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+      });
 
-            #region Favorites (New)
-            modelBuilder.Entity<FavoriteProduct>(entity =>
-            {
-                entity.ToTable("FavoriteProducts");
-                entity.HasKey(e => e.Id);
-                
-                // Índice único compuesto: un usuario no puede tener el mismo producto favorito dos veces
-                entity.HasIndex(e => new { e.UserId, e.ProductId })
-                    .IsUnique()
-                    .HasDatabaseName("UQ_FavoriteProducts_UserId_ProductId");
-                
-                // Índices para búsquedas
-                entity.HasIndex(e => e.UserId).HasDatabaseName("IX_FavoriteProducts_UserId");
-                entity.HasIndex(e => e.ProductId).HasDatabaseName("IX_FavoriteProducts_ProductId");
-                
-                entity.Property(e => e.UserId).IsRequired();
-                entity.Property(e => e.ProductId).IsRequired();
-                entity.Property(e => e.CreatedAt).IsRequired();
-            });
-            #endregion
+      modelBuilder.Entity<LoyaltyTransaction>(entity =>
+      {
+        entity.ToTable("LoyaltyTransactions");
+        entity.HasKey(e => e.Id);
 
-            #region Loyalty Program (New)
-            modelBuilder.Entity<LoyaltyAccount>(entity =>
-            {
-                entity.ToTable("LoyaltyAccounts");
-                entity.HasKey(e => e.Id);
-                
-                // Índice único: un usuario solo puede tener una cuenta de loyalty
-                entity.HasIndex(e => e.UserId)
-                    .IsUnique()
-                    .HasDatabaseName("UQ_LoyaltyAccounts_UserId");
-                
-                entity.Property(e => e.UserId).IsRequired();
-                entity.Property(e => e.PointsBalance).IsRequired();
-                entity.Property(e => e.CreatedAt).IsRequired();
-                entity.Property(e => e.UpdatedAt).IsRequired();
+        // ï¿½ndices
+        entity.HasIndex(e => e.LoyaltyAccountId).HasDatabaseName("IX_LoyaltyTransactions_AccountId");
+        entity.HasIndex(e => e.OrderId).HasDatabaseName("IX_LoyaltyTransactions_OrderId");
+        entity.HasIndex(e => e.CreatedAt).HasDatabaseName("IX_LoyaltyTransactions_CreatedAt");
 
-                // Relación 1:N con transacciones
-                entity.HasMany(a => a.Transactions)
-                    .WithOne(t => t.LoyaltyAccount)
-                    .HasForeignKey(t => t.LoyaltyAccountId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+        // ï¿½ndice ï¿½nico: una orden solo puede generar puntos una vez
+        entity.HasIndex(e => e.OrderId)
+                  .IsUnique()
+                  .HasFilter("\"OrderId\" IS NOT NULL")
+                  .HasDatabaseName("UQ_LoyaltyTransactions_OrderId");
 
-            modelBuilder.Entity<LoyaltyTransaction>(entity =>
-            {
-                entity.ToTable("LoyaltyTransactions");
-                entity.HasKey(e => e.Id);
-                
-                // Índices
-                entity.HasIndex(e => e.LoyaltyAccountId).HasDatabaseName("IX_LoyaltyTransactions_AccountId");
-                entity.HasIndex(e => e.OrderId).HasDatabaseName("IX_LoyaltyTransactions_OrderId");
-                entity.HasIndex(e => e.CreatedAt).HasDatabaseName("IX_LoyaltyTransactions_CreatedAt");
-                
-                // Índice único: una orden solo puede generar puntos una vez
-                entity.HasIndex(e => e.OrderId)
-                    .IsUnique()
-                    .HasFilter("\"OrderId\" IS NOT NULL")
-                    .HasDatabaseName("UQ_LoyaltyTransactions_OrderId");
-                
-                entity.Property(e => e.LoyaltyAccountId).IsRequired();
-                entity.Property(e => e.Type).IsRequired().HasMaxLength(20);
-                entity.Property(e => e.Points).IsRequired();
-                entity.Property(e => e.Description).HasMaxLength(500);
-                entity.Property(e => e.CreatedAt).IsRequired();
-            });
-            #endregion
+        entity.Property(e => e.LoyaltyAccountId).IsRequired();
+        entity.Property(e => e.Type).IsRequired().HasMaxLength(20);
+        entity.Property(e => e.Points).IsRequired();
+        entity.Property(e => e.Description).HasMaxLength(500);
+        entity.Property(e => e.CreatedAt).IsRequired();
+      });
+      #endregion
 
-            #region Authentication & Authorization
-            modelBuilder.Entity<TenantUser>(entity =>
-            {
-                entity.ToTable("TenantUsers");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Email).IsUnique();
-                entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-                entity.Property(e => e.PasswordHash).IsRequired();
-            });
+      #region Authentication & Authorization
+      modelBuilder.Entity<TenantUser>(entity =>
+      {
+        entity.ToTable("TenantUsers");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.Email).IsUnique();
+        entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
+        entity.Property(e => e.PasswordHash).IsRequired();
+      });
 
-            modelBuilder.Entity<TenantRole>(entity =>
-            {
-                entity.ToTable("TenantRoles");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Name).IsUnique();
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.CreatedAt).IsRequired();
-            });
+      modelBuilder.Entity<TenantRole>(entity =>
+      {
+        entity.ToTable("TenantRoles");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.Name).IsUnique();
+        entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+        entity.Property(e => e.CreatedAt).IsRequired();
+      });
 
-            modelBuilder.Entity<TenantUserRole>(entity =>
-            {
-                entity.ToTable("TenantUserRoles");
-                entity.HasKey(e => new { e.UserId, e.RoleId });
-                entity.Property(e => e.AssignedAt).IsRequired();
+      modelBuilder.Entity<TenantUserRole>(entity =>
+      {
+        entity.ToTable("TenantUserRoles");
+        entity.HasKey(e => new { e.UserId, e.RoleId });
+        entity.Property(e => e.AssignedAt).IsRequired();
 
-                entity.HasOne(ur => ur.User)
-                    .WithMany(u => u.UserRoles)
-                    .HasForeignKey(ur => ur.UserId)
-                    .OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne(ur => ur.User)
+                  .WithMany(u => u.UserRoles)
+                  .HasForeignKey(ur => ur.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
 
-                entity.HasOne(ur => ur.Role)
-                    .WithMany(r => r.UserRoles)
-                    .HasForeignKey(ur => ur.RoleId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+        entity.HasOne(ur => ur.Role)
+                  .WithMany(r => r.UserRoles)
+                  .HasForeignKey(ur => ur.RoleId)
+                  .OnDelete(DeleteBehavior.Cascade);
+      });
 
-            modelBuilder.Entity<Module>(entity =>
-            {
-                entity.ToTable("Modules");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Code).IsUnique();
-                entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.Description).HasMaxLength(500);
-                entity.Property(e => e.IconName).HasMaxLength(50);
-                entity.Property(e => e.IsActive).IsRequired();
-                entity.Property(e => e.CreatedAt).IsRequired();
-            });
+      modelBuilder.Entity<Module>(entity =>
+      {
+        entity.ToTable("Modules");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.Code).IsUnique();
+        entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
+        entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+        entity.Property(e => e.Description).HasMaxLength(500);
+        entity.Property(e => e.IconName).HasMaxLength(50);
+        entity.Property(e => e.IsActive).IsRequired();
+        entity.Property(e => e.CreatedAt).IsRequired();
+      });
 
-            modelBuilder.Entity<RoleModulePermission>(entity =>
-            {
-                entity.ToTable("RoleModulePermissions");
-                entity.HasKey(e => e.Id);
-                
-                // Índice único: un rol no puede tener múltiples permisos para el mismo módulo
-                entity.HasIndex(e => new { e.RoleId, e.ModuleId })
-                    .IsUnique()
-                    .HasDatabaseName("UQ_RoleModulePermissions_RoleId_ModuleId");
-                
-                entity.Property(e => e.RoleId).IsRequired();
-                entity.Property(e => e.ModuleId).IsRequired();
-                entity.Property(e => e.CanView).IsRequired();
-                entity.Property(e => e.CanCreate).IsRequired();
-                entity.Property(e => e.CanUpdate).IsRequired();
-                entity.Property(e => e.CanDelete).IsRequired();
-                entity.Property(e => e.CreatedAt).IsRequired();
+      modelBuilder.Entity<RoleModulePermission>(entity =>
+      {
+        entity.ToTable("RoleModulePermissions");
+        entity.HasKey(e => e.Id);
 
-                entity.HasOne(p => p.Role)
-                    .WithMany(r => r.ModulePermissions)
-                    .HasForeignKey(p => p.RoleId)
-                    .OnDelete(DeleteBehavior.Cascade);
+        // ï¿½ndice ï¿½nico: un rol no puede tener mï¿½ltiples permisos para el mismo mï¿½dulo
+        entity.HasIndex(e => new { e.RoleId, e.ModuleId })
+                  .IsUnique()
+                  .HasDatabaseName("UQ_RoleModulePermissions_RoleId_ModuleId");
 
-                entity.HasOne(p => p.Module)
-                    .WithMany(m => m.RolePermissions)
-                    .HasForeignKey(p => p.ModuleId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
-            #endregion
+        entity.Property(e => e.RoleId).IsRequired();
+        entity.Property(e => e.ModuleId).IsRequired();
+        entity.Property(e => e.CanView).IsRequired();
+        entity.Property(e => e.CanCreate).IsRequired();
+        entity.Property(e => e.CanUpdate).IsRequired();
+        entity.Property(e => e.CanDelete).IsRequired();
+        entity.Property(e => e.CreatedAt).IsRequired();
 
-            #region Settings
-            modelBuilder.Entity<TenantSetting>(entity =>
-            {
-                entity.ToTable("Settings");
-                entity.HasKey(e => e.Key);
-                entity.Property(e => e.Key).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.Value).IsRequired();
-            });
+        entity.HasOne(p => p.Role)
+                  .WithMany(r => r.ModulePermissions)
+                  .HasForeignKey(p => p.RoleId)
+                  .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<WebPushSubscription>(entity =>
-            {
-                entity.ToTable("WebPushSubscriptions");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Endpoint).IsUnique();
-            });
-            #endregion
+        entity.HasOne(p => p.Module)
+                  .WithMany(m => m.RolePermissions)
+                  .HasForeignKey(p => p.ModuleId)
+                  .OnDelete(DeleteBehavior.Cascade);
+      });
+      #endregion
 
-            #region Catalog
-            modelBuilder.Entity<Category>(entity =>
-            {
-                entity.ToTable("Categories");
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-            });
+      #region Settings
+      modelBuilder.Entity<TenantSetting>(entity =>
+      {
+        entity.ToTable("Settings");
+        entity.HasKey(e => e.Key);
+        entity.Property(e => e.Key).IsRequired().HasMaxLength(100);
+        entity.Property(e => e.Value).IsRequired();
+      });
 
-            modelBuilder.Entity<Product>(entity =>
-            {
-                entity.ToTable("Products");
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-                entity.Property(e => e.Price).HasPrecision(18, 2);
-            });
+      modelBuilder.Entity<WebPushSubscription>(entity =>
+      {
+        entity.ToTable("WebPushSubscriptions");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.Endpoint).IsUnique();
+      });
+      #endregion
 
-            modelBuilder.Entity<ProductCategory>(entity =>
-            {
-                entity.ToTable("ProductCategories");
-                entity.HasKey(e => new { e.ProductId, e.CategoryId });
-            });
+      #region Catalog
+      modelBuilder.Entity<Category>(entity =>
+      {
+        entity.ToTable("Categories");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+        entity.Property(e => e.Slug).IsRequired().HasMaxLength(200);
+        entity.HasIndex(e => e.Slug).IsUnique();
+        entity.HasIndex(e => e.ParentId);
+        entity.HasIndex(e => e.DisplayOrder);
 
-            modelBuilder.Entity<ProductImage>(entity =>
-            {
-                entity.ToTable("ProductImages");
-                entity.HasKey(e => e.Id);
-            });
-            #endregion
+        // RelaciÃ³n jerÃ¡rquica (self-referencing)
+        entity.HasOne(e => e.Parent)
+                  .WithMany(e => e.Children)
+                  .HasForeignKey(e => e.ParentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+      });
 
-            #region Shopping Cart
-            modelBuilder.Entity<Cart>(entity =>
-            {
-                entity.ToTable("Carts");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.UserId);
-            });
+      modelBuilder.Entity<Product>(entity =>
+      {
+        entity.ToTable("Products");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+        entity.Property(e => e.Slug).IsRequired().HasMaxLength(200);
+        entity.Property(e => e.Sku).HasMaxLength(100);
+        entity.Property(e => e.Price).HasPrecision(18, 2);
+        entity.Property(e => e.CompareAtPrice).HasPrecision(18, 2);
+        entity.Property(e => e.Tags).HasMaxLength(500);
+        entity.Property(e => e.Brand).HasMaxLength(100);
 
-            modelBuilder.Entity<CartItem>(entity =>
-            {
-                entity.ToTable("CartItems");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.CartId);
-            });
-            #endregion
+        entity.HasIndex(e => e.Slug).IsUnique();
+        entity.HasIndex(e => e.Sku);
+        entity.HasIndex(e => e.IsActive);
+        entity.HasIndex(e => e.IsFeatured);
+        // Ãndice para bÃºsqueda full-text (typeahead)
+        entity.HasIndex(e => e.Name);
+        entity.HasIndex(e => e.Tags);
+      });
 
-            #region Orders
-            modelBuilder.Entity<Order>(entity =>
-            {
-                entity.ToTable("Orders");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.UserId);
-                entity.HasIndex(e => e.SessionId);
-                entity.HasIndex(e => e.IdempotencyKey).IsUnique();
-                entity.HasIndex(e => e.OrderNumber).IsUnique();
-                entity.Property(e => e.Total).HasPrecision(18, 2);
-                entity.Property(e => e.Subtotal).HasPrecision(18, 2);
-                entity.Property(e => e.Tax).HasPrecision(18, 2);
-                entity.Property(e => e.Shipping).HasPrecision(18, 2);
-                entity.Property(e => e.OrderNumber).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.IdempotencyKey).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
-                entity.Property(e => e.ShippingAddress).IsRequired();
-                entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-            });
+      modelBuilder.Entity<ProductCategory>(entity =>
+      {
+        entity.ToTable("ProductCategories");
+        entity.HasKey(e => new { e.ProductId, e.CategoryId });
 
-            modelBuilder.Entity<OrderItem>(entity =>
-            {
-                entity.ToTable("OrderItems");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.OrderId);
-                entity.Property(e => e.Price).HasPrecision(18, 2);
-                entity.Property(e => e.Subtotal).HasPrecision(18, 2);
-            });
+        entity.HasOne<Product>()
+                  .WithMany(p => p.Categories)
+                  .HasForeignKey(pc => pc.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<OrderStatus>(entity =>
-            {
-                entity.ToTable("OrderStatuses");
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Code).IsUnique();
-            });
-            #endregion
-        }
+        entity.HasOne<Category>()
+                  .WithMany(c => c.Products)
+                  .HasForeignKey(pc => pc.CategoryId)
+                  .OnDelete(DeleteBehavior.Cascade);
+      });
+
+      modelBuilder.Entity<ProductImage>(entity =>
+      {
+        entity.ToTable("ProductImages");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.ProductId);
+
+        entity.HasOne<Product>()
+                  .WithMany(p => p.Images)
+                  .HasForeignKey(pi => pi.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+      });
+
+      modelBuilder.Entity<Banner>(entity =>
+      {
+        entity.ToTable("Banners");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+        entity.Property(e => e.ImageUrlDesktop).IsRequired().HasMaxLength(500);
+        entity.Property(e => e.ImageUrlMobile).HasMaxLength(500);
+        entity.Property(e => e.TargetUrl).HasMaxLength(500);
+        entity.Property(e => e.ButtonText).HasMaxLength(100);
+
+        entity.HasIndex(e => e.IsActive);
+        entity.HasIndex(e => e.Position);
+        entity.HasIndex(e => e.DisplayOrder);
+      });
+      #endregion
+
+      #region Shopping Cart
+      modelBuilder.Entity<Cart>(entity =>
+      {
+        entity.ToTable("Carts");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.UserId);
+      });
+
+      modelBuilder.Entity<CartItem>(entity =>
+      {
+        entity.ToTable("CartItems");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.CartId);
+      });
+      #endregion
+
+      #region Orders
+      modelBuilder.Entity<Order>(entity =>
+      {
+        entity.ToTable("Orders");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.UserId);
+        entity.HasIndex(e => e.SessionId);
+        entity.HasIndex(e => e.IdempotencyKey).IsUnique();
+        entity.HasIndex(e => e.OrderNumber).IsUnique();
+        entity.Property(e => e.Total).HasPrecision(18, 2);
+        entity.Property(e => e.Subtotal).HasPrecision(18, 2);
+        entity.Property(e => e.Tax).HasPrecision(18, 2);
+        entity.Property(e => e.Shipping).HasPrecision(18, 2);
+        entity.Property(e => e.OrderNumber).IsRequired().HasMaxLength(50);
+        entity.Property(e => e.IdempotencyKey).IsRequired().HasMaxLength(100);
+        entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+        entity.Property(e => e.ShippingAddress).IsRequired();
+        entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
+      });
+
+      modelBuilder.Entity<OrderItem>(entity =>
+      {
+        entity.ToTable("OrderItems");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.OrderId);
+        entity.Property(e => e.Price).HasPrecision(18, 2);
+        entity.Property(e => e.Subtotal).HasPrecision(18, 2);
+      });
+
+      modelBuilder.Entity<OrderStatus>(entity =>
+      {
+        entity.ToTable("OrderStatuses");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.Code).IsUnique();
+      });
+      #endregion
     }
+  }
 }

@@ -1,0 +1,182 @@
+# ==================================================
+# STORE SETTINGS - Ejemplos de API
+# ==================================================
+# Instala la extensión "REST Client" en VS Code para ejecutar estos requests
+# https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+# ==================================================
+
+@baseUrl = http://localhost:5000
+@tenantSlug = mi-tienda
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# ==================================================
+# ENDPOINTS PÚBLICOS (No requieren autenticación)
+# ==================================================
+
+### Obtener configuración pública del tenant
+# Este endpoint es público - lo usa la app del cliente para obtener
+# branding, colores, features habilitadas, etc.
+GET {{baseUrl}}/api/public/tenant/{{tenantSlug}}
+
+# ==================================================
+# STORE SETTINGS - TENANT ADMIN
+# Requiere: Authorization + X-Tenant-Slug + módulo "settings"
+# ==================================================
+
+### 1. Obtener toda la configuración de la tienda
+# Permiso: settings:view
+GET {{baseUrl}}/admin/settings
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### 2. Actualizar toda la configuración (PUT completo)
+# Permiso: settings:update
+# Solo incluye las secciones que quieras actualizar
+PUT {{baseUrl}}/admin/settings
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "branding": {
+    "logoUrl": "https://cdn.example.com/nuevo-logo.png",
+    "faviconUrl": "https://cdn.example.com/favicon.ico",
+    "primaryColor": "#3b82f6",
+    "secondaryColor": "#1e40af",
+    "accentColor": "#10b981",
+    "backgroundColor": "#ffffff"
+  },
+  "contact": {
+    "email": "soporte@mitienda.com",
+    "phone": "+57 300 123 4567",
+    "address": "Calle 123 #45-67, Bogotá, Colombia",
+    "whatsApp": "573001234567"
+  },
+  "social": {
+    "facebook": "https://facebook.com/mitienda",
+    "instagram": "https://instagram.com/mitienda",
+    "twitter": "https://twitter.com/mitienda",
+    "tikTok": "https://tiktok.com/@mitienda"
+  },
+  "locale": {
+    "locale": "es-CO",
+    "currency": "COP",
+    "currencySymbol": "$",
+    "taxRate": 19
+  },
+  "seo": {
+    "title": "Mi Tienda - Los mejores productos",
+    "description": "Encuentra todo lo que necesitas en Mi Tienda",
+    "keywords": "ecommerce,tienda,productos,colombia"
+  }
+}
+
+### 3. Actualizar solo BRANDING (PATCH parcial)
+# Permiso: settings:update
+# Útil cuando solo quieres cambiar colores/logo
+PATCH {{baseUrl}}/admin/settings/branding
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "logoUrl": "https://cdn.example.com/nuevo-logo.png",
+  "faviconUrl": "https://cdn.example.com/favicon.ico",
+  "primaryColor": "#ef4444",
+  "secondaryColor": "#dc2626",
+  "accentColor": "#f59e0b",
+  "backgroundColor": "#fef2f2"
+}
+
+### 4. Actualizar solo CONTACTO (PATCH parcial)
+# Permiso: settings:update
+PATCH {{baseUrl}}/admin/settings/contact
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "email": "contacto@mitienda.com",
+  "phone": "+57 311 222 3333",
+  "address": "Carrera 50 #30-45, Medellín, Colombia",
+  "whatsApp": "573112223333"
+}
+
+### 5. Actualizar solo REDES SOCIALES (PATCH parcial)
+# Permiso: settings:update
+PATCH {{baseUrl}}/admin/settings/social
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "facebook": "https://facebook.com/mitienda",
+  "instagram": "https://instagram.com/mitienda",
+  "twitter": "https://twitter.com/mitienda",
+  "tikTok": "https://tiktok.com/@mitienda"
+}
+
+# ==================================================
+# EJEMPLOS DE RESPUESTAS Y ERRORES
+# ==================================================
+
+### Ejemplo de respuesta exitosa (GET /admin/settings):
+# {
+#   "branding": {
+#     "logoUrl": "https://cdn.example.com/logo.png",
+#     "faviconUrl": "https://cdn.example.com/favicon.ico",
+#     "primaryColor": "#3b82f6",
+#     "secondaryColor": "#1e40af",
+#     "accentColor": "#10b981",
+#     "backgroundColor": "#ffffff"
+#   },
+#   "contact": {
+#     "email": "soporte@mitienda.com",
+#     "phone": "+57 300 123 4567",
+#     "address": "Calle 123 #45-67, Bogotá",
+#     "whatsApp": "573001234567"
+#   },
+#   "social": {
+#     "facebook": "https://facebook.com/mitienda",
+#     "instagram": "https://instagram.com/mitienda",
+#     "twitter": null,
+#     "tikTok": null
+#   },
+#   "locale": {
+#     "locale": "es-CO",
+#     "currency": "COP",
+#     "currencySymbol": "$",
+#     "taxRate": 19
+#   },
+#   "seo": {
+#     "title": "Mi Tienda - Los mejores productos",
+#     "description": "Encuentra los mejores productos",
+#     "keywords": "ecommerce,tienda"
+#   }
+# }
+
+### Ejemplo de error 403 (sin permisos):
+# Status: 403 Forbidden
+# {
+#   "error": "Forbidden",
+#   "message": "No tienes permiso para view en el módulo settings"
+# }
+
+### Ejemplo de error 401 (no autenticado):
+# Status: 401 Unauthorized
+# {
+#   "error": "Unauthorized",
+#   "message": "Token inválido o expirado"
+# }
+
+# ==================================================
+# NOTAS IMPORTANTES
+# ==================================================
+# 
+# 1. El rol "Admin" tiene acceso completo a settings
+# 2. Manager y Viewer NO tienen acceso a settings por defecto
+# 3. Los permisos se pueden configurar granularmente por rol
+# 4. Todos los cambios se guardan en TenantSettings (key-value)
+# 5. Los valores null se manejan correctamente (no se eliminan)
+# 
+# ==================================================

@@ -6,210 +6,225 @@ using Microsoft.Extensions.Logging;
 namespace CC.Infraestructure.TenantSeeders
 {
     /// <summary>
-    /// Seeder para m�dulos y permisos del tenant
-    /// Se ejecuta al crear un nuevo tenant
+    /// Seeder para módulos y permisos del tenant.
+    /// IMPORTANTE: Este seeder AUTO-SINCRONIZA módulos y permisos.
+    /// - Detecta módulos nuevos y los agrega automáticamente
+    /// - Asigna permisos completos al rol Admin para módulos nuevos
+    /// - Es seguro ejecutar múltiples veces (idempotente)
+    /// 
+    /// Para agregar un nuevo módulo:
+    /// 1. Agrégalo a GetSystemModules()
+    /// 2. Configura permisos en GetRolePermissionDefinitions()
+    /// 3. Ejecuta el seeder (se auto-sincroniza)
     /// </summary>
     public static class TenantModulesSeeder
     {
-        public static async Task SeedAsync(TenantDbContext db, ILogger? logger = null)
+        #region Module Definitions - Source of Truth
+
+        /// <summary>
+        /// FUENTE DE VERDAD para todos los módulos del sistema.
+        /// Para agregar un nuevo módulo, solo agrega una entrada aquí.
+        /// </summary>
+        private static readonly ModuleDefinition[] SystemModules = new[]
         {
-            logger?.LogInformation("?? Seeding tenant modules and permissions...");
+            new ModuleDefinition("00000000-0000-0000-0000-000000000001", "sales", "Punto de Venta", "Gestión de ventas y órdenes", "shopping-cart"),
+            new ModuleDefinition("00000000-0000-0000-0000-000000000002", "inventory", "Inventario", "Gestión de productos y stock", "box"),
+            new ModuleDefinition("00000000-0000-0000-0000-000000000003", "customers", "Clientes", "Gestión de clientes y usuarios", "users"),
+            new ModuleDefinition("00000000-0000-0000-0000-000000000004", "reports", "Reportes", "Reportes y analytics", "chart-bar"),
+            new ModuleDefinition("00000000-0000-0000-0000-000000000005", "settings", "Configuración", "Configuración de la tienda", "cog"),
+            new ModuleDefinition("00000000-0000-0000-0000-000000000006", "loyalty", "Fidelización", "Programa de puntos y recompensas", "gift"),
+            new ModuleDefinition("00000000-0000-0000-0000-000000000007", "marketing", "Marketing", "Banners, promociones y campañas", "megaphone"),
+        };
 
-            await SeedModulesAsync(db, logger);
-            await SeedRolePermissionsAsync(db, logger);
-
-            logger?.LogInformation("? Tenant modules and permissions seeded successfully");
-        }
-
-        private static async Task SeedModulesAsync(TenantDbContext db, ILogger? logger)
+        /// <summary>
+        /// Define permisos por defecto para cada rol y módulo.
+        /// Si no se especifica un módulo para un rol, ese rol NO tendrá acceso.
+        /// </summary>
+        private static Dictionary<string, Dictionary<string, PermissionSet>> GetRolePermissionDefinitions()
         {
-            if (await db.Modules.AnyAsync())
+            return new Dictionary<string, Dictionary<string, PermissionSet>>
             {
-                logger?.LogInformation("??  Modules already exist, skipping");
-                return;
-            }
+                // ADMIN - Acceso completo a todo
+                ["Admin"] = SystemModules.ToDictionary(
+                    m => m.Code,
+                    _ => new PermissionSet(true, true, true, true)
+                ),
 
-            logger?.LogInformation("Creating system modules...");
+                // MANAGER - Permisos operativos
+                ["Manager"] = new Dictionary<string, PermissionSet>
+                {
+                    ["sales"] = new(CanView: true, CanCreate: true, CanUpdate: true, CanDelete: false),
+                    ["inventory"] = new(CanView: true, CanCreate: true, CanUpdate: true, CanDelete: false),
+                    ["customers"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
+                    ["reports"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
+                    ["loyalty"] = new(CanView: true, CanCreate: true, CanUpdate: true, CanDelete: false),
+                },
 
-            var modules = new[]
-            {
-                new Module
+                // VIEWER - Solo lectura
+                ["Viewer"] = new Dictionary<string, PermissionSet>
                 {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
-                    Code = "sales",
-                    Name = "Punto de Venta",
-                    Description = "Gesti�n de ventas y �rdenes",
-                    IconName = "shopping-cart",
-                    IsActive = true
-                },
-                new Module
-                {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000002"),
-                    Code = "inventory",
-                    Name = "Inventario",
-                    Description = "Gesti�n de productos y stock",
-                    IconName = "box",
-                    IsActive = true
-                },
-                new Module
-                {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000003"),
-                    Code = "customers",
-                    Name = "Clientes",
-                    Description = "Gesti�n de clientes y usuarios",
-                    IconName = "users",
-                    IsActive = true
-                },
-                new Module
-                {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000004"),
-                    Code = "reports",
-                    Name = "Reportes",
-                    Description = "Reportes y analytics",
-                    IconName = "chart-bar",
-                    IsActive = true
-                },
-                new Module
-                {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000005"),
-                    Code = "settings",
-                    Name = "Configuraci�n",
-                    Description = "Configuraci�n del tenant",
-                    IconName = "cog",
-                    IsActive = true
+                    ["sales"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
+                    ["inventory"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
                 }
             };
-
-            db.Modules.AddRange(modules);
-            await db.SaveChangesAsync();
-
-            logger?.LogInformation("? Created {Count} modules", modules.Length);
         }
 
-        private static async Task SeedRolePermissionsAsync(TenantDbContext db, ILogger? logger)
+        #endregion
+
+        public static async Task SeedAsync(TenantDbContext db, ILogger? logger = null)
         {
-            if (await db.RoleModulePermissions.AnyAsync())
+            logger?.LogInformation("🔧 Seeding tenant modules and permissions...");
+
+            var syncResult = await SyncModulesAsync(db, logger);
+            await SyncRolePermissionsAsync(db, logger, syncResult.NewModules);
+
+            logger?.LogInformation("✅ Tenant modules and permissions synced successfully");
+        }
+
+        /// <summary>
+        /// Sincroniza módulos: agrega nuevos, actualiza existentes si es necesario.
+        /// NO elimina módulos (para preservar datos históricos).
+        /// </summary>
+        private static async Task<ModuleSyncResult> SyncModulesAsync(TenantDbContext db, ILogger? logger)
+        {
+            var existingModules = await db.Modules.ToDictionaryAsync(m => m.Code, m => m);
+            var newModules = new List<Module>();
+            var updatedCount = 0;
+
+            foreach (var def in SystemModules)
             {
-                logger?.LogInformation("??  Role permissions already exist, skipping");
-                return;
-            }
-
-            logger?.LogInformation("Creating role permissions...");
-
-            var roles = await db.Roles.ToListAsync();
-            var modules = await db.Modules.ToListAsync();
-
-            if (!roles.Any() || !modules.Any())
-            {
-                logger?.LogWarning("??  Roles or modules not found, skipping permissions seed");
-                return;
-            }
-
-            var adminRole = roles.FirstOrDefault(r => r.Name == "Admin");
-            var managerRole = roles.FirstOrDefault(r => r.Name == "Manager");
-            var viewerRole = roles.FirstOrDefault(r => r.Name == "Viewer");
-
-            var permissions = new List<RoleModulePermission>();
-
-            // ADMIN - Acceso completo a todo
-            if (adminRole != null)
-            {
-                foreach (var module in modules)
+                if (existingModules.TryGetValue(def.Code, out var existing))
                 {
-                    permissions.Add(new RoleModulePermission
+                    // Actualizar si cambió el nombre o descripción
+                    if (existing.Name != def.Name || existing.Description != def.Description || existing.IconName != def.Icon)
                     {
-                        RoleId = adminRole.Id,
-                        ModuleId = module.Id,
-                        CanView = true,
-                        CanCreate = true,
-                        CanUpdate = true,
-                        CanDelete = true
-                    });
+                        existing.Name = def.Name;
+                        existing.Description = def.Description;
+                        existing.IconName = def.Icon;
+                        updatedCount++;
+                    }
+                }
+                else
+                {
+                    // Módulo nuevo - agregar
+                    var newModule = new Module
+                    {
+                        Id = Guid.Parse(def.Id),
+                        Code = def.Code,
+                        Name = def.Name,
+                        Description = def.Description,
+                        IconName = def.Icon,
+                        IsActive = true
+                    };
+                    db.Modules.Add(newModule);
+                    newModules.Add(newModule);
+                    logger?.LogInformation("➕ New module detected: {Code} - {Name}", def.Code, def.Name);
                 }
             }
 
-            // MANAGER - Puede ver todo, crear/editar en sales e inventory, sin delete
-            if (managerRole != null)
+            if (newModules.Any() || updatedCount > 0)
             {
-                var salesModule = modules.First(m => m.Code == "sales");
-                var inventoryModule = modules.First(m => m.Code == "inventory");
-                var customersModule = modules.First(m => m.Code == "customers");
-                var reportsModule = modules.First(m => m.Code == "reports");
-
-                permissions.AddRange(new[]
-                {
-                    new RoleModulePermission
-                    {
-                        RoleId = managerRole.Id,
-                        ModuleId = salesModule.Id,
-                        CanView = true,
-                        CanCreate = true,
-                        CanUpdate = true,
-                        CanDelete = false
-                    },
-                    new RoleModulePermission
-                    {
-                        RoleId = managerRole.Id,
-                        ModuleId = inventoryModule.Id,
-                        CanView = true,
-                        CanCreate = true,
-                        CanUpdate = true,
-                        CanDelete = false
-                    },
-                    new RoleModulePermission
-                    {
-                        RoleId = managerRole.Id,
-                        ModuleId = customersModule.Id,
-                        CanView = true,
-                        CanCreate = false,
-                        CanUpdate = false,
-                        CanDelete = false
-                    },
-                    new RoleModulePermission
-                    {
-                        RoleId = managerRole.Id,
-                        ModuleId = reportsModule.Id,
-                        CanView = true,
-                        CanCreate = false,
-                        CanUpdate = false,
-                        CanDelete = false
-                    }
-                });
+                await db.SaveChangesAsync();
+                logger?.LogInformation("📦 Modules synced: {New} new, {Updated} updated", newModules.Count, updatedCount);
+            }
+            else
+            {
+                logger?.LogInformation("📦 All modules up to date");
             }
 
-            // VIEWER - Solo lectura en sales e inventory
-            if (viewerRole != null)
-            {
-                var salesModule = modules.First(m => m.Code == "sales");
-                var inventoryModule = modules.First(m => m.Code == "inventory");
-
-                permissions.AddRange(new[]
-                {
-                    new RoleModulePermission
-                    {
-                        RoleId = viewerRole.Id,
-                        ModuleId = salesModule.Id,
-                        CanView = true,
-                        CanCreate = false,
-                        CanUpdate = false,
-                        CanDelete = false
-                    },
-                    new RoleModulePermission
-                    {
-                        RoleId = viewerRole.Id,
-                        ModuleId = inventoryModule.Id,
-                        CanView = true,
-                        CanCreate = false,
-                        CanUpdate = false,
-                        CanDelete = false
-                    }
-                });
-            }
-
-            db.RoleModulePermissions.AddRange(permissions);
-            await db.SaveChangesAsync();
-
-            logger?.LogInformation("? Created {Count} role permissions", permissions.Count);
+            return new ModuleSyncResult(newModules);
         }
+
+        /// <summary>
+        /// Sincroniza permisos de roles:
+        /// - Asigna permisos a nuevos módulos
+        /// - El rol Admin SIEMPRE obtiene acceso completo a módulos nuevos
+        /// </summary>
+        private static async Task SyncRolePermissionsAsync(TenantDbContext db, ILogger? logger, List<Module> newModules)
+        {
+            var roles = await db.Roles.ToDictionaryAsync(r => r.Name, r => r);
+            var existingPermissions = await db.RoleModulePermissions.ToListAsync();
+            var allModules = await db.Modules.ToDictionaryAsync(m => m.Code, m => m);
+            var permissionDefinitions = GetRolePermissionDefinitions();
+
+            var permissionsToAdd = new List<RoleModulePermission>();
+
+            foreach (var (roleName, modulePermissions) in permissionDefinitions)
+            {
+                if (!roles.TryGetValue(roleName, out var role))
+                {
+                    logger?.LogWarning("⚠️ Role '{Role}' not found, skipping permissions", roleName);
+                    continue;
+                }
+
+                foreach (var (moduleCode, permSet) in modulePermissions)
+                {
+                    if (!allModules.TryGetValue(moduleCode, out var module))
+                        continue;
+
+                    // Verificar si ya existe el permiso
+                    var existingPerm = existingPermissions.FirstOrDefault(p =>
+                        p.RoleId == role.Id && p.ModuleId == module.Id);
+
+                    if (existingPerm == null)
+                    {
+                        permissionsToAdd.Add(new RoleModulePermission
+                        {
+                            RoleId = role.Id,
+                            ModuleId = module.Id,
+                            CanView = permSet.CanView,
+                            CanCreate = permSet.CanCreate,
+                            CanUpdate = permSet.CanUpdate,
+                            CanDelete = permSet.CanDelete
+                        });
+                        logger?.LogInformation("➕ Adding permission: {Role} -> {Module}", roleName, moduleCode);
+                    }
+                }
+            }
+
+            // IMPORTANTE: Admin SIEMPRE obtiene acceso completo a módulos nuevos
+            // (incluso si no están en las definiciones explícitas)
+            if (roles.TryGetValue("Admin", out var adminRole) && newModules.Any())
+            {
+                foreach (var newModule in newModules)
+                {
+                    var alreadyAdded = permissionsToAdd.Any(p =>
+                        p.RoleId == adminRole.Id && p.ModuleId == newModule.Id);
+
+                    if (!alreadyAdded)
+                    {
+                        permissionsToAdd.Add(new RoleModulePermission
+                        {
+                            RoleId = adminRole.Id,
+                            ModuleId = newModule.Id,
+                            CanView = true,
+                            CanCreate = true,
+                            CanUpdate = true,
+                            CanDelete = true
+                        });
+                        logger?.LogInformation("🔐 Auto-granting Admin full access to new module: {Module}", newModule.Code);
+                    }
+                }
+            }
+
+            if (permissionsToAdd.Any())
+            {
+                db.RoleModulePermissions.AddRange(permissionsToAdd);
+                await db.SaveChangesAsync();
+                logger?.LogInformation("🔐 Added {Count} new role permissions", permissionsToAdd.Count);
+            }
+            else
+            {
+                logger?.LogInformation("🔐 All role permissions up to date");
+            }
+        }
+
+        #region Helper Types
+
+        private record ModuleDefinition(string Id, string Code, string Name, string Description, string Icon);
+        private record PermissionSet(bool CanView, bool CanCreate, bool CanUpdate, bool CanDelete);
+        private record ModuleSyncResult(List<Module> NewModules);
+
+        #endregion
     }
 }

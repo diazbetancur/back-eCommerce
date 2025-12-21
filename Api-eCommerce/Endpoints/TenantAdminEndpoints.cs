@@ -12,8 +12,8 @@ using System.Security.Claims;
 namespace Api_eCommerce.Endpoints
 {
     /// <summary>
-    /// Endpoints de administración del tenant (requiere X-Tenant-Slug y autenticación)
-    /// Acceso basado en permisos de módulos
+    /// Endpoints de administraciï¿½n del tenant (requiere X-Tenant-Slug y autenticaciï¿½n)
+    /// Acceso basado en permisos de mï¿½dulos
     /// </summary>
     public static class TenantAdminEndpoints
     {
@@ -24,7 +24,7 @@ namespace Api_eCommerce.Endpoints
                 .AddEndpointFilter<ModuleAuthorizationFilter>()
                 .WithTags("Tenant Admin");
 
-            // ==================== PRODUCTS (Módulo: inventory) ====================
+            // ==================== PRODUCTS (Mï¿½dulo: inventory) ====================
             group.MapGet("/products", GetProducts)
                 .WithName("AdminGetProducts")
                 .WithSummary("Get products (Admin)")
@@ -55,7 +55,7 @@ namespace Api_eCommerce.Endpoints
                 .WithMetadata(new RequireModuleAttribute("inventory", "delete"))
                 .Produces(StatusCodes.Status204NoContent);
 
-            // ==================== ORDERS (Módulo: sales) ====================
+            // ==================== ORDERS (Mï¿½dulo: sales) ====================
             group.MapGet("/orders", GetOrders)
                 .WithName("AdminGetOrders")
                 .WithSummary("Get all orders (Admin)")
@@ -74,7 +74,7 @@ namespace Api_eCommerce.Endpoints
                 .WithMetadata(new RequireModuleAttribute("sales", "update"))
                 .Produces<AdminOrderDetailDto>(StatusCodes.Status200OK);
 
-            // ==================== USERS (Módulo: customers) ====================
+            // ==================== USERS (Mï¿½dulo: customers) ====================
             group.MapGet("/users", GetUsers)
                 .WithName("AdminGetUsers")
                 .WithSummary("Get tenant users (Admin)")
@@ -92,6 +92,37 @@ namespace Api_eCommerce.Endpoints
                 .WithSummary("Assign role to user (Admin)")
                 .WithMetadata(new RequireModuleAttribute("customers", "update"))
                 .Produces<TenantUserDetailDto>(StatusCodes.Status200OK);
+
+            // ==================== STORE SETTINGS (MÃ³dulo: settings) ====================
+            group.MapGet("/settings", GetStoreSettings)
+                .WithName("AdminGetStoreSettings")
+                .WithSummary("Get store settings (branding, contact, social, etc.)")
+                .WithMetadata(new RequireModuleAttribute("settings", "view"))
+                .Produces<StoreSettingsResponse>(StatusCodes.Status200OK);
+
+            group.MapPut("/settings", UpdateStoreSettings)
+                .WithName("AdminUpdateStoreSettings")
+                .WithSummary("Update store settings")
+                .WithMetadata(new RequireModuleAttribute("settings", "update"))
+                .Produces<StoreSettingsResponse>(StatusCodes.Status200OK);
+
+            group.MapPatch("/settings/branding", UpdateBrandingSettings)
+                .WithName("AdminUpdateBranding")
+                .WithSummary("Update branding settings only")
+                .WithMetadata(new RequireModuleAttribute("settings", "update"))
+                .Produces<BrandingSettingsDto>(StatusCodes.Status200OK);
+
+            group.MapPatch("/settings/contact", UpdateContactSettings)
+                .WithName("AdminUpdateContact")
+                .WithSummary("Update contact information")
+                .WithMetadata(new RequireModuleAttribute("settings", "update"))
+                .Produces<ContactSettingsDto>(StatusCodes.Status200OK);
+
+            group.MapPatch("/settings/social", UpdateSocialSettings)
+                .WithName("AdminUpdateSocial")
+                .WithSummary("Update social media links")
+                .WithMetadata(new RequireModuleAttribute("settings", "update"))
+                .Produces<SocialSettingsDto>(StatusCodes.Status200OK);
 
             return group;
         }
@@ -163,7 +194,7 @@ namespace Api_eCommerce.Endpoints
                 if (tenantContext == null) return TenantNotResolvedError();
 
                 await using var db = dbFactory.Create();
-                
+
                 var product = await db.Products
                     .FirstOrDefaultAsync(p => p.Id == id);
 
@@ -205,12 +236,12 @@ namespace Api_eCommerce.Endpoints
 
                 await using var db = dbFactory.Create();
 
-                // ? VALIDAR LÍMITE DE PRODUCTOS
+                // ? VALIDAR Lï¿½MITE DE PRODUCTOS
                 var currentProductCount = await db.Products.CountAsync();
                 await planLimitService.ThrowIfExceedsLimitAsync(
                     CC.Infraestructure.Admin.Entities.PlanLimitCodes.MaxProducts,
                     currentProductCount,
-                    "Has alcanzado el límite de productos de tu plan. Actualiza tu plan para agregar más productos."
+                    "Has alcanzado el lï¿½mite de productos de tu plan. Actualiza tu plan para agregar mï¿½s productos."
                 );
 
                 var product = new Product
@@ -544,12 +575,12 @@ namespace Api_eCommerce.Endpoints
                     return Results.Conflict(new { error = "Email already exists" });
                 }
 
-                // ? VALIDAR LÍMITE DE USUARIOS
+                // ? VALIDAR Lï¿½MITE DE USUARIOS
                 var currentUserCount = await db.Users.CountAsync();
                 await planLimitService.ThrowIfExceedsLimitAsync(
                     CC.Infraestructure.Admin.Entities.PlanLimitCodes.MaxUsers,
                     currentUserCount,
-                    "Has alcanzado el límite de usuarios de tu plan. Actualiza tu plan para agregar más usuarios."
+                    "Has alcanzado el lï¿½mite de usuarios de tu plan. Actualiza tu plan para agregar mï¿½s usuarios."
                 );
 
                 // Hash password
@@ -579,7 +610,7 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.Created($"/admin/users/{user.Id}", dto);
             }
-            catch (CC.Aplication.Plans.PlanLimitExceededException ex)  // ? CATCH ESPECÍFICO
+            catch (CC.Aplication.Plans.PlanLimitExceededException ex)  // ? CATCH ESPECï¿½FICO
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status402PaymentRequired,
@@ -655,6 +686,272 @@ namespace Api_eCommerce.Endpoints
             {
                 return InternalServerError("assigning role");
             }
+        }
+
+        // ==================== STORE SETTINGS HANDLERS ====================
+
+        private static async Task<IResult> GetStoreSettings(
+            HttpContext context,
+            TenantDbContextFactory dbFactory,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null) return TenantNotResolvedError();
+
+                await using var db = dbFactory.Create();
+                var settings = await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value);
+
+                var response = MapSettingsToResponse(settings);
+                return Results.Ok(response);
+            }
+            catch (Exception)
+            {
+                return InternalServerError("retrieving store settings");
+            }
+        }
+
+        private static async Task<IResult> UpdateStoreSettings(
+            HttpContext context,
+            [FromBody] UpdateStoreSettingsRequest request,
+            TenantDbContextFactory dbFactory,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null) return TenantNotResolvedError();
+
+                await using var db = dbFactory.Create();
+
+                var updates = new Dictionary<string, string?>();
+
+                // Branding
+                if (request.Branding != null)
+                {
+                    updates["LogoUrl"] = request.Branding.LogoUrl;
+                    updates["FaviconUrl"] = request.Branding.FaviconUrl;
+                    updates["PrimaryColor"] = request.Branding.PrimaryColor;
+                    updates["SecondaryColor"] = request.Branding.SecondaryColor;
+                    updates["AccentColor"] = request.Branding.AccentColor;
+                    updates["BackgroundColor"] = request.Branding.BackgroundColor;
+                }
+
+                // Contact
+                if (request.Contact != null)
+                {
+                    updates["ContactEmail"] = request.Contact.Email;
+                    updates["ContactPhone"] = request.Contact.Phone;
+                    updates["ContactAddress"] = request.Contact.Address;
+                    updates["WhatsAppNumber"] = request.Contact.WhatsApp;
+                }
+
+                // Social
+                if (request.Social != null)
+                {
+                    updates["FacebookUrl"] = request.Social.Facebook;
+                    updates["InstagramUrl"] = request.Social.Instagram;
+                    updates["TwitterUrl"] = request.Social.Twitter;
+                    updates["TikTokUrl"] = request.Social.TikTok;
+                }
+
+                // Locale
+                if (request.Locale != null)
+                {
+                    updates["Locale"] = request.Locale.Locale;
+                    updates["Currency"] = request.Locale.Currency;
+                    updates["CurrencySymbol"] = request.Locale.CurrencySymbol;
+                    updates["TaxRate"] = request.Locale.TaxRate.ToString();
+                }
+
+                // SEO
+                if (request.Seo != null)
+                {
+                    updates["SeoTitle"] = request.Seo.Title;
+                    updates["SeoDescription"] = request.Seo.Description;
+                    updates["SeoKeywords"] = request.Seo.Keywords;
+                }
+
+                await UpsertSettingsAsync(db, updates);
+                await db.SaveChangesAsync();
+
+                var allSettings = await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value);
+                return Results.Ok(MapSettingsToResponse(allSettings));
+            }
+            catch (Exception)
+            {
+                return InternalServerError("updating store settings");
+            }
+        }
+
+        private static async Task<IResult> UpdateBrandingSettings(
+            HttpContext context,
+            [FromBody] BrandingSettingsDto request,
+            TenantDbContextFactory dbFactory,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null) return TenantNotResolvedError();
+
+                await using var db = dbFactory.Create();
+
+                var updates = new Dictionary<string, string?>
+                {
+                    ["LogoUrl"] = request.LogoUrl,
+                    ["FaviconUrl"] = request.FaviconUrl,
+                    ["PrimaryColor"] = request.PrimaryColor,
+                    ["SecondaryColor"] = request.SecondaryColor,
+                    ["AccentColor"] = request.AccentColor,
+                    ["BackgroundColor"] = request.BackgroundColor
+                };
+
+                await UpsertSettingsAsync(db, updates);
+                await db.SaveChangesAsync();
+
+                var settings = await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value);
+                return Results.Ok(new BrandingSettingsDto
+                {
+                    LogoUrl = settings.GetValueOrDefault("LogoUrl"),
+                    FaviconUrl = settings.GetValueOrDefault("FaviconUrl"),
+                    PrimaryColor = settings.GetValueOrDefault("PrimaryColor", "#3b82f6"),
+                    SecondaryColor = settings.GetValueOrDefault("SecondaryColor", "#1e40af"),
+                    AccentColor = settings.GetValueOrDefault("AccentColor", "#10b981"),
+                    BackgroundColor = settings.GetValueOrDefault("BackgroundColor", "#ffffff")
+                });
+            }
+            catch (Exception)
+            {
+                return InternalServerError("updating branding settings");
+            }
+        }
+
+        private static async Task<IResult> UpdateContactSettings(
+            HttpContext context,
+            [FromBody] ContactSettingsDto request,
+            TenantDbContextFactory dbFactory,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null) return TenantNotResolvedError();
+
+                await using var db = dbFactory.Create();
+
+                var updates = new Dictionary<string, string?>
+                {
+                    ["ContactEmail"] = request.Email,
+                    ["ContactPhone"] = request.Phone,
+                    ["ContactAddress"] = request.Address,
+                    ["WhatsAppNumber"] = request.WhatsApp
+                };
+
+                await UpsertSettingsAsync(db, updates);
+                await db.SaveChangesAsync();
+
+                return Results.Ok(request);
+            }
+            catch (Exception)
+            {
+                return InternalServerError("updating contact settings");
+            }
+        }
+
+        private static async Task<IResult> UpdateSocialSettings(
+            HttpContext context,
+            [FromBody] SocialSettingsDto request,
+            TenantDbContextFactory dbFactory,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null) return TenantNotResolvedError();
+
+                await using var db = dbFactory.Create();
+
+                var updates = new Dictionary<string, string?>
+                {
+                    ["FacebookUrl"] = request.Facebook,
+                    ["InstagramUrl"] = request.Instagram,
+                    ["TwitterUrl"] = request.Twitter,
+                    ["TikTokUrl"] = request.TikTok
+                };
+
+                await UpsertSettingsAsync(db, updates);
+                await db.SaveChangesAsync();
+
+                return Results.Ok(request);
+            }
+            catch (Exception)
+            {
+                return InternalServerError("updating social settings");
+            }
+        }
+
+        private static async Task UpsertSettingsAsync(TenantDbContext db, Dictionary<string, string?> updates)
+        {
+            foreach (var (key, value) in updates)
+            {
+                if (string.IsNullOrEmpty(value))
+                    continue;
+
+                var existing = await db.Settings.FirstOrDefaultAsync(s => s.Key == key);
+                if (existing != null)
+                {
+                    existing.Value = value;
+                }
+                else
+                {
+                    db.Settings.Add(new TenantSetting { Key = key, Value = value });
+                }
+            }
+        }
+
+        private static StoreSettingsResponse MapSettingsToResponse(Dictionary<string, string> settings)
+        {
+            return new StoreSettingsResponse
+            {
+                Branding = new BrandingSettingsDto
+                {
+                    LogoUrl = settings.GetValueOrDefault("LogoUrl"),
+                    FaviconUrl = settings.GetValueOrDefault("FaviconUrl"),
+                    PrimaryColor = settings.GetValueOrDefault("PrimaryColor", "#3b82f6"),
+                    SecondaryColor = settings.GetValueOrDefault("SecondaryColor", "#1e40af"),
+                    AccentColor = settings.GetValueOrDefault("AccentColor", "#10b981"),
+                    BackgroundColor = settings.GetValueOrDefault("BackgroundColor", "#ffffff")
+                },
+                Contact = new ContactSettingsDto
+                {
+                    Email = settings.GetValueOrDefault("ContactEmail"),
+                    Phone = settings.GetValueOrDefault("ContactPhone"),
+                    Address = settings.GetValueOrDefault("ContactAddress"),
+                    WhatsApp = settings.GetValueOrDefault("WhatsAppNumber")
+                },
+                Social = new SocialSettingsDto
+                {
+                    Facebook = settings.GetValueOrDefault("FacebookUrl"),
+                    Instagram = settings.GetValueOrDefault("InstagramUrl"),
+                    Twitter = settings.GetValueOrDefault("TwitterUrl"),
+                    TikTok = settings.GetValueOrDefault("TikTokUrl")
+                },
+                Locale = new LocaleSettingsDto
+                {
+                    Locale = settings.GetValueOrDefault("Locale", "es-CO"),
+                    Currency = settings.GetValueOrDefault("Currency", "COP"),
+                    CurrencySymbol = settings.GetValueOrDefault("CurrencySymbol", "$"),
+                    TaxRate = decimal.TryParse(settings.GetValueOrDefault("TaxRate", "0"), out var tax) ? tax : 0m
+                },
+                Seo = new SeoSettingsDto
+                {
+                    Title = settings.GetValueOrDefault("SeoTitle"),
+                    Description = settings.GetValueOrDefault("SeoDescription"),
+                    Keywords = settings.GetValueOrDefault("SeoKeywords")
+                }
+            };
         }
 
         // ==================== HELPER METHODS ====================
@@ -804,5 +1101,68 @@ namespace Api_eCommerce.Endpoints
     );
 
     public record AssignRoleRequest(string RoleName);
+
+    #region Store Settings DTOs
+
+    public record StoreSettingsResponse
+    {
+        public BrandingSettingsDto Branding { get; set; } = new();
+        public ContactSettingsDto Contact { get; set; } = new();
+        public SocialSettingsDto Social { get; set; } = new();
+        public LocaleSettingsDto Locale { get; set; } = new();
+        public SeoSettingsDto Seo { get; set; } = new();
+    }
+
+    public record BrandingSettingsDto
+    {
+        public string? LogoUrl { get; set; }
+        public string? FaviconUrl { get; set; }
+        public string PrimaryColor { get; set; } = "#3b82f6";
+        public string SecondaryColor { get; set; } = "#1e40af";
+        public string AccentColor { get; set; } = "#10b981";
+        public string BackgroundColor { get; set; } = "#ffffff";
+    }
+
+    public record ContactSettingsDto
+    {
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? Address { get; set; }
+        public string? WhatsApp { get; set; }
+    }
+
+    public record SocialSettingsDto
+    {
+        public string? Facebook { get; set; }
+        public string? Instagram { get; set; }
+        public string? Twitter { get; set; }
+        public string? TikTok { get; set; }
+    }
+
+    public record LocaleSettingsDto
+    {
+        public string Locale { get; set; } = "es-CO";
+        public string Currency { get; set; } = "COP";
+        public string CurrencySymbol { get; set; } = "$";
+        public decimal TaxRate { get; set; }
+    }
+
+    public record SeoSettingsDto
+    {
+        public string? Title { get; set; }
+        public string? Description { get; set; }
+        public string? Keywords { get; set; }
+    }
+
+    public record UpdateStoreSettingsRequest
+    {
+        public BrandingSettingsDto? Branding { get; set; }
+        public ContactSettingsDto? Contact { get; set; }
+        public SocialSettingsDto? Social { get; set; }
+        public LocaleSettingsDto? Locale { get; set; }
+        public SeoSettingsDto? Seo { get; set; }
+    }
+
+    #endregion
 }
 

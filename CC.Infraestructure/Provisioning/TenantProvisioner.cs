@@ -72,7 +72,7 @@ namespace CC.Infraestructure.Provisioning
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error provisioning tenant {TenantId} ({Slug})", tenantId, tenant.Slug);
-                
+
                 tenant.Status = TenantStatus.Failed;
                 tenant.LastError = ex.Message;
                 tenant.UpdatedAt = DateTime.UtcNow;
@@ -99,7 +99,7 @@ namespace CC.Infraestructure.Provisioning
                 _logger.LogInformation("Creating database {DbName} for tenant {TenantId}", tenant.DbName, tenant.Id);
 
                 var created = await _dbCreator.CreateDatabaseAsync(tenant.DbName, cancellationToken);
-                
+
                 step.Status = "Success";
                 step.CompletedAt = DateTime.UtcNow;
                 step.Message = $"Database {tenant.DbName} created successfully";
@@ -134,10 +134,10 @@ namespace CC.Infraestructure.Provisioning
                 _logger.LogInformation("Applying migrations to database {DbName} for tenant {TenantId}", tenant.DbName, tenant.Id);
 
                 var tenantConnectionString = GetTenantConnectionString(tenant.DbName);
-                
+
                 // Aplicar migraciones usando MigrationRunner
                 var success = await _migrationRunner.ApplyTenantMigrationsAsync(tenantConnectionString, cancellationToken);
-                
+
                 if (!success)
                 {
                     throw new Exception("Failed to apply tenant migrations");
@@ -177,7 +177,7 @@ namespace CC.Infraestructure.Provisioning
                 _logger.LogInformation("Seeding data for tenant {TenantId} in database {DbName}", tenant.Id, tenant.DbName);
 
                 var tenantConnectionString = GetTenantConnectionString(tenant.DbName);
-                
+
                 // Aplicar seed de datos usando TenantDbSeeder
                 await SeedTenantDataAsync(tenantConnectionString, tenant, cancellationToken);
 
@@ -208,24 +208,11 @@ namespace CC.Infraestructure.Provisioning
             // Usar el TenantDbSeeder para seed consistente
             await Tenant.TenantDbSeeder.SeedAsync(tenantDb, tenant.Slug, _logger);
 
-            // ==================== SEED ADICIONAL (Settings, Order Statuses) ====================
-            // Estas entidades son específicas de negocio y no están en el TenantDbSeeder genérico
+            // ==================== SEED SETTINGS COMPLETOS ====================
+            // Usa el nuevo TenantSettingsSeeder con configuraciÃ³n completa por defecto
+            await TenantSeeders.TenantSettingsSeeder.SeedAsync(tenantDb, tenant.Slug, tenant.Name, _logger);
 
-            // Seed Settings
-            if (!await tenantDb.Settings.AnyAsync(cancellationToken))
-            {
-                _logger.LogInformation("Seeding settings for tenant {TenantId}", tenant.Id);
-                tenantDb.Settings.AddRange(
-                    new Tenant.Entities.TenantSetting { Key = "Currency", Value = "USD" },
-                    new Tenant.Entities.TenantSetting { Key = "TaxRate", Value = "0.15" },
-                    new Tenant.Entities.TenantSetting { Key = "StoreName", Value = tenant.Name },
-                    new Tenant.Entities.TenantSetting { Key = "LoyaltyEnabled", Value = "true" },
-                    new Tenant.Entities.TenantSetting { Key = "LoyaltyPointsPerDollar", Value = "1" }
-                );
-                await tenantDb.SaveChangesAsync(cancellationToken);
-            }
-
-            // Seed Order Statuses
+            // ==================== SEED ORDER STATUSES ====================
             if (!await tenantDb.OrderStatuses.AnyAsync(cancellationToken))
             {
                 _logger.LogInformation("Seeding order statuses for tenant {TenantId}", tenant.Id);
@@ -244,9 +231,9 @@ namespace CC.Infraestructure.Provisioning
 
         private string GetTenantConnectionString(string dbName)
         {
-            var template = _configuration["Tenancy:TenantDbTemplate"] 
+            var template = _configuration["Tenancy:TenantDbTemplate"]
                 ?? throw new InvalidOperationException("Tenancy:TenantDbTemplate not configured");
-            
+
             return template.Replace("{DbName}", dbName);
         }
     }

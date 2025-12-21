@@ -52,6 +52,7 @@ builder.Services.AddSingleton<CC.Infraestructure.Cache.IFeatureCache, CC.Infraes
 // ==================== TENANCY SERVICES ====================
 builder.Services.AddScoped<ITenantAccessor, TenantAccessor>();
 builder.Services.AddScoped<TenantDbContextFactory>();
+builder.Services.AddScoped<ITenantUnitOfWorkFactory, TenantUnitOfWorkFactory>();
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<ITenantConnectionProtector, TenantConnectionProtector>();
 builder.Services.AddScoped<ITenantResolver, TenantResolver>();
@@ -205,6 +206,12 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 
 app.MapPublicTenantConfig();
 
+// ==================== STOREFRONT ENDPOINTS (Public) ====================
+// Endpoints públicos del catálogo que requieren X-Tenant-Slug pero NO autenticación
+var storefrontGroup = app.MapGroup("").RequireTenantResolution();
+storefrontGroup.MapGroup("").MapStorefrontEndpoints();
+
+// ==================== TENANT ENDPOINTS (Require tenant resolution) ====================
 var tenantGroup = app.MapGroup("").RequireTenantResolution();
 tenantGroup.MapGroup("").MapFeatureFlagsEndpoints();
 tenantGroup.MapGroup("").MapTenantAuth();
