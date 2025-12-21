@@ -1,0 +1,28 @@
+###############################################################################
+# Test Login de Tenant - Debug
+###############################################################################
+
+@baseUrl = http://localhost:5000
+@tenantSlug = test
+@adminEmail = admin@admin.com
+@tempPassword = qTU=02Ee
+
+### 1. Verificar que el tenant está Ready
+GET {{baseUrl}}/superadmin/tenants/{{tenantSlug}}
+Content-Type: application/json
+
+### 2. Login con credenciales del tenant
+POST {{baseUrl}}/auth/login
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{tempPassword}}"
+}
+
+### 3. Obtener perfil (después de login exitoso)
+GET {{baseUrl}}/auth/me
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{$dotenv TOKEN}}
+Content-Type: application/json

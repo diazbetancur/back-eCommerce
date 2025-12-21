@@ -4,6 +4,7 @@ using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
 using CC.Infraestructure.TenantSeeders;
+using CC.Domain.Helpers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,18 @@ using System.Text.RegularExpressions;
 // DTOs para SuperAdmin
 public record CreateTenantRequest(string Slug, string Name, string PlanCode, string? AdminEmail = null);
 public record ChangeTenantPlanRequest(string PlanCode);
+
+/// <summary>
+/// Respuesta de creación de tenant con credenciales temporales
+/// </summary>
+public record CreateTenantResponse
+{
+    public string Slug { get; init; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
+    public string AdminEmail { get; init; } = string.Empty;
+    public string TemporaryPassword { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+}
 
 namespace Api_eCommerce.Endpoints
 {
@@ -128,12 +141,12 @@ namespace Api_eCommerce.Endpoints
                 CreatedAt = DateTime.UtcNow
             };
 
+            // Variable para almacenar el password temporal (se genera después)
+            string? tempPassword = null;
+
             try
             {
-                adminDb.Tenants.Add(tenant);
-                await adminDb.SaveChangesAsync();
-
-                // 1. Crear base de datos - usar defaultdb en lugar de template1 (requerido por Aiven)
+                // 1. Verificar que la DB no exista ANTES de crear el tenant
                 var adminConn = adminDb.Database.GetConnectionString();
                 var csb = new NpgsqlConnectionStringBuilder(adminConn);
                 var masterCs = new NpgsqlConnectionStringBuilder(csb.ConnectionString) { Database = "defaultdb" }.ToString();
@@ -141,16 +154,33 @@ namespace Api_eCommerce.Endpoints
                 await using (var conn = new NpgsqlConnection(masterCs))
                 {
                     await conn.OpenAsync();
+
+                    // Verificar si la base de datos ya existe
+                    await using var checkCmd = new NpgsqlCommand(
+                        $"SELECT 1 FROM pg_database WHERE datname = '{dbName}';", conn);
+                    var exists = await checkCmd.ExecuteScalarAsync();
+
+                    if (exists != null)
+                    {
+                        logger.LogWarning("❌ Database {DbName} already exists, cannot create tenant", dbName);
+                        return Results.Conflict(new
+                        {
+                            error = $"Database '{dbName}' already exists. Cannot create tenant.",
+                            suggestion = "Use a different slug or contact administrator to clean up the orphaned database."
+                        });
+                    }
+                }
+
+                adminDb.Tenants.Add(tenant);
+                await adminDb.SaveChangesAsync();
+
+                // 2. Crear base de datos - usar defaultdb en lugar de template1 (requerido por Aiven)
+                await using (var conn = new NpgsqlConnection(masterCs))
+                {
+                    await conn.OpenAsync();
                     await using var cmd = new NpgsqlCommand($"CREATE DATABASE \"{dbName}\" WITH TEMPLATE template0 ENCODING 'UTF8';", conn);
-                    try
-                    {
-                        await cmd.ExecuteNonQueryAsync();
-                        logger.LogInformation("? Created database: {DbName}", dbName);
-                    }
-                    catch (PostgresException pgEx) when (pgEx.SqlState == "42P04")
-                    {
-                        logger.LogWarning("??  Database {DbName} already exists", dbName);
-                    }
+                    await cmd.ExecuteNonQueryAsync();
+                    logger.LogInformation("✅ Created database: {DbName}", dbName);
                 }
 
                 tenant.Status = TenantStatus.Seeding;
@@ -184,9 +214,10 @@ namespace Api_eCommerce.Endpoints
                     // Crear usuario admin y asignar rol
                     if (!await tenantDb.Users.AnyAsync())
                     {
-                        var tempPass = Guid.NewGuid().ToString("N").Substring(0, 10);
+                        // Generar password aleatorio seguro
+                        tempPassword = PasswordExtensions.GenerateRandomPassword();
                         var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
-                        var hash = hasher.HashPassword(null!, tempPass);
+                        var hash = hasher.HashPassword(null!, tempPassword);
 
                         var adminUser = new TenantUser
                         {
@@ -211,7 +242,7 @@ namespace Api_eCommerce.Endpoints
                         await tenantDb.SaveChangesAsync();
 
                         logger.LogInformation("✅ Admin user created: {Email}", adminUser.Email);
-                        logger.LogWarning("⚠️  TEMP PASSWORD: {Password}", tempPass);
+                        logger.LogWarning("⚠️  TEMP PASSWORD for {Email}: {Password}", finalAdminEmail, tempPassword);
                     }
                 }
 
@@ -224,7 +255,15 @@ namespace Api_eCommerce.Endpoints
 
                 logger.LogInformation("🎉 Tenant {Slug} created successfully", request.Slug);
 
-                return Results.Created($"/superadmin/tenants/{request.Slug}", new { slug = request.Slug, status = "Ready" });
+                // Retornar respuesta con credenciales temporales
+                return Results.Created($"/superadmin/tenants/{request.Slug}", new CreateTenantResponse
+                {
+                    Slug = request.Slug,
+                    Status = "Ready",
+                    AdminEmail = finalAdminEmail,
+                    TemporaryPassword = tempPassword ?? "(existing user - no new password)",
+                    Message = "Tenant created successfully. Admin should change password on first login."
+                });
             }
             catch (Exception ex)
             {
@@ -326,8 +365,11 @@ namespace Api_eCommerce.Endpoints
         // ==================== DELETE TENANT ====================
         private static async Task<IResult> DeleteTenant(
             AdminDbContext adminDb,
-            string slug)
+            ILoggerFactory loggerFactory,
+            string slug,
+            [FromQuery] bool hardDelete = false)
         {
+            var logger = loggerFactory.CreateLogger("SuperAdminTenants");
             var tenant = await adminDb.Tenants.FirstOrDefaultAsync(t => t.Slug == slug);
 
             if (tenant == null)
@@ -335,12 +377,73 @@ namespace Api_eCommerce.Endpoints
                 return Results.NotFound(new { error = $"Tenant '{slug}' not found" });
             }
 
-            // Soft delete: cambiar status a Disabled
-            tenant.Status = TenantStatus.Disabled;
-            tenant.UpdatedAt = DateTime.UtcNow;
-            await adminDb.SaveChangesAsync();
+            if (hardDelete)
+            {
+                // Hard delete: eliminar base de datos física y registro
+                try
+                {
+                    var adminConn = adminDb.Database.GetConnectionString();
+                    var csb = new NpgsqlConnectionStringBuilder(adminConn);
+                    var masterCs = new NpgsqlConnectionStringBuilder(csb.ConnectionString) { Database = "defaultdb" }.ToString();
 
-            return Results.Ok(new { message = $"Tenant '{slug}' disabled successfully" });
+                    await using (var conn = new NpgsqlConnection(masterCs))
+                    {
+                        await conn.OpenAsync();
+
+                        // Terminar conexiones activas a la base de datos
+                        var terminateCmd = new NpgsqlCommand(
+                            $@"SELECT pg_terminate_backend(pg_stat_activity.pid)
+                               FROM pg_stat_activity
+                               WHERE pg_stat_activity.datname = '{tenant.DbName}'
+                               AND pid <> pg_backend_pid();", conn);
+                        await terminateCmd.ExecuteNonQueryAsync();
+                        logger.LogInformation("Terminated active connections to {DbName}", tenant.DbName);
+
+                        // Eliminar la base de datos
+                        var dropCmd = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{tenant.DbName}\";", conn);
+                        await dropCmd.ExecuteNonQueryAsync();
+                        logger.LogInformation("✅ Dropped database: {DbName}", tenant.DbName);
+                    }
+
+                    // Eliminar registros de provisioning
+                    var provisionings = await adminDb.TenantProvisionings
+                        .Where(p => p.TenantId == tenant.Id)
+                        .ToListAsync();
+                    adminDb.TenantProvisionings.RemoveRange(provisionings);
+
+                    // Eliminar el tenant
+                    adminDb.Tenants.Remove(tenant);
+                    await adminDb.SaveChangesAsync();
+
+                    logger.LogWarning("🗑️ Tenant '{Slug}' permanently deleted with database", slug);
+                    return Results.Ok(new
+                    {
+                        message = $"Tenant '{slug}' permanently deleted",
+                        databaseDropped = tenant.DbName,
+                        action = "HARD_DELETE"
+                    });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error during hard delete of tenant {Slug}", slug);
+                    return Results.Problem(statusCode: 500, detail: $"Error deleting tenant: {ex.Message}");
+                }
+            }
+            else
+            {
+                // Soft delete: cambiar status a Disabled (default behavior)
+                tenant.Status = TenantStatus.Disabled;
+                tenant.UpdatedAt = DateTime.UtcNow;
+                await adminDb.SaveChangesAsync();
+
+                logger.LogInformation("Tenant '{Slug}' soft-deleted (disabled)", slug);
+                return Results.Ok(new
+                {
+                    message = $"Tenant '{slug}' disabled successfully",
+                    action = "SOFT_DELETE",
+                    hint = "Use ?hardDelete=true to permanently delete tenant and its database"
+                });
+            }
         }
 
         // ==================== CHANGE TENANT PLAN ====================

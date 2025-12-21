@@ -1,0 +1,387 @@
+###############################################################################
+# API de Categorías - Ejemplos de Uso Completos
+# Usa REST Client extension de VS Code
+###############################################################################
+
+@baseUrl = http://localhost:5093
+@tenantSlug = test
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###############################################################################
+# 1. LISTAR CATEGORÍAS (Público - No requiere autenticación)
+###############################################################################
+
+### Listar todas las categorías (paginación por defecto)
+GET {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+
+### Listar con paginación personalizada
+GET {{baseUrl}}/api/categories?page=1&pageSize=10
+X-Tenant-Slug: {{tenantSlug}}
+
+### Buscar categorías por nombre
+GET {{baseUrl}}/api/categories?search=electr
+X-Tenant-Slug: {{tenantSlug}}
+
+### Filtrar solo categorías activas
+GET {{baseUrl}}/api/categories?isActive=true
+X-Tenant-Slug: {{tenantSlug}}
+
+### Búsqueda con filtros combinados
+GET {{baseUrl}}/api/categories?page=1&pageSize=20&search=ropa&isActive=true
+X-Tenant-Slug: {{tenantSlug}}
+
+###############################################################################
+# Respuesta esperada:
+# {
+#   "items": [
+#     {
+#       "id": "a1b2c3d4-...",
+#       "name": "Electrónica",
+#       "slug": "electronica",
+#       "imageUrl": "https://storage.com/electronics.jpg",
+#       "isActive": true,
+#       "productCount": 45
+#     }
+#   ],
+#   "total": 8,
+#   "page": 1,
+#   "pageSize": 20,
+#   "totalPages": 1
+# }
+###############################################################################
+
+###############################################################################
+# 2. OBTENER CATEGORÍA POR ID (Público)
+###############################################################################
+
+### Por ID
+GET {{baseUrl}}/api/categories/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+X-Tenant-Slug: {{tenantSlug}}
+
+###############################################################################
+# Respuesta esperada:
+# {
+#   "id": "a1b2c3d4-...",
+#   "name": "Electrónica",
+#   "slug": "electronica",
+#   "description": "Productos electrónicos y gadgets",
+#   "imageUrl": "https://storage.com/electronics.jpg",
+#   "isActive": true,
+#   "productCount": 45,
+#   "parentId": null,
+#   "createdAt": "2025-12-20T10:00:00Z",
+#   "updatedAt": "2025-12-21T14:30:00Z"
+# }
+###############################################################################
+
+###############################################################################
+# 3. OBTENER CATEGORÍA POR SLUG (Público - para URLs amigables)
+###############################################################################
+
+### Por slug
+GET {{baseUrl}}/api/categories/slug/electronica
+X-Tenant-Slug: {{tenantSlug}}
+
+### Ejemplo: slug con guiones
+GET {{baseUrl}}/api/categories/slug/ropa-de-mujer
+X-Tenant-Slug: {{tenantSlug}}
+
+###############################################################################
+# 4. CREAR CATEGORÍA (Requiere Auth + Permiso CanCreate)
+###############################################################################
+
+### Crear categoría básica
+POST {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Electrónica",
+  "description": "Productos electrónicos, gadgets y accesorios tecnológicos",
+  "imageUrl": "https://storage.googleapis.com/mi-bucket/electronics.jpg",
+  "isActive": true
+}
+
+### Crear categoría sin imagen
+POST {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Ropa de Hombre",
+  "description": "Vestimenta masculina de todas las edades",
+  "isActive": true
+}
+
+### Crear categoría inactiva (draft)
+POST {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Próximamente",
+  "description": "Categoría en preparación",
+  "isActive": false
+}
+
+###############################################################################
+# Respuesta exitosa (201 Created):
+# Location: /api/categories/a1b2c3d4-...
+# {
+#   "id": "a1b2c3d4-...",
+#   "name": "Electrónica",
+#   "slug": "electronica",  // Generado automáticamente
+#   "description": "Productos electrónicos...",
+#   "imageUrl": "https://storage.googleapis.com/...",
+#   "isActive": true,
+#   "productCount": 0,
+#   "parentId": null,
+#   "createdAt": "2025-12-21T15:00:00Z",
+#   "updatedAt": null
+# }
+#
+# Errores posibles:
+# 400 - Nombre duplicado: "Ya existe una categoría con el nombre 'Electrónica'"
+# 400 - Validación: "El nombre debe tener entre 3 y 100 caracteres"
+# 401 - No autenticado: "Unauthorized"
+# 403 - Sin permisos: "No tiene permiso CanCreate en el módulo 'categories'"
+###############################################################################
+
+###############################################################################
+# 5. ACTUALIZAR CATEGORÍA (Requiere Auth + Permiso CanUpdate)
+###############################################################################
+
+### Actualizar categoría completa
+PUT {{baseUrl}}/api/categories/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Electrónica y Tecnología",
+  "description": "Productos electrónicos, gadgets, smartphones y accesorios tecnológicos de última generación",
+  "imageUrl": "https://storage.googleapis.com/mi-bucket/electronics-updated.jpg",
+  "isActive": true
+}
+
+### Desactivar una categoría
+PUT {{baseUrl}}/api/categories/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Electrónica",
+  "description": "Productos electrónicos...",
+  "imageUrl": "https://storage.googleapis.com/mi-bucket/electronics.jpg",
+  "isActive": false
+}
+
+### Cambiar nombre (actualiza el slug automáticamente)
+PUT {{baseUrl}}/api/categories/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Tecnología y Gadgets",
+  "description": "...",
+  "isActive": true
+}
+
+###############################################################################
+# Respuesta exitosa (200 OK):
+# {
+#   "id": "a1b2c3d4-...",
+#   "name": "Electrónica y Tecnología",
+#   "slug": "electronica-y-tecnologia",  // Actualizado automáticamente
+#   "description": "Productos electrónicos...",
+#   "imageUrl": "https://storage.googleapis.com/...",
+#   "isActive": true,
+#   "productCount": 45,
+#   "parentId": null,
+#   "createdAt": "2025-12-21T15:00:00Z",
+#   "updatedAt": "2025-12-21T16:30:00Z"
+# }
+#
+# Errores posibles:
+# 400 - ID mismatch: "El ID de la URL no coincide con el ID del cuerpo..."
+# 400 - Nombre duplicado: "Ya existe otra categoría con el nombre '...'"
+# 404 - No encontrada: "Categoría no encontrada"
+# 401 - No autenticado
+# 403 - Sin permisos: "No tiene permiso CanUpdate en el módulo 'categories'"
+###############################################################################
+
+###############################################################################
+# 6. ELIMINAR CATEGORÍA (Requiere Auth + Permiso CanDelete - Solo Admin)
+###############################################################################
+
+### Eliminar categoría
+DELETE {{baseUrl}}/api/categories/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+# Respuesta exitosa (204 No Content):
+# (Sin cuerpo de respuesta)
+#
+# ¿Qué sucede?
+# 1. Se eliminan las relaciones ProductCategory (desvincula productos)
+# 2. Si tiene subcategorías, se les quita el parentId (las hace de nivel raíz)
+# 3. Se elimina la categoría de forma FÍSICA (hard delete)
+#
+# Errores posibles:
+# 404 - No encontrada: "Categoría no encontrada"
+# 401 - No autenticado
+# 403 - Sin permisos: "No tiene permiso CanDelete en el módulo 'categories'"
+###############################################################################
+
+###############################################################################
+# 7. EJEMPLOS DE ERRORES Y CASOS EDGE
+###############################################################################
+
+### Error: Nombre muy corto
+POST {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "AB",
+  "isActive": true
+}
+# Respuesta 400: "El nombre debe tener entre 3 y 100 caracteres"
+
+### Error: Nombre muy largo
+POST {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Esta es una categoría con un nombre extremadamente largo que excede el límite de cien caracteres permitidos por el sistema y debería fallar la validación",
+  "isActive": true
+}
+# Respuesta 400: "El nombre debe tener entre 3 y 100 caracteres"
+
+### Error: URL de imagen inválida
+POST {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Electrónica",
+  "imageUrl": "not-a-valid-url",
+  "isActive": true
+}
+# Respuesta 400: "La URL de la imagen no es válida"
+
+### Error: Sin tenant header
+GET {{baseUrl}}/api/categories
+
+# Respuesta 400: "Unable to resolve tenant from request"
+
+### Error: Sin autenticación en endpoint protegido
+POST {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "name": "Electrónica",
+  "isActive": true
+}
+# Respuesta 401: "Unauthorized"
+
+###############################################################################
+# 8. FLUJO COMPLETO: Crear, Listar, Actualizar, Eliminar
+###############################################################################
+
+### Paso 1: Login como Admin
+POST {{baseUrl}}/auth/login
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "email": "admin@admin.com",
+  "password": "qTU=02Ee"
+}
+
+# Copiar el token de la respuesta y usarlo en los siguientes requests
+
+### Paso 2: Crear categoría
+POST {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer <TOKEN_DEL_PASO_1>
+Content-Type: application/json
+
+{
+  "name": "Deportes",
+  "description": "Equipamiento y ropa deportiva",
+  "isActive": true
+}
+
+# Copiar el ID de la respuesta
+
+### Paso 3: Listar y verificar
+GET {{baseUrl}}/api/categories
+X-Tenant-Slug: {{tenantSlug}}
+
+### Paso 4: Actualizar la categoría
+PUT {{baseUrl}}/api/categories/<ID_DEL_PASO_2>
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer <TOKEN_DEL_PASO_1>
+Content-Type: application/json
+
+{
+  "id": "<ID_DEL_PASO_2>",
+  "name": "Deportes y Fitness",
+  "description": "Equipamiento deportivo, ropa y accesorios para fitness",
+  "isActive": true
+}
+
+### Paso 5: Eliminar la categoría
+DELETE {{baseUrl}}/api/categories/<ID_DEL_PASO_2>
+X-Tenant-Slug: {{tenantSlug}}
+Authorization: Bearer <TOKEN_DEL_PASO_1>
+
+###############################################################################
+# 9. NOTAS IMPORTANTES
+###############################################################################
+
+# ✅ Slug automático:
+#    "Ropa de Mujer" → "ropa-de-mujer"
+#    "Electrónica & Gadgets" → "electronica-gadgets"
+#    Si existe duplicado: "electronica-1", "electronica-2"
+
+# ✅ Nombre único:
+#    No puede haber dos categorías con el mismo nombre (case-insensitive)
+
+# ✅ Eliminación física:
+#    - Desvincula productos automáticamente
+#    - Quita parentId de subcategorías
+#    - La categoría se elimina permanentemente
+
+# ✅ Permisos:
+#    - Viewer: Solo puede leer (GET)
+#    - Manager: Puede leer, crear y actualizar
+#    - Admin: Acceso completo (incluido eliminar)
+
+# ✅ Endpoints públicos:
+#    - GET /api/categories (listar)
+#    - GET /api/categories/{id}
+#    - GET /api/categories/slug/{slug}
+#    Estos NO requieren autenticación (AllowAnonymous)
+
+# ✅ Preparado para futuro:
+#    - Campo parentId para jerarquía de categorías
+#    - Solo falta agregar lógica de consultas jerárquicas
+
+###############################################################################

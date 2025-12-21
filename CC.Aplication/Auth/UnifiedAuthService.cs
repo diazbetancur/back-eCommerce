@@ -4,6 +4,7 @@ using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -27,30 +28,37 @@ namespace CC.Aplication.Auth
         private readonly TenantDbContextFactory _dbFactory;
         private readonly ITenantAccessor _tenantAccessor;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<UnifiedAuthService> _logger;
 
         public UnifiedAuthService(
             TenantDbContextFactory dbFactory,
             ITenantAccessor tenantAccessor,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ILogger<UnifiedAuthService> logger)
         {
             _dbFactory = dbFactory;
             _tenantAccessor = tenantAccessor;
             _configuration = configuration;
+            _logger = logger;
         }
 
         /// <summary>
-        /// Login unificado: detecta autom�ticamente si es TenantUser (admin/staff) o UserAccount (comprador)
+        /// Login unificado: detecta automáticamente si es TenantUser (admin/staff) o UserAccount (comprador)
         /// </summary>
         public async Task<UnifiedAuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
         {
             if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
             {
+                _logger.LogError("🔴 Login failed: No tenant context available");
                 throw new InvalidOperationException("No tenant context available");
             }
 
+            _logger.LogInformation("🔍 Login attempt for {Email} in tenant {Slug} (DB: {DbName})",
+                request.Email, _tenantAccessor.TenantInfo.Slug, _tenantAccessor.TenantInfo.DbName);
+
             await using var db = _dbFactory.Create();
 
-            // 1?? Primero buscar en TenantUser (admin/staff con roles)
+            // 1️⃣ Primero buscar en TenantUser (admin/staff con roles)
             var tenantUser = await db.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
@@ -60,22 +68,29 @@ namespace CC.Aplication.Auth
 
             if (tenantUser != null)
             {
+                _logger.LogInformation("✅ Found TenantUser: {Email}, IsActive: {IsActive}, MustChangePassword: {MustChange}",
+                    tenantUser.Email, tenantUser.IsActive, tenantUser.MustChangePassword);
                 // Es un TenantUser (admin/staff)
                 return await LoginTenantUserAsync(tenantUser, request.Password, db, ct);
             }
 
-            // 2?? Si no existe, buscar en UserAccount (comprador)
+            _logger.LogWarning("⚠️  User {Email} not found in TenantUser table, checking UserAccount...", request.Email);
+
+            // 2️⃣ Si no existe, buscar en UserAccount (comprador)
             var userAccount = await db.UserAccounts
                 .Include(u => u.Profile)
                 .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower(), ct);
 
             if (userAccount != null)
             {
+                _logger.LogInformation("✅ Found UserAccount: {Email}, IsActive: {IsActive}",
+                    userAccount.Email, userAccount.IsActive);
                 // Es un UserAccount (comprador)
                 return await LoginUserAccountAsync(userAccount, request.Password, ct);
             }
 
-            // 3?? No existe en ninguna tabla
+            // 3️⃣ No existe en ninguna tabla
+            _logger.LogError("🔴 User {Email} not found in any table (TenantUser or UserAccount)", request.Email);
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
@@ -90,6 +105,7 @@ namespace CC.Aplication.Auth
         {
             if (!user.IsActive)
             {
+                _logger.LogWarning("🔴 Login failed: User {Email} is not active", user.Email);
                 throw new UnauthorizedAccessException("Account is disabled");
             }
 
@@ -97,15 +113,21 @@ namespace CC.Aplication.Auth
             var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
             var result = hasher.VerifyHashedPassword(null!, user.PasswordHash, password);
 
+            _logger.LogInformation("🔑 Password verification result for {Email}: {Result}", user.Email, result);
+
             if (result == Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
             {
+                _logger.LogError("🔴 Login failed: Invalid password for {Email}", user.Email);
                 throw new UnauthorizedAccessException("Invalid email or password");
             }
 
             // Obtener roles
+            _logger.LogInformation("📋 Getting roles for user {UserId}...", user.Id);
             var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
+            _logger.LogInformation("📋 Found {RoleCount} roles: {Roles}", roles.Count, string.Join(", ", roles));
 
-            // Obtener permisos por m�dulo
+            // Obtener permisos por módulo
+            _logger.LogInformation("🔐 Getting permissions for user {UserId}...", user.Id);
             var permissions = user.UserRoles
                 .SelectMany(ur => ur.Role.ModulePermissions)
                 .Where(mp => mp.Module.IsActive)
@@ -121,11 +143,18 @@ namespace CC.Aplication.Auth
                     CanDelete = g.Any(p => p.CanDelete)
                 })
                 .ToList();
+            _logger.LogInformation("🔐 Found {PermissionCount} module permissions", permissions.Count);
 
-            // Generar JWT con roles y m�dulos
+            // Generar JWT con roles y módulos
+            _logger.LogInformation("🎫 Getting modules for JWT...");
             var modules = await GetUserModulesAsync(user.Id, db);
+            _logger.LogInformation("🎫 Found {ModuleCount} modules: {Modules}", modules.Count, string.Join(", ", modules));
+
+            _logger.LogInformation("🔑 Generating JWT token...");
             var token = GenerateJwtTokenForTenantUser(user.Id, user.Email, roles, modules);
             var expiresAt = DateTime.UtcNow.AddHours(24);
+
+            _logger.LogInformation("✅ Login successful for TenantUser {Email} with {RoleCount} roles", user.Email, roles.Count);
 
             return new UnifiedAuthResponse(
                 token,
@@ -302,23 +331,44 @@ namespace CC.Aplication.Auth
 
         private string GenerateJwtTokenForTenantUser(Guid userId, string email, List<string> roles, List<string> modules)
         {
-            var jwtKey = _configuration["jwtKey"] ?? throw new InvalidOperationException("JWT key not configured");
-
-            var payload = new Dictionary<string, object>
+            try
             {
-                { "sub", userId.ToString() },
-                { "email", email },
-                { "user_type", "tenant_user" },  // ? Identificador de tipo
-                { "jti", Guid.NewGuid().ToString() },
-                { "tenant_id", _tenantAccessor.TenantInfo!.Id.ToString() },
-                { "tenant_slug", _tenantAccessor.TenantInfo.Slug },
-                { "roles", roles },
-                { "modules", modules },
-                { "exp", new DateTimeOffset(DateTime.UtcNow.AddHours(24)).ToUnixTimeSeconds() },
-                { "iat", new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds() }
-            };
+                _logger.LogInformation("🔑 Starting JWT generation for {Email}...", email);
 
-            return CreateJwtToken(payload, jwtKey);
+                var jwtKey = _configuration["jwtKey"];
+                if (string.IsNullOrEmpty(jwtKey))
+                {
+                    _logger.LogError("🔴 JWT key is not configured!");
+                    throw new InvalidOperationException("JWT key not configured");
+                }
+
+                _logger.LogInformation("🔑 JWT key found, creating payload...");
+
+                var payload = new Dictionary<string, object>
+                {
+                    { "sub", userId.ToString() },
+                    { "email", email },
+                    { "user_type", "tenant_user" },  // ? Identificador de tipo
+                    { "jti", Guid.NewGuid().ToString() },
+                    { "tenant_id", _tenantAccessor.TenantInfo!.Id.ToString() },
+                    { "tenant_slug", _tenantAccessor.TenantInfo.Slug },
+                    { "roles", roles },
+                    { "modules", modules },
+                    { "exp", new DateTimeOffset(DateTime.UtcNow.AddHours(24)).ToUnixTimeSeconds() },
+                    { "iat", new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds() }
+                };
+
+                _logger.LogInformation("🔑 Payload created, generating token...");
+                var token = CreateJwtToken(payload, jwtKey);
+                _logger.LogInformation("✅ JWT token generated successfully");
+
+                return token;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "🔴 Error generating JWT token for {Email}", email);
+                throw;
+            }
         }
 
         private string GenerateJwtTokenForUserAccount(Guid userId, string email)
@@ -359,13 +409,13 @@ namespace CC.Aplication.Auth
             var keyBytes = Encoding.UTF8.GetBytes(key);
             using var hmac = new HMACSHA256(keyBytes);
             var signatureBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(input));
-            return Base64UrlEncode(Convert.ToBase64String(signatureBytes));
+            return Base64UrlEncode(signatureBytes);
         }
 
         private string Base64UrlEncode(string input)
         {
             var bytes = Encoding.UTF8.GetBytes(input);
-            return Base64UrlEncode(Convert.ToBase64String(bytes));
+            return Base64UrlEncode(bytes);
         }
 
         private string Base64UrlEncode(byte[] bytes)

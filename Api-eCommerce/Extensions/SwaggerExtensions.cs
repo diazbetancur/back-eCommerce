@@ -5,7 +5,7 @@ using System.Reflection;
 namespace Api_eCommerce.Extensions
 {
     /// <summary>
-    /// Extensiones para configurar Swagger en la aplicación multi-tenant
+    /// Extensiones para configurar Swagger en la aplicaciï¿½n multi-tenant
     /// </summary>
     public static class SwaggerExtensions
     {
@@ -15,13 +15,13 @@ namespace Api_eCommerce.Extensions
         public static IServiceCollection AddMultiTenantSwagger(this IServiceCollection services)
         {
             services.AddEndpointsApiExplorer();
-            
+
             services.AddSwaggerGen(options =>
             {
                 // ========================================
-                // Configuración de documentos Swagger
+                // Configuraciï¿½n de documentos Swagger
                 // ========================================
-                
+
                 // Documento principal - API Multi-Tenant
                 options.SwaggerDoc("v1", new OpenApiInfo
                 {
@@ -30,35 +30,35 @@ namespace Api_eCommerce.Extensions
                     Description = @"
 ## ?? API Multi-Tenant para eCommerce
 
-Esta API soporta **múltiples tenants** (inquilinos) aislados, cada uno con su propia base de datos y configuración.
+Esta API soporta **mï¿½ltiples tenants** (inquilinos) aislados, cada uno con su propia base de datos y configuraciï¿½n.
 
-### ?? Características principales:
+### ?? Caracterï¿½sticas principales:
 
 - **Multi-tenancy**: Cada tenant tiene datos completamente aislados
-- **Provisioning automático**: Creación de tenants con base de datos dedicada
-- **Feature flags**: Configuración de features por tenant y plan
+- **Provisioning automï¿½tico**: Creaciï¿½n de tenants con base de datos dedicada
+- **Feature flags**: Configuraciï¿½n de features por tenant y plan
 - **Metering**: Monitoreo de uso y quotas
-- **Checkout**: Carrito, cotización y órdenes
-- **Catálogo**: Productos, categorías y búsqueda
+- **Checkout**: Carrito, cotizaciï¿½n y ï¿½rdenes
+- **Catï¿½logo**: Productos, categorï¿½as y bï¿½squeda
 
-### ?? Autenticación:
+### ?? Autenticaciï¿½n:
 
-La API usa **JWT Bearer tokens** para autenticación. Para endpoints que requieren autenticación:
+La API usa **JWT Bearer tokens** para autenticaciï¿½n. Para endpoints que requieren autenticaciï¿½n:
 
-1. Obtén un token haciendo login en `/auth/login`
+1. Obtï¿½n un token haciendo login en `/auth/login`
 2. Incluye el token en el header: `Authorization: Bearer {token}`
 
 ### ??? Headers requeridos:
 
-#### X-Tenant-Slug (requerido para la mayoría de endpoints)
+#### X-Tenant-Slug (requerido para la mayorï¿½a de endpoints)
 Identifica el tenant al que pertenece la solicitud. Ejemplos: `acme`, `demo-store`, `mi-tienda`
 
 #### X-Session-Id (requerido para carrito/checkout)
-Identificador único de sesión para operaciones de carrito. Genera un UUID: `sess_abc123def456`
+Identificador ï¿½nico de sesiï¿½n para operaciones de carrito. Genera un UUID: `sess_abc123def456`
 
-### ?? Documentación adicional:
+### ?? Documentaciï¿½n adicional:
 
-- Guía de inicio rápido: Ver `FEATURE-FLAGS-QUICKSTART.md`
+- Guï¿½a de inicio rï¿½pido: Ver `FEATURE-FLAGS-QUICKSTART.md`
 - Ejemplos de API: Ver `FEATURE-FLAGS-API-EXAMPLES.md`
 ",
                     Contact = new OpenApiContact
@@ -74,27 +74,27 @@ Identificador único de sesión para operaciones de carrito. Genera un UUID: `sess
                     }
                 });
 
-                // Documento SuperAdmin - Endpoints de administración
+                // Documento SuperAdmin - Endpoints de administraciï¿½n
                 options.SwaggerDoc("superadmin", new OpenApiInfo
                 {
                     Title = "SuperAdmin API",
                     Version = "v1.0.0",
                     Description = @"
-## ?? API de Administración SuperAdmin
+## ?? API de Administraciï¿½n SuperAdmin
 
-Endpoints para administración de tenants, planes, features y configuración global.
+Endpoints para administraciï¿½n de tenants, planes, features y configuraciï¿½n global.
 
 ### ?? Acceso restringido:
 
-Estos endpoints están destinados **solo para administradores del sistema**.
-En producción, estos endpoints deben estar protegidos por autenticación y autorización específica.
+Estos endpoints estï¿½n destinados **solo para administradores del sistema**.
+En producciï¿½n, estos endpoints deben estar protegidos por autenticaciï¿½n y autorizaciï¿½n especï¿½fica.
 
 ### ?? Funcionalidades:
 
-- Gestión de tenants (crear, actualizar, eliminar)
-- Configuración de feature flags
-- Gestión de planes y quotas
-- Monitoreo de uso y métricas
+- Gestiï¿½n de tenants (crear, actualizar, eliminar)
+- Configuraciï¿½n de feature flags
+- Gestiï¿½n de planes y quotas
+- Monitoreo de uso y mï¿½tricas
 "
                 });
 
@@ -106,17 +106,17 @@ En producción, estos endpoints deben estar protegidos por autenticación y autori
                     Description = @"
 ## ?? API de Aprovisionamiento de Tenants
 
-Endpoints públicos para registro y activación de nuevos tenants.
+Endpoints pï¿½blicos para registro y activaciï¿½n de nuevos tenants.
 
 ### ?? Flujo de provisioning:
 
 1. **Iniciar registro**: `POST /provision/tenants/init`
-   - Proporciona información básica del tenant
-   - Recibe email de confirmación
+   - Proporciona informaciï¿½n bï¿½sica del tenant
+   - Recibe email de confirmaciï¿½n
 
 2. **Confirmar registro**: `POST /provision/tenants/confirm`
    - Confirma con el token recibido por email
-   - Se crea la base de datos y configuración inicial
+   - Se crea la base de datos y configuraciï¿½n inicial
 
 3. **Tenant listo**: El tenant queda en estado `Ready`
    - Ya puede usar todos los endpoints de la API
@@ -126,7 +126,7 @@ Endpoints públicos para registro y activación de nuevos tenants.
                 // ========================================
                 // Seguridad - JWT Bearer
                 // ========================================
-                
+
                 options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
                     Name = "Authorization",
@@ -135,23 +135,29 @@ Endpoints públicos para registro y activación de nuevos tenants.
                     BearerFormat = "JWT",
                     In = ParameterLocation.Header,
                     Description = @"
-### Autenticación JWT
+### Autenticaciï¿½n JWT
 
-Ingresa tu token JWT en el campo de texto.
+Ingresa **SOLO el token** (sin el prefijo 'Bearer').
 
-**Formato:** `Bearer {token}`
+Swagger automï¿½ticamente agregarï¿½ el prefijo 'Bearer ' al enviarlo.
 
-**Ejemplo:**
+**Ejemplo correcto:**
 ```
-Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-### Cómo obtener un token:
+**ï¿½ NO incluyas 'Bearer':**
+```
+Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...  ? INCORRECTO
+```
 
-1. Haz login en `/auth/login` con tu email y contraseña
-2. Copia el token de la respuesta
-3. Haz clic en el botón **Authorize** en Swagger
-4. Pega el token (sin el prefijo 'Bearer ')
+### Cï¿½mo obtener un token:
+
+1. Haz login en `/auth/login` con tu email y contraseï¿½a
+2. Copia el token de la respuesta (solo el token, sin 'Bearer')
+3. Haz clic en el botï¿½n **Authorize** ??
+4. Pega el token en el campo 'Value'
+5. Haz clic en 'Authorize' y luego 'Close'
 "
                 });
 
@@ -171,18 +177,18 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
                 });
 
                 // ========================================
-                // Filtros de operación
+                // Filtros de operaciï¿½n
                 // ========================================
-                
-                // Agregar header X-Tenant-Slug automáticamente
+
+                // Agregar header X-Tenant-Slug automï¿½ticamente
                 options.OperationFilter<SwaggerTenantOperationFilter>();
-                
+
                 // Agregar header X-Session-Id para endpoints de carrito/checkout
                 options.OperationFilter<SwaggerSessionOperationFilter>();
-                
+
                 // Documentar respuestas comunes (400, 401, 404, 500)
                 options.OperationFilter<SwaggerCommonResponsesOperationFilter>();
-                
+
                 // Agrupar endpoints por dominio
                 options.TagActionsBy(api =>
                 {
@@ -213,9 +219,9 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
                 });
 
                 // ========================================
-                // Documentación XML
+                // Documentaciï¿½n XML
                 // ========================================
-                
+
                 // Incluir comentarios XML si existen
                 var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
                 var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
@@ -225,16 +231,16 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
                 }
 
                 // ========================================
-                // Configuración adicional
+                // Configuraciï¿½n adicional
                 // ========================================
-                
-                // Ordenar acciones por método HTTP
-                options.OrderActionsBy(api => 
+
+                // Ordenar acciones por mï¿½todo HTTP
+                options.OrderActionsBy(api =>
                     $"{api.GroupName}_{api.HttpMethod}_{api.RelativePath}");
 
                 // Mostrar enums como strings
                 options.SchemaFilter<EnumSchemaFilter>();
-                
+
                 // Ejemplos de request/response
                 options.SchemaFilter<ExampleSchemaFilter>();
             });
@@ -259,28 +265,28 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
                 options.SwaggerEndpoint("/swagger/superadmin/swagger.json", "SuperAdmin API");
                 options.SwaggerEndpoint("/swagger/provisioning/swagger.json", "Provisioning API");
 
-                // Configuración UI
+                // Configuraciï¿½n UI
                 options.DocumentTitle = "eCommerce Multi-Tenant API";
                 options.RoutePrefix = "swagger";
-                
-                // Habilitar búsqueda
+
+                // Habilitar bï¿½squeda
                 options.EnableFilter();
-                
+
                 // Expandir operaciones por defecto
                 options.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.List);
-                
+
                 // Mostrar duraciones de request
                 options.DisplayRequestDuration();
-                
+
                 // Tema oscuro
                 options.DefaultModelsExpandDepth(2);
                 options.DefaultModelExpandDepth(2);
-                
-                // Persistir autenticación
+
+                // Persistir autenticaciï¿½n
                 options.EnableDeepLinking();
                 options.DisplayOperationId();
-                
-                // Configuración personalizada
+
+                // Configuraciï¿½n personalizada
                 options.InjectStylesheet("/swagger-custom.css");
                 options.InjectJavascript("/swagger-custom.js");
             });
@@ -290,7 +296,7 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     }
 
     /// <summary>
-    /// Filtro para mostrar enums como strings en lugar de números
+    /// Filtro para mostrar enums como strings en lugar de nï¿½meros
     /// </summary>
     public class EnumSchemaFilter : ISchemaFilter
     {
@@ -316,7 +322,7 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     {
         public void Apply(OpenApiSchema schema, SchemaFilterContext context)
         {
-            // Aquí puedes agregar ejemplos personalizados para tus DTOs
+            // Aquï¿½ puedes agregar ejemplos personalizados para tus DTOs
             // Por ejemplo, para ProductDto, CheckoutRequest, etc.
         }
     }

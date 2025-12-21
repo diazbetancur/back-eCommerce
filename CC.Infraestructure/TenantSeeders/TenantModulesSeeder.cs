@@ -34,6 +34,7 @@ namespace CC.Infraestructure.TenantSeeders
             new ModuleDefinition("00000000-0000-0000-0000-000000000005", "settings", "Configuración", "Configuración de la tienda", "cog"),
             new ModuleDefinition("00000000-0000-0000-0000-000000000006", "loyalty", "Fidelización", "Programa de puntos y recompensas", "gift"),
             new ModuleDefinition("00000000-0000-0000-0000-000000000007", "marketing", "Marketing", "Banners, promociones y campañas", "megaphone"),
+            new ModuleDefinition("00000000-0000-0000-0000-000000000008", "categories", "Categorías", "Gestión de categorías de productos", "folder"),
         };
 
         /// <summary>
@@ -58,6 +59,7 @@ namespace CC.Infraestructure.TenantSeeders
                     ["customers"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
                     ["reports"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
                     ["loyalty"] = new(CanView: true, CanCreate: true, CanUpdate: true, CanDelete: false),
+                    ["categories"] = new(CanView: true, CanCreate: true, CanUpdate: true, CanDelete: false),
                 },
 
                 // VIEWER - Solo lectura
@@ -65,6 +67,7 @@ namespace CC.Infraestructure.TenantSeeders
                 {
                     ["sales"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
                     ["inventory"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
+                    ["categories"] = new(CanView: true, CanCreate: false, CanUpdate: false, CanDelete: false),
                 }
             };
         }

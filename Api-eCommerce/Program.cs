@@ -76,6 +76,7 @@ builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IFeatureService, FeatureService>();
+builder.Services.AddScoped<CC.Aplication.Catalog.ICategoryManagementService, CC.Aplication.Catalog.CategoryManagementService>();
 
 // Auth services
 // ? DEPRECATED - Ahora usamos UnifiedAuthService
@@ -218,6 +219,7 @@ tenantGroup.MapGroup("").MapTenantAuth();
 tenantGroup.MapGroup("").MapPermissionsEndpoints();
 tenantGroup.MapGroup("").MapTenantAdminEndpoints();
 tenantGroup.MapGroup("").MapCatalogEndpoints();
+tenantGroup.MapGroup("").MapCategoryEndpoints();
 tenantGroup.MapGroup("").MapCartEndpoints();
 tenantGroup.MapGroup("").MapCheckoutEndpoints();
 tenantGroup.MapGroup("").MapOrdersEndpoints();
@@ -248,11 +250,17 @@ public static class TenantMiddlewareExtensions
 
             await middleware.InvokeAsync(httpContext, adminDb, tenantAccessor, configuration);
 
+            // Si el middleware escribió una respuesta de error (HasStarted = true),
+            // no continuamos al siguiente handler. El filtro debe retornar algo,
+            // pero como la respuesta ya fue escrita, retornamos el status actual
             if (httpContext.Response.HasStarted)
             {
-                return null;
+                // La respuesta ya fue escrita por el middleware (error de tenant)
+                // Simplemente retornamos sin invocar el handler del endpoint
+                return TypedResults.StatusCode(httpContext.Response.StatusCode);
             }
 
+            // Tenant resuelto correctamente, continuar con el endpoint
             return await next(context);
         });
     }
