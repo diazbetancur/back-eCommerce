@@ -61,7 +61,7 @@ namespace Api_eCommerce.Endpoints
                 .Produces<TenantDetailDto>(StatusCodes.Status200OK);
 
             tenants.MapDelete("/{tenantId:guid}", DeleteTenant)
-                .WithName("DeleteTenant")
+                .WithName("Admin_DeleteTenant")
                 .WithSummary("Delete tenant (dangerous operation)")
                 .Produces(StatusCodes.Status204NoContent);
 
@@ -224,7 +224,7 @@ namespace Api_eCommerce.Endpoints
         private static Guid? GetAdminUserIdFromJwt(HttpContext context)
         {
             var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier);
-            
+
             if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 // Verificar que es un admin (claim especial)

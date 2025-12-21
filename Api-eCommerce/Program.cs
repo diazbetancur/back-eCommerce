@@ -16,6 +16,7 @@ using CC.Infraestructure.Tenant;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,7 +30,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
-                "https://pwaecommercee.netlify.app",   // Producci�n
+                "https://pwaecommercee.netlify.app",   // Producci�n
                 "http://localhost:4200"                 // Desarrollo local
             )
             .AllowAnyMethod()
@@ -80,7 +81,7 @@ builder.Services.AddScoped<IFeatureService, FeatureService>();
 // builder.Services.AddScoped<CC.Aplication.Auth.IAuthService, CC.Aplication.Auth.AuthService>();
 // builder.Services.AddScoped<CC.Aplication.TenantAuth.ITenantAuthService, CC.Aplication.TenantAuth.TenantAuthService>();
 
-// ? NUEVO: Servicio unificado de autenticaci�n
+// ? NUEVO: Servicio unificado de autenticaci�n
 builder.Services.AddScoped<CC.Aplication.Auth.IUnifiedAuthService, CC.Aplication.Auth.UnifiedAuthService>();
 
 // Permission service
@@ -121,17 +122,51 @@ using (var scope = app.Services.CreateScope())
     {
         var adminDb = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
-        logger.LogInformation("?? Applying AdminDb migrations...");
+        // En Aiven Cloud, necesitamos crear la DB usando 'defaultdb' como base de mantenimiento
+        var adminCs = config.GetConnectionString("AdminDb");
+        var csb = new NpgsqlConnectionStringBuilder(adminCs);
+        var targetDb = csb.Database;
+
+        // Conectar a 'defaultdb' (base por defecto en Aiven) para crear la DB si no existe
+        csb.Database = "defaultdb";
+        var maintenanceCs = csb.ToString();
+
+        try
+        {
+            await using var conn = new NpgsqlConnection(maintenanceCs);
+            await conn.OpenAsync();
+
+            // Verificar si la base de datos existe
+            await using var checkCmd = new NpgsqlCommand(
+                $"SELECT 1 FROM pg_database WHERE datname = '{targetDb}'", conn);
+            var exists = await checkCmd.ExecuteScalarAsync() != null;
+
+            if (!exists)
+            {
+                logger.LogInformation("📦 Creating database {Database}...", targetDb);
+                await using var createCmd = new NpgsqlCommand(
+                    $"CREATE DATABASE \"{targetDb}\" WITH ENCODING 'UTF8'", conn);
+                await createCmd.ExecuteNonQueryAsync();
+                logger.LogInformation("✅ Database {Database} created", targetDb);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("⚠️ Could not check/create database (may already exist): {Message}", ex.Message);
+        }
+
+        logger.LogInformation("🔄 Applying AdminDb migrations...");
         await adminDb.Database.MigrateAsync();
 
-        logger.LogInformation("?? Seeding AdminDb...");
+        logger.LogInformation("🌱 Seeding AdminDb...");
         await CC.Infraestructure.Admin.AdminDbSeeder.SeedAsync(adminDb, logger);
     }
     catch (Exception ex)
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "? Error during startup migration/seed");
+        logger.LogError(ex, "❌ Error during startup migration/seed");
         throw;
     }
 }

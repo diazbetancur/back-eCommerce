@@ -6,11 +6,16 @@ using CC.Infraestructure.Tenant.Entities;
 using CC.Infraestructure.TenantSeeders;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using System.Text.RegularExpressions;
+
+// DTOs para SuperAdmin
+public record CreateTenantRequest(string Slug, string Name, string PlanCode, string? AdminEmail = null);
+public record ChangeTenantPlanRequest(string PlanCode);
 
 namespace Api_eCommerce.Endpoints
 {
@@ -30,8 +35,8 @@ namespace Api_eCommerce.Endpoints
                 .WithSummary("Listar todos los tenants");
 
             group.MapDelete("/{slug}", DeleteTenant)
-                .WithName("DeleteTenant")
-                .WithSummary("Eliminar tenant (soft delete)");
+                .WithName("SuperAdmin_DisableTenant")
+                .WithSummary("Deshabilitar tenant (soft delete)");
 
             group.MapPatch("/{slug}/plan", ChangeTenantPlan)
                 .WithName("ChangeTenantPlan")
@@ -82,37 +87,41 @@ namespace Api_eCommerce.Endpoints
             ITenantConnectionProtector protector,
             TenantDbContextFactory factory,
             ILoggerFactory loggerFactory,
-            string slug,
-            string name,
-            string planCode,
-            string? adminEmail = null)
+            [FromBody] CreateTenantRequest request)
         {
             var logger = loggerFactory.CreateLogger("SuperAdminTenants");
             var regex = new Regex("^[a-z0-9-]{3,}$");
 
-            if (!regex.IsMatch(slug))
+            if (!regex.IsMatch(request.Slug))
             {
-                return Results.ValidationProblem(new Dictionary<string, string[]> { { "slug", new[] { "invalid format" } } });
+                return Results.ValidationProblem(new Dictionary<string, string[]> { { "slug", new[] { "invalid format: must be lowercase letters, numbers and hyphens, min 3 chars" } } });
+            }
+
+            // Verificar si ya existe un tenant con ese slug
+            var existingTenant = await adminDb.Tenants.FirstOrDefaultAsync(t => t.Slug == request.Slug);
+            if (existingTenant != null)
+            {
+                return Results.Conflict(new { error = $"Tenant with slug '{request.Slug}' already exists", existingStatus = existingTenant.Status.ToString() });
             }
 
             // Usar adminEmail proporcionado o generar uno por defecto
-            var finalAdminEmail = string.IsNullOrWhiteSpace(adminEmail)
-                ? $"admin@{slug}"
-                : adminEmail.Trim().ToLower();
+            var finalAdminEmail = string.IsNullOrWhiteSpace(request.AdminEmail)
+                ? $"admin@{request.Slug}"
+                : request.AdminEmail.Trim().ToLower();
 
-            var plan = await adminDb.Plans.FirstOrDefaultAsync(p => p.Code == planCode);
+            var plan = await adminDb.Plans.FirstOrDefaultAsync(p => p.Code == request.PlanCode);
             if (plan == null)
             {
                 return Results.NotFound(new { errors = "plan not found" });
             }
 
-            var dbName = $"tenant_{slug}";
+            var dbName = $"tenant_{request.Slug}";
 
             var tenant = new CC.Infraestructure.Admin.Entities.Tenant
             {
                 Id = Guid.NewGuid(),
-                Slug = slug,
-                Name = name,
+                Slug = request.Slug,
+                Name = request.Name,
                 DbName = dbName,
                 Status = TenantStatus.Pending,
                 PlanId = plan.Id,
@@ -124,10 +133,10 @@ namespace Api_eCommerce.Endpoints
                 adminDb.Tenants.Add(tenant);
                 await adminDb.SaveChangesAsync();
 
-                // 1. Crear base de datos
+                // 1. Crear base de datos - usar defaultdb en lugar de template1 (requerido por Aiven)
                 var adminConn = adminDb.Database.GetConnectionString();
                 var csb = new NpgsqlConnectionStringBuilder(adminConn);
-                var masterCs = new NpgsqlConnectionStringBuilder(csb.ConnectionString) { Database = "template1" }.ToString();
+                var masterCs = new NpgsqlConnectionStringBuilder(csb.ConnectionString) { Database = "defaultdb" }.ToString();
 
                 await using (var conn = new NpgsqlConnection(masterCs))
                 {
@@ -213,13 +222,13 @@ namespace Api_eCommerce.Endpoints
                 tenant.UpdatedAt = DateTime.UtcNow;
                 await adminDb.SaveChangesAsync();
 
-                logger.LogInformation("?? Tenant {Slug} created successfully", slug);
+                logger.LogInformation("🎉 Tenant {Slug} created successfully", request.Slug);
 
-                return Results.Created($"/superadmin/tenants/{slug}", new { slug, status = "Ready" });
+                return Results.Created($"/superadmin/tenants/{request.Slug}", new { slug = request.Slug, status = "Ready" });
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "? Error creating tenant {Slug}", slug);
+                logger.LogError(ex, "❌ Error creating tenant {Slug}", request.Slug);
                 tenant.Status = TenantStatus.Failed;
                 tenant.LastError = ex.Message;
                 tenant.UpdatedAt = DateTime.UtcNow;
@@ -338,7 +347,7 @@ namespace Api_eCommerce.Endpoints
         private static async Task<IResult> ChangeTenantPlan(
             AdminDbContext adminDb,
             string slug,
-            string newPlanCode)
+            [FromBody] ChangeTenantPlanRequest request)
         {
             var tenant = await adminDb.Tenants
                 .Include(t => t.Plan)
@@ -351,11 +360,11 @@ namespace Api_eCommerce.Endpoints
 
             var newPlan = await adminDb.Plans
                 .Include(p => p.Limits)
-                .FirstOrDefaultAsync(p => p.Code == newPlanCode);
+                .FirstOrDefaultAsync(p => p.Code == request.PlanCode);
 
             if (newPlan == null)
             {
-                return Results.NotFound(new { error = $"Plan '{newPlanCode}' not found" });
+                return Results.NotFound(new { error = $"Plan '{request.PlanCode}' not found" });
             }
 
             var oldPlanCode = tenant.Plan?.Code ?? "none";
