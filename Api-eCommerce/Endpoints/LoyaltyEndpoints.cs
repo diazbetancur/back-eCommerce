@@ -74,7 +74,7 @@ namespace Api_eCommerce.Endpoints
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
@@ -139,7 +139,7 @@ namespace Api_eCommerce.Endpoints
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,

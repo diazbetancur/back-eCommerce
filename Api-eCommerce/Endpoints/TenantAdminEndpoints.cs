@@ -145,7 +145,7 @@ namespace Api_eCommerce.Endpoints
                     TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
                 });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("retrieving products");
             }
@@ -185,7 +185,7 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.Ok(dto);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("retrieving product");
             }
@@ -254,7 +254,7 @@ namespace Api_eCommerce.Endpoints
                     }
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("creating product");
             }
@@ -301,7 +301,7 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.Ok(dto);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("updating product");
             }
@@ -331,7 +331,7 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.NoContent();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("deleting product");
             }
@@ -378,7 +378,7 @@ namespace Api_eCommerce.Endpoints
                     TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
                 });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("retrieving orders");
             }
@@ -435,7 +435,7 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.Ok(dto);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("retrieving order");
             }
@@ -482,7 +482,7 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.Ok(dto);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("updating order status");
             }
@@ -518,7 +518,7 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.Ok(new AdminUsersResponse { Users = userDtos });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("retrieving users");
             }
@@ -593,7 +593,7 @@ namespace Api_eCommerce.Endpoints
                     }
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("creating user");
             }
@@ -651,7 +651,7 @@ namespace Api_eCommerce.Endpoints
 
                 return Results.Ok(dto);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return InternalServerError("assigning role");
             }

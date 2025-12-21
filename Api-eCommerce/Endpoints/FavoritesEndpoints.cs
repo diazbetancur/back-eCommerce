@@ -91,7 +91,7 @@ namespace Api_eCommerce.Endpoints
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
@@ -161,7 +161,7 @@ namespace Api_eCommerce.Endpoints
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
@@ -203,7 +203,7 @@ namespace Api_eCommerce.Endpoints
 
                 // Eliminar favorito
                 var removed = await favoritesService.RemoveFavoriteAsync(userId.Value, productId);
-                
+
                 if (!removed)
                 {
                     return Results.Problem(
@@ -223,7 +223,7 @@ namespace Api_eCommerce.Endpoints
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
@@ -275,7 +275,7 @@ namespace Api_eCommerce.Endpoints
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,

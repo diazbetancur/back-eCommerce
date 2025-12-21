@@ -62,7 +62,7 @@ namespace Api_eCommerce.Endpoints
                     );
                 }
 
-                // Obtener módulos del usuario
+                // Obtener mï¿½dulos del usuario
                 var modules = await permissionService.GetUserModulesAsync(userId.Value);
 
                 return Results.Ok(new ModulesResponse
@@ -91,7 +91,7 @@ namespace Api_eCommerce.Endpoints
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
@@ -131,7 +131,7 @@ namespace Api_eCommerce.Endpoints
                     );
                 }
 
-                // Obtener permisos del módulo
+                // Obtener permisos del mï¿½dulo
                 var permissions = await permissionService.GetUserPermissionsAsync(userId.Value, moduleCode);
 
                 return Results.Ok(permissions);
@@ -144,7 +144,7 @@ namespace Api_eCommerce.Endpoints
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,

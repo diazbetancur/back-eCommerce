@@ -117,7 +117,7 @@ namespace Api_eCommerce.Auth
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
@@ -176,7 +176,7 @@ namespace Api_eCommerce.Auth
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
@@ -237,7 +237,7 @@ namespace Api_eCommerce.Auth
                     detail: ex.Message
                 );
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,

@@ -7,7 +7,6 @@ namespace Api_eCommerce.Handlers
     public class ActivityLoggingMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly DBContext _dbContext;
         private readonly IServiceProvider _serviceProvider;
 
         public ActivityLoggingMiddleware(RequestDelegate next, IServiceProvider serviceProvider)
