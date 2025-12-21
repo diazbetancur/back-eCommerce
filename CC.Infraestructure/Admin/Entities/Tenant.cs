@@ -32,8 +32,8 @@ namespace CC.Infraestructure.Admin.Entities
 
         public TenantStatus Status { get; set; }
 
-        [Required]
-        public string EncryptedConnection { get; set; }
+        // ? CAMBIAR: Nullable porque se asigna después de crear la DB
+        public string? EncryptedConnection { get; set; }
 
         public Guid? PlanId { get; set; }
         public Plan? Plan { get; set; }

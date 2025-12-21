@@ -72,7 +72,7 @@ namespace Api_eCommerce.Endpoints
         {
             var logger = loggerFactory.CreateLogger("SuperAdminTenants");
             var regex = new Regex("^[a-z0-9-]{3,}$");
-            
+
             if (!regex.IsMatch(slug))
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]> { { "slug", new[] { "invalid format" } } });
@@ -84,27 +84,29 @@ namespace Api_eCommerce.Endpoints
                 return Results.NotFound(new { errors = "plan not found" });
             }
 
+            var dbName = $"tenant_{slug}";
+
             var tenant = new CC.Infraestructure.Admin.Entities.Tenant
             {
                 Id = Guid.NewGuid(),
                 Slug = slug,
                 Name = name,
+                DbName = dbName,
                 Status = TenantStatus.Pending,
                 PlanId = plan.Id,
                 CreatedAt = DateTime.UtcNow
             };
-            
-            adminDb.Tenants.Add(tenant);
-            await adminDb.SaveChangesAsync();
 
             try
             {
+                adminDb.Tenants.Add(tenant);
+                await adminDb.SaveChangesAsync();
+                
                 // 1. Crear base de datos
                 var adminConn = adminDb.Database.GetConnectionString();
                 var csb = new NpgsqlConnectionStringBuilder(adminConn);
-                var dbName = $"tenant_{slug}";
-                var masterCs = new NpgsqlConnectionStringBuilder(csb.ConnectionString) { Database = "postgres" }.ToString();
-                
+                var masterCs = new NpgsqlConnectionStringBuilder(csb.ConnectionString) { Database = "template1" }.ToString();
+
                 await using (var conn = new NpgsqlConnection(masterCs))
                 {
                     await conn.OpenAsync();
@@ -154,7 +156,7 @@ namespace Api_eCommerce.Endpoints
                         var tempPass = Guid.NewGuid().ToString("N").Substring(0, 10);
                         var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
                         var hash = hasher.HashPassword(null!, tempPass);
-                        
+
                         var adminUser = new TenantUser
                         {
                             Id = Guid.NewGuid(),
@@ -162,7 +164,7 @@ namespace Api_eCommerce.Endpoints
                             PasswordHash = hash,
                             IsActive = true
                         };
-                        
+
                         tenantDb.Users.Add(adminUser);
                         await tenantDb.SaveChangesAsync();
 
@@ -189,7 +191,7 @@ namespace Api_eCommerce.Endpoints
                 await adminDb.SaveChangesAsync();
 
                 logger.LogInformation("?? Tenant {Slug} created successfully", slug);
-                
+
                 return Results.Created($"/superadmin/tenants/{slug}", new { slug, status = "Ready" });
             }
             catch (Exception ex)
@@ -199,7 +201,7 @@ namespace Api_eCommerce.Endpoints
                 tenant.LastError = ex.Message;
                 tenant.UpdatedAt = DateTime.UtcNow;
                 await adminDb.SaveChangesAsync();
-                
+
                 return Results.Problem(statusCode: 500, detail: ex.Message);
             }
         }
@@ -208,24 +210,52 @@ namespace Api_eCommerce.Endpoints
             AdminDbContext adminDb,
             ITenantConnectionProtector protector,
             TenantDbContextFactory factory,
+            IConfiguration configuration,  // ? AGREGAR para leer template
             string tenant)
         {
             var t = await adminDb.Tenants.FirstOrDefaultAsync(x => x.Slug == tenant);
             if (t == null) return Results.NotFound();
-            
+
             try
             {
-                var cs = protector.Unprotect(t.EncryptedConnection);
+                string cs;
+
+                // ? PLAN B: Si EncryptedConnection es null, reconstruirlo
+                if (string.IsNullOrEmpty(t.EncryptedConnection))
+                {
+                    // Obtener template del appsettings.json
+                    var template = configuration["Tenancy:TenantDbTemplate"];
+                    if (string.IsNullOrEmpty(template))
+                    {
+                        return Results.Problem(
+                            statusCode: 500,
+                            detail: "Tenancy:TenantDbTemplate not configured"
+                        );
+                    }
+
+                    // Reemplazar {DbName} con el nombre real
+                    cs = template.Replace("{DbName}", t.DbName);
+
+                    // Guardar la conexión encriptada
+                    t.EncryptedConnection = protector.Protect(cs);
+                }
+                else
+                {
+                    // Si ya existe, desencriptarla
+                    cs = protector.Unprotect(t.EncryptedConnection);
+                }
+
+                // Aplicar migraciones a la DB del tenant
                 await using (var tenantDb = factory.Create(cs))
                 {
                     await tenantDb.Database.MigrateAsync();
                 }
-                
+
                 t.Status = TenantStatus.Ready;
                 t.LastError = null;
                 t.UpdatedAt = DateTime.UtcNow;
                 await adminDb.SaveChangesAsync();
-                
+
                 return Results.Ok(new { tenant, status = "Ready" });
             }
             catch (Exception ex)
@@ -234,7 +264,7 @@ namespace Api_eCommerce.Endpoints
                 t.LastError = ex.Message;
                 t.UpdatedAt = DateTime.UtcNow;
                 await adminDb.SaveChangesAsync();
-                
+
                 return Results.Problem(statusCode: 500, detail: ex.Message);
             }
         }
