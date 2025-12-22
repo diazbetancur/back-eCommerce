@@ -40,7 +40,7 @@ namespace CC.Aplication.TenantAuth
 
             await using var db = _dbFactory.Create();
 
-            // Buscar usuario con roles Y permisos de módulos
+            // Buscar usuario con roles Y permisos de mï¿½dulos
             var user = await db.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
@@ -61,7 +61,7 @@ namespace CC.Aplication.TenantAuth
             // Verificar password
             var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
             var result = hasher.VerifyHashedPassword(null!, user.PasswordHash, request.Password);
-            
+
             if (result == Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
             {
                 throw new UnauthorizedAccessException("Invalid email or password");
@@ -70,7 +70,7 @@ namespace CC.Aplication.TenantAuth
             // Obtener roles del usuario
             var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
 
-            // ? NUEVO: Obtener permisos agrupados por módulo
+            // ? NUEVO: Obtener permisos agrupados por mï¿½dulo
             var modulePermissions = user.UserRoles
                 .SelectMany(ur => ur.Role.ModulePermissions)
                 .Where(mp => mp.Module.IsActive)
@@ -87,7 +87,7 @@ namespace CC.Aplication.TenantAuth
                 })
                 .ToList();
 
-            // Generar JWT con roles y módulos
+            // Generar JWT con roles y mï¿½dulos
             var token = await GenerateJwtTokenWithRolesAsync(user, roles, _tenantAccessor.TenantInfo, db);
             var expiresAt = DateTime.UtcNow.AddHours(24);
 
@@ -157,13 +157,13 @@ namespace CC.Aplication.TenantAuth
         // ==================== PRIVATE HELPERS ====================
 
         private async Task<string> GenerateJwtTokenWithRolesAsync(
-            TenantUser user,
+            User user,
             List<string> roles,
             TenantInfo tenantInfo,
             TenantDbContext db)
         {
             var jwtKey = _configuration["jwtKey"] ?? throw new InvalidOperationException("JWT key not configured");
-            
+
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -176,7 +176,7 @@ namespace CC.Aplication.TenantAuth
             // Agregar roles como claims
             claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-            // Agregar módulos disponibles (para el frontend)
+            // Agregar mï¿½dulos disponibles (para el frontend)
             var modules = await GetUserModulesAsync(user.Id, db);
             if (modules.Any())
             {

@@ -199,9 +199,8 @@ namespace Api_eCommerce.Endpoints
                     {
                         var roles = new[]
                         {
-                            new TenantRole { Id = Guid.NewGuid(), Name = "Admin" },
-                            new TenantRole { Id = Guid.NewGuid(), Name = "Manager" },
-                            new TenantRole { Id = Guid.NewGuid(), Name = "Viewer" }
+                            new Role { Id = Guid.NewGuid(), Name = "SuperAdmin", Description = "Administrador con acceso total" },
+                            new Role { Id = Guid.NewGuid(), Name = "Customer", Description = "Cliente con acceso a compras" }
                         };
                         tenantDb.Roles.AddRange(roles);
                         await tenantDb.SaveChangesAsync();
@@ -216,14 +215,16 @@ namespace Api_eCommerce.Endpoints
                     {
                         // Generar password aleatorio seguro
                         tempPassword = PasswordExtensions.GenerateRandomPassword();
-                        var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
+                        var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<User>();
                         var hash = hasher.HashPassword(null!, tempPassword);
 
-                        var adminUser = new TenantUser
+                        var adminUser = new User
                         {
                             Id = Guid.NewGuid(),
                             Email = finalAdminEmail,
                             PasswordHash = hash,
+                            FirstName = "Admin",
+                            LastName = "System",
                             IsActive = true,
                             MustChangePassword = true  // Forzar cambio en primer login
                         };
@@ -231,9 +232,9 @@ namespace Api_eCommerce.Endpoints
                         tenantDb.Users.Add(adminUser);
                         await tenantDb.SaveChangesAsync();
 
-                        // Asignar rol Admin
-                        var adminRole = await tenantDb.Roles.FirstAsync(r => r.Name == "Admin");
-                        tenantDb.UserRoles.Add(new TenantUserRole
+                        // Asignar rol SuperAdmin
+                        var adminRole = await tenantDb.Roles.FirstAsync(r => r.Name == "SuperAdmin");
+                        tenantDb.UserRoles.Add(new UserRole
                         {
                             UserId = adminUser.Id,
                             RoleId = adminRole.Id,

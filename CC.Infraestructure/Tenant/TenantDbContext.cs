@@ -14,26 +14,22 @@ namespace CC.Infraestructure.Tenant
   {
     public TenantDbContext(DbContextOptions<TenantDbContext> options) : base(options) { }
 
-    #region User Authentication (New)
-    public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
+    #region User Authentication & Authorization
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
+    public DbSet<Module> Modules => Set<Module>();
+    public DbSet<RoleModulePermission> RoleModulePermissions => Set<RoleModulePermission>();
     #endregion
 
-    #region Favorites (New)
+    #region Favorites
     public DbSet<FavoriteProduct> FavoriteProducts => Set<FavoriteProduct>();
     #endregion
 
-    #region Loyalty Program (New)
+    #region Loyalty Program
     public DbSet<LoyaltyAccount> LoyaltyAccounts => Set<LoyaltyAccount>();
     public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
-    #endregion
-
-    #region Authentication & Authorization
-    public DbSet<TenantUser> Users => Set<TenantUser>();
-    public DbSet<TenantRole> Roles => Set<TenantRole>();
-    public DbSet<TenantUserRole> UserRoles => Set<TenantUserRole>();
-    public DbSet<Module> Modules => Set<Module>();
-    public DbSet<RoleModulePermission> RoleModulePermissions => Set<RoleModulePermission>();
     #endregion
 
     #region Settings & Configuration
@@ -67,22 +63,46 @@ namespace CC.Infraestructure.Tenant
       // Schema por defecto
       modelBuilder.HasDefaultSchema("public");
 
-      #region User Authentication (New)
-      modelBuilder.Entity<UserAccount>(entity =>
+      #region User Authentication & Authorization
+      modelBuilder.Entity<User>(entity =>
       {
-        entity.ToTable("UserAccounts");
+        entity.ToTable("Users");
         entity.HasKey(e => e.Id);
         entity.HasIndex(e => e.Email).IsUnique();
         entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
         entity.Property(e => e.PasswordHash).IsRequired().HasMaxLength(500);
-        entity.Property(e => e.PasswordSalt).IsRequired().HasMaxLength(500);
+        entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
+        entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
+        entity.Property(e => e.PhoneNumber).HasMaxLength(20);
         entity.Property(e => e.IsActive).IsRequired();
+        entity.Property(e => e.MustChangePassword).IsRequired();
         entity.Property(e => e.CreatedAt).IsRequired();
+      });
 
-        // Relaci�n 1:1 con UserProfile
-        entity.HasOne(u => u.Profile)
-                  .WithOne(p => p.UserAccount)
-                  .HasForeignKey<UserProfile>(p => p.Id)
+      modelBuilder.Entity<Role>(entity =>
+      {
+        entity.ToTable("Roles");
+        entity.HasKey(e => e.Id);
+        entity.HasIndex(e => e.Name).IsUnique();
+        entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
+        entity.Property(e => e.Description).HasMaxLength(255);
+        entity.Property(e => e.CreatedAt).IsRequired();
+      });
+
+      modelBuilder.Entity<UserRole>(entity =>
+      {
+        entity.ToTable("UserRoles");
+        entity.HasKey(e => new { e.UserId, e.RoleId });
+        entity.Property(e => e.AssignedAt).IsRequired();
+
+        entity.HasOne(ur => ur.User)
+                  .WithMany(u => u.UserRoles)
+                  .HasForeignKey(ur => ur.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(ur => ur.Role)
+                  .WithMany(r => r.UserRoles)
+                  .HasForeignKey(ur => ur.RoleId)
                   .OnDelete(DeleteBehavior.Cascade);
       });
 
@@ -169,42 +189,7 @@ namespace CC.Infraestructure.Tenant
       });
       #endregion
 
-      #region Authentication & Authorization
-      modelBuilder.Entity<TenantUser>(entity =>
-      {
-        entity.ToTable("TenantUsers");
-        entity.HasKey(e => e.Id);
-        entity.HasIndex(e => e.Email).IsUnique();
-        entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-        entity.Property(e => e.PasswordHash).IsRequired();
-      });
-
-      modelBuilder.Entity<TenantRole>(entity =>
-      {
-        entity.ToTable("TenantRoles");
-        entity.HasKey(e => e.Id);
-        entity.HasIndex(e => e.Name).IsUnique();
-        entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-        entity.Property(e => e.CreatedAt).IsRequired();
-      });
-
-      modelBuilder.Entity<TenantUserRole>(entity =>
-      {
-        entity.ToTable("TenantUserRoles");
-        entity.HasKey(e => new { e.UserId, e.RoleId });
-        entity.Property(e => e.AssignedAt).IsRequired();
-
-        entity.HasOne(ur => ur.User)
-                  .WithMany(u => u.UserRoles)
-                  .HasForeignKey(ur => ur.UserId)
-                  .OnDelete(DeleteBehavior.Cascade);
-
-        entity.HasOne(ur => ur.Role)
-                  .WithMany(r => r.UserRoles)
-                  .HasForeignKey(ur => ur.RoleId)
-                  .OnDelete(DeleteBehavior.Cascade);
-      });
-
+      #region Modules & Permissions
       modelBuilder.Entity<Module>(entity =>
       {
         entity.ToTable("Modules");

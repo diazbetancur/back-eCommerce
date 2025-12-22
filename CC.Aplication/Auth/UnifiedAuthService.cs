@@ -5,15 +5,14 @@ using CC.Infraestructure.Tenant.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace CC.Aplication.Auth
 {
     /// <summary>
-    /// Servicio unificado de autenticaci�n para el tenant
-    /// Soporta tanto usuarios compradores (UserAccount) como staff/admin (TenantUser)
+    /// Servicio de autenticación unificado
+    /// Todos los usuarios (admins, staff, clientes) usan la misma tabla Users con roles diferentes
     /// </summary>
     public interface IUnifiedAuthService
     {
@@ -43,7 +42,8 @@ namespace CC.Aplication.Auth
         }
 
         /// <summary>
-        /// Login unificado: detecta automáticamente si es TenantUser (admin/staff) o UserAccount (comprador)
+        /// Login unificado: todos los usuarios usan la misma tabla Users
+        /// La diferenciación es por roles (SuperAdmin, Customer, etc.)
         /// </summary>
         public async Task<UnifiedAuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
         {
@@ -58,51 +58,23 @@ namespace CC.Aplication.Auth
 
             await using var db = _dbFactory.Create();
 
-            // 1️⃣ Primero buscar en TenantUser (admin/staff con roles)
-            var tenantUser = await db.Users
+            // Buscar usuario en tabla Users
+            var user = await db.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
                         .ThenInclude(r => r.ModulePermissions)
                             .ThenInclude(mp => mp.Module)
                 .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower(), ct);
 
-            if (tenantUser != null)
+            if (user == null)
             {
-                _logger.LogInformation("✅ Found TenantUser: {Email}, IsActive: {IsActive}, MustChangePassword: {MustChange}",
-                    tenantUser.Email, tenantUser.IsActive, tenantUser.MustChangePassword);
-                // Es un TenantUser (admin/staff)
-                return await LoginTenantUserAsync(tenantUser, request.Password, db, ct);
+                _logger.LogError("🔴 User {Email} not found", request.Email);
+                throw new UnauthorizedAccessException("Invalid email or password");
             }
 
-            _logger.LogWarning("⚠️  User {Email} not found in TenantUser table, checking UserAccount...", request.Email);
+            _logger.LogInformation("✅ Found user: {Email}, IsActive: {IsActive}, MustChangePassword: {MustChange}",
+                user.Email, user.IsActive, user.MustChangePassword);
 
-            // 2️⃣ Si no existe, buscar en UserAccount (comprador)
-            var userAccount = await db.UserAccounts
-                .Include(u => u.Profile)
-                .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower(), ct);
-
-            if (userAccount != null)
-            {
-                _logger.LogInformation("✅ Found UserAccount: {Email}, IsActive: {IsActive}",
-                    userAccount.Email, userAccount.IsActive);
-                // Es un UserAccount (comprador)
-                return await LoginUserAccountAsync(userAccount, request.Password, ct);
-            }
-
-            // 3️⃣ No existe en ninguna tabla
-            _logger.LogError("🔴 User {Email} not found in any table (TenantUser or UserAccount)", request.Email);
-            throw new UnauthorizedAccessException("Invalid email or password");
-        }
-
-        /// <summary>
-        /// Login para TenantUser (admin/staff con roles y permisos)
-        /// </summary>
-        private async Task<UnifiedAuthResponse> LoginTenantUserAsync(
-            TenantUser user,
-            string password,
-            TenantDbContext db,
-            CancellationToken ct)
-        {
             if (!user.IsActive)
             {
                 _logger.LogWarning("🔴 Login failed: User {Email} is not active", user.Email);
@@ -110,8 +82,8 @@ namespace CC.Aplication.Auth
             }
 
             // Verificar password (Identity hasher)
-            var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
-            var result = hasher.VerifyHashedPassword(null!, user.PasswordHash, password);
+            var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<User>();
+            var result = hasher.VerifyHashedPassword(null!, user.PasswordHash, request.Password);
 
             _logger.LogInformation("🔑 Password verification result for {Email}: {Result}", user.Email, result);
 
@@ -151,10 +123,10 @@ namespace CC.Aplication.Auth
             _logger.LogInformation("🎫 Found {ModuleCount} modules: {Modules}", modules.Count, string.Join(", ", modules));
 
             _logger.LogInformation("🔑 Generating JWT token...");
-            var token = GenerateJwtTokenForTenantUser(user.Id, user.Email, roles, modules);
+            var token = GenerateJwtToken(user.Id, user.Email, roles, modules);
             var expiresAt = DateTime.UtcNow.AddHours(24);
 
-            _logger.LogInformation("✅ Login successful for TenantUser {Email} with {RoleCount} roles", user.Email, roles.Count);
+            _logger.LogInformation("✅ Login successful for user {Email} with {RoleCount} roles", user.Email, roles.Count);
 
             return new UnifiedAuthResponse(
                 token,
@@ -163,56 +135,20 @@ namespace CC.Aplication.Auth
                 {
                     UserId = user.Id,
                     Email = user.Email,
-                    UserType = "tenant_user",  // ? Indica que es admin/staff
+                    FirstName = user.FirstName,
+                    LastName = user.LastName,
+                    PhoneNumber = user.PhoneNumber,
                     Roles = roles,
                     Permissions = permissions,
-                    IsActive = user.IsActive
+                    IsActive = user.IsActive,
+                    MustChangePassword = user.MustChangePassword
                 }
             );
         }
 
         /// <summary>
-        /// Login para UserAccount (comprador sin roles)
-        /// </summary>
-        private async Task<UnifiedAuthResponse> LoginUserAccountAsync(
-            UserAccount user,
-            string password,
-            CancellationToken ct)
-        {
-            if (!user.IsActive)
-            {
-                throw new UnauthorizedAccessException("Account is disabled");
-            }
-
-            // Verificar password (PBKDF2 custom)
-            if (!VerifyPassword(password, user.PasswordHash, user.PasswordSalt))
-            {
-                throw new UnauthorizedAccessException("Invalid email or password");
-            }
-
-            // Generar JWT sin roles (comprador)
-            var token = GenerateJwtTokenForUserAccount(user.Id, user.Email);
-            var expiresAt = DateTime.UtcNow.AddHours(24);
-
-            return new UnifiedAuthResponse(
-                token,
-                expiresAt,
-                new UnifiedUserDto
-                {
-                    UserId = user.Id,
-                    Email = user.Email,
-                    UserType = "customer",  // ? Indica que es comprador
-                    FirstName = user.Profile?.FirstName,
-                    LastName = user.Profile?.LastName,
-                    Roles = new List<string>(),
-                    Permissions = new List<ModulePermissionDto>(),
-                    IsActive = user.IsActive
-                }
-            );
-        }
-
-        /// <summary>
-        /// Registro de comprador (UserAccount)
+        /// Registro de nuevo usuario (cliente)
+        /// Automáticamente se le asigna el rol "Customer"
         /// </summary>
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
         {
@@ -223,33 +159,55 @@ namespace CC.Aplication.Auth
 
             await using var db = _dbFactory.Create();
 
-            // Verificar si ya existe (en ambas tablas)
-            var existsInTenantUser = await db.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower(), ct);
-            var existsInUserAccount = await db.UserAccounts.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower(), ct);
+            // Verificar si ya existe
+            var exists = await db.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower(), ct);
 
-            if (existsInTenantUser || existsInUserAccount)
+            if (exists)
             {
                 throw new InvalidOperationException("Email already registered");
             }
 
-            // Crear cuenta de comprador (UserAccount)
-            var (hash, salt) = HashPassword(request.Password);
+            // Buscar rol Customer
+            var customerRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "Customer", ct);
+            if (customerRole == null)
+            {
+                throw new InvalidOperationException("Customer role not found. Please contact support.");
+            }
 
-            var userAccount = new UserAccount
+            // Hash de contraseña usando Identity PasswordHasher
+            var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<User>();
+            var passwordHash = hasher.HashPassword(null!, request.Password);
+
+            // Crear usuario
+            var user = new User
             {
                 Id = Guid.NewGuid(),
                 Email = request.Email.ToLower().Trim(),
-                PasswordHash = hash,
-                PasswordSalt = salt,
+                PasswordHash = passwordHash,
+                FirstName = request.FirstName,
+                LastName = request.LastName,
+                PhoneNumber = request.PhoneNumber,
                 IsActive = true,
+                MustChangePassword = false,
                 CreatedAt = DateTime.UtcNow
             };
 
-            db.UserAccounts.Add(userAccount);
+            db.Users.Add(user);
 
+            // Asignar rol Customer
+            var userRole = new UserRole
+            {
+                UserId = user.Id,
+                RoleId = customerRole.Id,
+                AssignedAt = DateTime.UtcNow
+            };
+
+            db.UserRoles.Add(userRole);
+
+            // Crear perfil extendido (opcional, para datos adicionales)
             var userProfile = new UserProfile
             {
-                Id = userAccount.Id,
+                Id = user.Id,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 PhoneNumber = request.PhoneNumber
@@ -258,20 +216,21 @@ namespace CC.Aplication.Auth
             db.UserProfiles.Add(userProfile);
             await db.SaveChangesAsync(ct);
 
-            var token = GenerateJwtTokenForUserAccount(userAccount.Id, userAccount.Email);
+            // Generar JWT
+            var token = GenerateJwtToken(user.Id, user.Email, new List<string> { "Customer" }, new List<string>());
             var expiresAt = DateTime.UtcNow.AddHours(24);
 
             return new AuthResponse(
                 token,
                 expiresAt,
                 new UserDto(
-                    userAccount.Id,
-                    userAccount.Email,
-                    userProfile.FirstName,
-                    userProfile.LastName,
-                    userProfile.PhoneNumber,
-                    userAccount.CreatedAt,
-                    userAccount.IsActive
+                    user.Id,
+                    user.Email,
+                    user.FirstName,
+                    user.LastName,
+                    user.PhoneNumber,
+                    user.CreatedAt,
+                    user.IsActive
                 )
             );
         }
@@ -285,32 +244,35 @@ namespace CC.Aplication.Auth
 
             await using var db = _dbFactory.Create();
 
-            var userAccount = await db.UserAccounts
-                .Include(u => u.Profile)
+            // Buscar usuario en tabla Users
+            var user = await db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
-            if (userAccount == null)
+            if (user == null)
             {
                 throw new InvalidOperationException("User not found");
             }
 
-            var profile = userAccount.Profile;
+            // Buscar perfil extendido (opcional, para datos adicionales como DocumentType, Address, etc.)
+            var profile = await db.UserProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == userId, ct);
 
             return new UserProfileDto(
-                userAccount.Id,
-                userAccount.Email,
-                profile?.FirstName ?? "",
-                profile?.LastName ?? "",
-                profile?.PhoneNumber,
+                user.Id,
+                user.Email,
+                user.FirstName,
+                user.LastName,
+                user.PhoneNumber,
                 profile?.DocumentType,
                 profile?.DocumentNumber,
                 profile?.BirthDate,
                 profile?.Address,
                 profile?.City,
                 profile?.Country,
-                userAccount.CreatedAt,
-                userAccount.IsActive
+                user.CreatedAt,
+                user.IsActive
             );
         }
 
@@ -329,7 +291,7 @@ namespace CC.Aplication.Auth
             return modules;
         }
 
-        private string GenerateJwtTokenForTenantUser(Guid userId, string email, List<string> roles, List<string> modules)
+        private string GenerateJwtToken(Guid userId, string email, List<string> roles, List<string> modules)
         {
             try
             {
@@ -348,7 +310,6 @@ namespace CC.Aplication.Auth
                 {
                     { "sub", userId.ToString() },
                     { "email", email },
-                    { "user_type", "tenant_user" },  // ? Identificador de tipo
                     { "jti", Guid.NewGuid().ToString() },
                     { "tenant_id", _tenantAccessor.TenantInfo!.Id.ToString() },
                     { "tenant_slug", _tenantAccessor.TenantInfo.Slug },
@@ -369,25 +330,6 @@ namespace CC.Aplication.Auth
                 _logger.LogError(ex, "🔴 Error generating JWT token for {Email}", email);
                 throw;
             }
-        }
-
-        private string GenerateJwtTokenForUserAccount(Guid userId, string email)
-        {
-            var jwtKey = _configuration["jwtKey"] ?? throw new InvalidOperationException("JWT key not configured");
-
-            var payload = new Dictionary<string, object>
-            {
-                { "sub", userId.ToString() },
-                { "email", email },
-                { "user_type", "customer" },  // ? Identificador de tipo
-                { "jti", Guid.NewGuid().ToString() },
-                { "tenant_id", _tenantAccessor.TenantInfo!.Id.ToString() },
-                { "tenant_slug", _tenantAccessor.TenantInfo.Slug },
-                { "exp", new DateTimeOffset(DateTime.UtcNow.AddHours(24)).ToUnixTimeSeconds() },
-                { "iat", new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds() }
-            };
-
-            return CreateJwtToken(payload, jwtKey);
         }
 
         private string CreateJwtToken(Dictionary<string, object> payload, string key)
@@ -426,35 +368,8 @@ namespace CC.Aplication.Auth
                 .Replace('/', '_');
         }
 
-        private (string hash, string salt) HashPassword(string password)
-        {
-            byte[] saltBytes = new byte[128 / 8];
-            using (var rng = RandomNumberGenerator.Create())
-            {
-                rng.GetBytes(saltBytes);
-            }
-
-            using var pbkdf2 = new Rfc2898DeriveBytes(password, saltBytes, 100000, HashAlgorithmName.SHA256);
-            var hashBytes = pbkdf2.GetBytes(256 / 8);
-
-            return (
-                Convert.ToBase64String(hashBytes),
-                Convert.ToBase64String(saltBytes)
-            );
-        }
-
-        private bool VerifyPassword(string password, string storedHash, string storedSalt)
-        {
-            byte[] saltBytes = Convert.FromBase64String(storedSalt);
-            using var pbkdf2 = new Rfc2898DeriveBytes(password, saltBytes, 100000, HashAlgorithmName.SHA256);
-            var hashBytes = pbkdf2.GetBytes(256 / 8);
-
-            string hash = Convert.ToBase64String(hashBytes);
-            return hash == storedHash;
-        }
-
         /// <summary>
-        /// Cambio de contraseña para TenantUser (admin/staff)
+        /// Cambio de contraseña
         /// Resetea MustChangePassword a false después del cambio exitoso
         /// </summary>
         public async Task<ChangePasswordResponse> ChangePasswordAsync(ChangePasswordRequest request, Guid userId, CancellationToken ct = default)
@@ -466,7 +381,7 @@ namespace CC.Aplication.Auth
 
             await using var db = _dbFactory.Create();
 
-            // Buscar el usuario (TenantUser)
+            // Buscar el usuario
             var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
 
             if (user == null)
@@ -475,7 +390,7 @@ namespace CC.Aplication.Auth
             }
 
             // Verificar contraseña actual
-            var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
+            var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<User>();
             var result = hasher.VerifyHashedPassword(null!, user.PasswordHash, request.CurrentPassword);
 
             if (result == Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
@@ -511,9 +426,9 @@ namespace CC.Aplication.Auth
     {
         public Guid UserId { get; set; }
         public string Email { get; set; } = string.Empty;
-        public string UserType { get; set; } = string.Empty;  // "customer" o "tenant_user"
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
+        public string? PhoneNumber { get; set; }
         public List<string> Roles { get; set; } = new();
         public List<ModulePermissionDto> Permissions { get; set; } = new();
         public bool IsActive { get; set; }

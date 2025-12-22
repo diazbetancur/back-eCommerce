@@ -587,11 +587,13 @@ namespace Api_eCommerce.Endpoints
                 var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<object>();
                 var hash = hasher.HashPassword(null!, request.Password);
 
-                var user = new TenantUser
+                var user = new User
                 {
                     Id = Guid.NewGuid(),
                     Email = request.Email,
                     PasswordHash = hash,
+                    FirstName = "Staff",
+                    LastName = "User",
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -662,7 +664,7 @@ namespace Api_eCommerce.Endpoints
                 // Verificar si ya tiene el rol
                 if (!user.UserRoles.Any(ur => ur.RoleId == role.Id))
                 {
-                    db.UserRoles.Add(new TenantUserRole
+                    db.UserRoles.Add(new UserRole
                     {
                         UserId = user.Id,
                         RoleId = role.Id,

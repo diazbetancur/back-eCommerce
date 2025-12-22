@@ -31,7 +31,9 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
                 "https://pwaecommercee.netlify.app",   // Producci�n
-                "http://localhost:4200"                 // Desarrollo local
+                "http://localhost:4200",                // Desarrollo local - Angular
+                "http://localhost:3000",                // Desarrollo local - React/Next
+                "http://localhost:5173"                 // Desarrollo local - Vite
             )
             .AllowAnyMethod()
             .AllowAnyHeader()
@@ -77,6 +79,7 @@ builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IFeatureService, FeatureService>();
 builder.Services.AddScoped<CC.Aplication.Catalog.ICategoryManagementService, CC.Aplication.Catalog.CategoryManagementService>();
+builder.Services.AddScoped<CC.Aplication.Catalog.IProductService, CC.Aplication.Catalog.ProductService>();
 
 // Auth services
 // ? DEPRECATED - Ahora usamos UnifiedAuthService
@@ -217,9 +220,10 @@ var tenantGroup = app.MapGroup("").RequireTenantResolution();
 tenantGroup.MapGroup("").MapFeatureFlagsEndpoints();
 tenantGroup.MapGroup("").MapTenantAuth();
 tenantGroup.MapGroup("").MapPermissionsEndpoints();
-tenantGroup.MapGroup("").MapTenantAdminEndpoints();
+tenantGroup.MapGroup("").MapTenantAdminEndpoints(); // Ya incluye /admin/products
 tenantGroup.MapGroup("").MapCatalogEndpoints();
 tenantGroup.MapGroup("").MapCategoryEndpoints();
+// tenantGroup.MapGroup("").MapProductEndpoints();  // ❌ REMOVIDO: Duplicado con TenantAdminEndpoints
 tenantGroup.MapGroup("").MapCartEndpoints();
 tenantGroup.MapGroup("").MapCheckoutEndpoints();
 tenantGroup.MapGroup("").MapOrdersEndpoints();

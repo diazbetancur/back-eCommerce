@@ -24,12 +24,11 @@ namespace CC.Infraestructure.Tenant
     private bool _disposed;
 
     #region Lazy-loaded Repositories
-    private ITenantRepository<TenantUser>? _users;
-    private ITenantRepository<TenantRole>? _roles;
-    private ITenantRepository<TenantUserRole>? _userRoles;
+    private ITenantRepository<User>? _users;
+    private ITenantRepository<Role>? _roles;
+    private ITenantRepository<UserRole>? _userRoles;
     private ITenantRepository<Module>? _modules;
     private ITenantRepository<RoleModulePermission>? _roleModulePermissions;
-    private ITenantRepository<UserAccount>? _userAccounts;
     private ITenantRepository<UserProfile>? _userProfiles;
     private ITenantRepository<Product>? _products;
     private ITenantRepository<Category>? _categories;
@@ -54,14 +53,14 @@ namespace CC.Infraestructure.Tenant
     }
 
     #region Authentication & Authorization
-    public ITenantRepository<TenantUser> Users =>
-        _users ??= new TenantRepository<TenantUser>(_context);
+    public ITenantRepository<User> Users =>
+        _users ??= new TenantRepository<User>(_context);
 
-    public ITenantRepository<TenantRole> Roles =>
-        _roles ??= new TenantRepository<TenantRole>(_context);
+    public ITenantRepository<Role> Roles =>
+        _roles ??= new TenantRepository<Role>(_context);
 
-    public ITenantRepository<TenantUserRole> UserRoles =>
-        _userRoles ??= new TenantRepository<TenantUserRole>(_context);
+    public ITenantRepository<UserRole> UserRoles =>
+        _userRoles ??= new TenantRepository<UserRole>(_context);
 
     public ITenantRepository<Module> Modules =>
         _modules ??= new TenantRepository<Module>(_context);
@@ -70,10 +69,7 @@ namespace CC.Infraestructure.Tenant
         _roleModulePermissions ??= new TenantRepository<RoleModulePermission>(_context);
     #endregion
 
-    #region User Accounts (Consumer)
-    public ITenantRepository<UserAccount> UserAccounts =>
-        _userAccounts ??= new TenantRepository<UserAccount>(_context);
-
+    #region User Profiles (Extended Data)
     public ITenantRepository<UserProfile> UserProfiles =>
         _userProfiles ??= new TenantRepository<UserProfile>(_context);
     #endregion

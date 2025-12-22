@@ -13,36 +13,40 @@ namespace CC.Infraestructure.Tenant
     public static class TenantDbSeeder
     {
         /// <summary>
-        /// Seed de datos iniciales de un tenant (roles, categor�as, admin user)
-        /// Este m�todo es IDEMPOTENTE - puede ejecutarse m�ltiples veces sin duplicar datos
+        /// Seed de datos iniciales de un tenant (roles, admin user)
+        /// Este método es IDEMPOTENTE - puede ejecutarse múltiples veces sin duplicar datos
         /// </summary>
         public static async Task SeedAsync(
-            TenantDbContext tenantDb, 
+            TenantDbContext tenantDb,
             string tenantSlug,
             ILogger? logger = null)
         {
-            logger?.LogInformation("?? Starting TenantDb seed for tenant: {TenantSlug}", tenantSlug);
+            logger?.LogInformation("🌱 Starting TenantDb seed for tenant: {TenantSlug}", tenantSlug);
 
             // ==================== 1. SEED ROLES ====================
             await SeedRolesAsync(tenantDb, logger);
 
-            // ==================== 2. SEED ADMIN USER ====================
+            // ==================== 2. SEED MODULES ====================
+            await SeedModulesAsync(tenantDb, logger);
+
+            // ==================== 3. SEED ROLE PERMISSIONS ====================
+            await SeedRolePermissionsAsync(tenantDb, logger);
+
+            // ==================== 4. SEED ADMIN USER ====================
             await SeedTenantAdminAsync(tenantDb, tenantSlug, logger);
 
-            // ==================== 3. SEED DEMO CATEGORIES (Opcional) ====================
-            // await SeedDemoCategoriesAsync(tenantDb, logger);
-
-            logger?.LogInformation("? TenantDb seed completed for tenant: {TenantSlug}", tenantSlug);
+            logger?.LogInformation("✅ TenantDb seed completed for tenant: {TenantSlug}", tenantSlug);
         }
 
         /// <summary>
-        /// Seed de roles del tenant (Admin, Manager, Customer)
+        /// Seed de roles del tenant (SuperAdmin, Customer)
+        /// El tenant puede crear roles adicionales después
         /// </summary>
         private static async Task SeedRolesAsync(TenantDbContext tenantDb, ILogger? logger)
         {
             if (await tenantDb.Roles.AnyAsync())
             {
-                logger?.LogInformation("??  Tenant roles already exist, skipping seed");
+                logger?.LogInformation("⚠️  Tenant roles already exist, skipping seed");
                 return;
             }
 
@@ -50,35 +54,36 @@ namespace CC.Infraestructure.Tenant
 
             var roles = new[]
             {
-                new TenantRole
+                new Role
                 {
                     Id = Guid.NewGuid(),
-                    Name = "Admin"
+                    Name = "SuperAdmin",
+                    Description = "Administrador con acceso total al sistema",
+                    CreatedAt = DateTime.UtcNow
                 },
-                new TenantRole
+                new Role
                 {
                     Id = Guid.NewGuid(),
-                    Name = "Manager"
-                },
-                new TenantRole
-                {
-                    Id = Guid.NewGuid(),
-                    Name = "Customer"
+                    Name = "Customer",
+                    Description = "Cliente con acceso a compras y perfil",
+                    CreatedAt = DateTime.UtcNow
                 }
             };
 
             tenantDb.Roles.AddRange(roles);
             await tenantDb.SaveChangesAsync();
 
-            logger?.LogInformation("? Created {Count} tenant roles", roles.Length);
+            logger?.LogInformation("✅ Created {Count} tenant roles: {Roles}",
+                roles.Length, string.Join(", ", roles.Select(r => r.Name)));
         }
 
         /// <summary>
         /// Seed del usuario administrador del tenant
         /// Credenciales: admin@{tenantSlug} / TenantAdmin123!
+        /// Datos: FirstName="Admin", LastName="System"
         /// </summary>
         private static async Task SeedTenantAdminAsync(
-            TenantDbContext tenantDb, 
+            TenantDbContext tenantDb,
             string tenantSlug,
             ILogger? logger)
         {
@@ -87,115 +92,255 @@ namespace CC.Infraestructure.Tenant
             // Verificar si ya existe un admin para este tenant
             if (await tenantDb.Users.AnyAsync(u => u.Email == adminEmail))
             {
-                logger?.LogInformation("??  Tenant admin user already exists, skipping seed");
+                logger?.LogInformation("⚠️  Tenant admin user already exists, skipping seed");
                 return;
             }
 
             logger?.LogInformation("Creating tenant admin user...");
 
-            // Obtener rol Admin
+            // Obtener rol SuperAdmin
             var adminRole = await tenantDb.Roles
-                .FirstOrDefaultAsync(r => r.Name == "Admin");
+                .FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
 
             if (adminRole == null)
             {
-                logger?.LogError("? Admin role not found! Run SeedRolesAsync first");
-                throw new InvalidOperationException("Admin role not found. Roles must be seeded before users.");
+                logger?.LogError("❌ SuperAdmin role not found! Run SeedRolesAsync first");
+                throw new InvalidOperationException("SuperAdmin role not found. Roles must be seeded before users.");
             }
 
-            // Generar contrase�a �nica por tenant
+            // Generar contraseña única por tenant
             var password = $"TenantAdmin123!";
-            
-            // Hash de contrase�a usando Identity PasswordHasher
-            var hasher = new PasswordHasher<TenantUser>();
+
+            // Hash de contraseña usando Identity PasswordHasher
+            var hasher = new PasswordHasher<User>();
             var passwordHash = hasher.HashPassword(null!, password);
 
             // Crear usuario admin del tenant
-            var tenantAdmin = new TenantUser
+            var tenantAdmin = new User
             {
                 Id = Guid.NewGuid(),
                 Email = adminEmail,
                 PasswordHash = passwordHash,
+                FirstName = "Admin",
+                LastName = "System",
+                PhoneNumber = null,
                 IsActive = true,
+                MustChangePassword = false,
                 CreatedAt = DateTime.UtcNow
             };
 
             tenantDb.Users.Add(tenantAdmin);
             await tenantDb.SaveChangesAsync();
 
-            logger?.LogInformation("? Created tenant admin user: {Email}", adminEmail);
+            logger?.LogInformation("✅ Created tenant admin user: {Email}", adminEmail);
 
-            // Asignar rol Admin
-            var userRole = new TenantUserRole
+            // Asignar rol SuperAdmin
+            var userRole = new UserRole
             {
                 UserId = tenantAdmin.Id,
-                RoleId = adminRole.Id
+                RoleId = adminRole.Id,
+                AssignedAt = DateTime.UtcNow
             };
 
             tenantDb.UserRoles.Add(userRole);
             await tenantDb.SaveChangesAsync();
 
-            logger?.LogInformation("? Assigned Admin role to tenant user");
-            logger?.LogWarning("??  TENANT ADMIN CREDENTIALS - Email: {Email} | Password: {Password}", adminEmail, password);
-            logger?.LogWarning("??  IMPORTANT: Tenant admin should change password after first login!");
+            logger?.LogInformation("✅ Assigned SuperAdmin role to tenant user");
+            logger?.LogWarning("🔑 TENANT ADMIN CREDENTIALS - Email: {Email} | Password: {Password}", adminEmail, password);
+            logger?.LogWarning("⚠️  IMPORTANT: Tenant admin should change password after first login!");
         }
 
         /// <summary>
-        /// Seed de categor�as de demostraci�n (opcional)
-        /// �til para development y testing
+        /// Seed de módulos del sistema
+        /// Define las áreas funcionales disponibles en el tenant
         /// </summary>
-        private static async Task SeedDemoCategoriesAsync(TenantDbContext tenantDb, ILogger? logger)
+        private static async Task SeedModulesAsync(TenantDbContext tenantDb, ILogger? logger)
         {
-            if (await tenantDb.Categories.AnyAsync())
+            if (await tenantDb.Modules.AnyAsync())
             {
-                logger?.LogInformation("??  Categories already exist, skipping seed");
+                logger?.LogInformation("⚠️  Modules already exist, skipping seed");
                 return;
             }
 
-            logger?.LogInformation("Creating demo categories...");
+            logger?.LogInformation("Creating system modules...");
 
-            var categories = new[]
+            var modules = new[]
             {
-                new Category
+                new Module
                 {
                     Id = Guid.NewGuid(),
-                    Name = "Electronics",
-                    Description = "Electronic devices and accessories"
+                    Code = "dashboard",
+                    Name = "Dashboard",
+                    Description = "Panel de control y estadísticas generales",
+                    IconName = "chart-line",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
                 },
-                new Category
+                new Module
                 {
                     Id = Guid.NewGuid(),
-                    Name = "Clothing",
-                    Description = "Apparel and fashion items"
+                    Code = "catalog",
+                    Name = "Catálogo",
+                    Description = "Gestión de productos y categorías",
+                    IconName = "box",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
                 },
-                new Category
+                new Module
                 {
                     Id = Guid.NewGuid(),
-                    Name = "Home & Garden",
-                    Description = "Home decor and garden supplies"
+                    Code = "orders",
+                    Name = "Pedidos",
+                    Description = "Gestión de órdenes y ventas",
+                    IconName = "shopping-cart",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Module
+                {
+                    Id = Guid.NewGuid(),
+                    Code = "customers",
+                    Name = "Clientes",
+                    Description = "Gestión de clientes y perfiles",
+                    IconName = "users",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Module
+                {
+                    Id = Guid.NewGuid(),
+                    Code = "loyalty",
+                    Name = "Programa de Lealtad",
+                    Description = "Gestión de puntos y recompensas",
+                    IconName = "star",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Module
+                {
+                    Id = Guid.NewGuid(),
+                    Code = "settings",
+                    Name = "Configuración",
+                    Description = "Configuración del tenant",
+                    IconName = "cog",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Module
+                {
+                    Id = Guid.NewGuid(),
+                    Code = "permissions",
+                    Name = "Permisos",
+                    Description = "Gestión de roles y permisos",
+                    IconName = "shield",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
                 }
             };
 
-            tenantDb.Categories.AddRange(categories);
+            tenantDb.Modules.AddRange(modules);
             await tenantDb.SaveChangesAsync();
 
-            logger?.LogInformation("? Created {Count} demo categories", categories.Length);
+            logger?.LogInformation("✅ Created {Count} modules: {Modules}",
+                modules.Length, string.Join(", ", modules.Select(m => m.Code)));
         }
 
         /// <summary>
-        /// Crea un usuario adicional para el tenant (�til para crear staff, managers, etc.)
+        /// Seed de permisos por rol sobre los módulos
+        /// SuperAdmin: acceso total a todos los módulos
+        /// Customer: solo acceso de lectura a catálogo y órdenes
+        /// </summary>
+        private static async Task SeedRolePermissionsAsync(TenantDbContext tenantDb, ILogger? logger)
+        {
+            if (await tenantDb.RoleModulePermissions.AnyAsync())
+            {
+                logger?.LogInformation("⚠️  Role permissions already exist, skipping seed");
+                return;
+            }
+
+            logger?.LogInformation("Creating role permissions...");
+
+            var superAdminRole = await tenantDb.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
+            var customerRole = await tenantDb.Roles.FirstOrDefaultAsync(r => r.Name == "Customer");
+            var modules = await tenantDb.Modules.ToListAsync();
+
+            if (superAdminRole == null || customerRole == null)
+            {
+                logger?.LogError("❌ Required roles not found");
+                throw new InvalidOperationException("Roles must be seeded before permissions");
+            }
+
+            if (!modules.Any())
+            {
+                logger?.LogError("❌ No modules found");
+                throw new InvalidOperationException("Modules must be seeded before permissions");
+            }
+
+            var permissions = new List<RoleModulePermission>();
+
+            // SuperAdmin: acceso completo a todos los módulos
+            foreach (var module in modules)
+            {
+                permissions.Add(new RoleModulePermission
+                {
+                    Id = Guid.NewGuid(),
+                    RoleId = superAdminRole.Id,
+                    ModuleId = module.Id,
+                    CanView = true,
+                    CanCreate = true,
+                    CanUpdate = true,
+                    CanDelete = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            // Customer: acceso limitado
+            var customerModules = modules.Where(m =>
+                m.Code == "catalog" ||
+                m.Code == "orders" ||
+                m.Code == "loyalty").ToList();
+
+            foreach (var module in customerModules)
+            {
+                var canCreate = module.Code == "orders"; // Solo puede crear órdenes
+
+                permissions.Add(new RoleModulePermission
+                {
+                    Id = Guid.NewGuid(),
+                    RoleId = customerRole.Id,
+                    ModuleId = module.Id,
+                    CanView = true,
+                    CanCreate = canCreate,
+                    CanUpdate = false,
+                    CanDelete = false,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            tenantDb.RoleModulePermissions.AddRange(permissions);
+            await tenantDb.SaveChangesAsync();
+
+            logger?.LogInformation("✅ Created {Count} role permissions", permissions.Count);
+            logger?.LogInformation("   - SuperAdmin: Full access to {ModuleCount} modules", modules.Count);
+            logger?.LogInformation("   - Customer: Limited access to {ModuleCount} modules", customerModules.Count);
+        }
+
+        /// <summary>
+        /// Crea un usuario adicional para el tenant (útil para crear staff, customers, etc.)
         /// </summary>
         public static async Task CreateTenantUserAsync(
             TenantDbContext tenantDb,
             string email,
             string password,
             string roleName,
+            string firstName,
+            string lastName,
             ILogger? logger = null)
         {
             // Verificar si el usuario ya existe
             if (await tenantDb.Users.AnyAsync(u => u.Email == email))
             {
-                logger?.LogWarning("??  User {Email} already exists in tenant", email);
+                logger?.LogWarning("⚠️  User {Email} already exists in tenant", email);
                 return;
             }
 
@@ -203,20 +348,23 @@ namespace CC.Infraestructure.Tenant
             var role = await tenantDb.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
             if (role == null)
             {
-                logger?.LogError("? Role {RoleName} not found in tenant", roleName);
+                logger?.LogError("❌ Role {RoleName} not found in tenant", roleName);
                 throw new InvalidOperationException($"Role '{roleName}' not found");
             }
 
             // Crear usuario
-            var hasher = new PasswordHasher<TenantUser>();
+            var hasher = new PasswordHasher<User>();
             var passwordHash = hasher.HashPassword(null!, password);
 
-            var user = new TenantUser
+            var user = new User
             {
                 Id = Guid.NewGuid(),
                 Email = email,
                 PasswordHash = passwordHash,
+                FirstName = firstName,
+                LastName = lastName,
                 IsActive = true,
+                MustChangePassword = false,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -224,16 +372,17 @@ namespace CC.Infraestructure.Tenant
             await tenantDb.SaveChangesAsync();
 
             // Asignar rol
-            var userRole = new TenantUserRole
+            var userRole = new UserRole
             {
                 UserId = user.Id,
-                RoleId = role.Id
+                RoleId = role.Id,
+                AssignedAt = DateTime.UtcNow
             };
 
             tenantDb.UserRoles.Add(userRole);
             await tenantDb.SaveChangesAsync();
 
-            logger?.LogInformation("? Created tenant user: {Email} with role {Role}", email, roleName);
+            logger?.LogInformation("✅ Created tenant user: {Email} with role {Role}", email, roleName);
         }
     }
 }

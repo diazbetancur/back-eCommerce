@@ -188,32 +188,41 @@ namespace Api_eCommerce.Auth
 
         private static async Task<IResult> GetProfile(
             HttpContext context,
-            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService,
-            ITenantResolver tenantResolver)
+            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService)
         {
             try
             {
-                // Validar tenant
-                var tenantContext = await tenantResolver.ResolveAsync(context);
-                if (tenantContext == null)
-                {
-                    return Results.Problem(
-                        statusCode: StatusCodes.Status409Conflict,
-                        title: "Tenant Not Resolved",
-                        detail: "Unable to resolve tenant from request"
-                    );
-                }
+                // El tenant ya fue resuelto por el filtro RequireTenantResolution()
+                // No necesitamos validarlo de nuevo aquí
+
+                // DEBUG: Ver todos los claims disponibles
+                var allClaims = string.Join(", ", context.User.Claims.Select(c => $"{c.Type}={c.Value}"));
+                var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogInformation("🔍 Claims in token: {Claims}", allClaims);
+                logger.LogInformation("🔍 User.Identity.IsAuthenticated: {IsAuth}", context.User.Identity?.IsAuthenticated);
 
                 // Obtener user ID del token JWT
                 var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)
-                    ?? context.User.FindFirst("sub");
+                    ?? context.User.FindFirst("sub")
+                    ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
 
-                if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+                if (userIdClaim == null)
                 {
+                    logger.LogWarning("❌ No user ID claim found. Available claims: {Claims}", allClaims);
                     return Results.Problem(
                         statusCode: StatusCodes.Status401Unauthorized,
                         title: "Invalid Token",
-                        detail: "User ID not found in token"
+                        detail: $"User ID not found in token. Available claims: {allClaims}"
+                    );
+                }
+
+                if (!Guid.TryParse(userIdClaim.Value, out var userId))
+                {
+                    logger.LogWarning("❌ Cannot parse user ID: {Value}", userIdClaim.Value);
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        title: "Invalid Token",
+                        detail: $"Invalid user ID format: {userIdClaim.Value}"
                     );
                 }
 
@@ -250,21 +259,12 @@ namespace Api_eCommerce.Auth
         private static async Task<IResult> ChangePassword(
             HttpContext context,
             [FromBody] ChangePasswordRequest request,
-            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService,
-            ITenantResolver tenantResolver)
+            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService)
         {
             try
             {
-                // Validar tenant
-                var tenantContext = await tenantResolver.ResolveAsync(context);
-                if (tenantContext == null)
-                {
-                    return Results.Problem(
-                        statusCode: StatusCodes.Status409Conflict,
-                        title: "Tenant Not Resolved",
-                        detail: "Unable to resolve tenant from request"
-                    );
-                }
+                // El tenant ya fue resuelto por el filtro RequireTenantResolution()
+                // No necesitamos validarlo de nuevo aquí
 
                 // Obtener user ID del token JWT
                 var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)

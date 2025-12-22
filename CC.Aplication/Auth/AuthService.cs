@@ -43,7 +43,7 @@ namespace CC.Aplication.Auth
             await using var db = _dbFactory.Create();
 
             // Verificar si el email ya existe
-            var existingUser = await db.UserAccounts
+            var existingUser = await db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower(), ct);
 
@@ -52,26 +52,47 @@ namespace CC.Aplication.Auth
                 throw new InvalidOperationException("Email already registered");
             }
 
-            // Crear salt y hash de password
-            var (hash, salt) = HashPassword(request.Password);
+            // Buscar rol Customer
+            var customerRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "Customer", ct);
+            if (customerRole == null)
+            {
+                throw new InvalidOperationException("Customer role not found. Please contact support.");
+            }
+
+            // Hash de contraseña usando Identity PasswordHasher
+            var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<CC.Infraestructure.Tenant.Entities.User>();
+            var passwordHash = hasher.HashPassword(null!, request.Password);
 
             // Crear cuenta de usuario
-            var userAccount = new UserAccount
+            var user = new CC.Infraestructure.Tenant.Entities.User
             {
                 Id = Guid.NewGuid(),
                 Email = request.Email.ToLower().Trim(),
-                PasswordHash = hash,
-                PasswordSalt = salt,
+                PasswordHash = passwordHash,
+                FirstName = request.FirstName,
+                LastName = request.LastName,
+                PhoneNumber = request.PhoneNumber,
                 IsActive = true,
+                MustChangePassword = false,
                 CreatedAt = DateTime.UtcNow
             };
 
-            db.UserAccounts.Add(userAccount);
+            db.Users.Add(user);
 
-            // Crear perfil
+            // Asignar rol Customer
+            var userRole = new CC.Infraestructure.Tenant.Entities.UserRole
+            {
+                UserId = user.Id,
+                RoleId = customerRole.Id,
+                AssignedAt = DateTime.UtcNow
+            };
+
+            db.UserRoles.Add(userRole);
+
+            // Crear perfil extendido
             var userProfile = new UserProfile
             {
-                Id = userAccount.Id,
+                Id = user.Id,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 PhoneNumber = request.PhoneNumber
@@ -82,17 +103,17 @@ namespace CC.Aplication.Auth
             await db.SaveChangesAsync(ct);
 
             // Generar JWT
-            var token = GenerateJwtToken(userAccount, _tenantAccessor.TenantInfo);
+            var token = GenerateJwtToken(user, _tenantAccessor.TenantInfo);
             var expiresAt = DateTime.UtcNow.AddHours(24);
 
             var userDto = new UserDto(
-                userAccount.Id,
-                userAccount.Email,
-                userProfile.FirstName,
-                userProfile.LastName,
-                userProfile.PhoneNumber,
-                userAccount.CreatedAt,
-                userAccount.IsActive
+                user.Id,
+                user.Email,
+                user.FirstName,
+                user.LastName,
+                user.PhoneNumber,
+                user.CreatedAt,
+                user.IsActive
             );
 
             return new AuthResponse(token, expiresAt, userDto);
@@ -108,38 +129,40 @@ namespace CC.Aplication.Auth
             await using var db = _dbFactory.Create();
 
             // Buscar usuario por email
-            var userAccount = await db.UserAccounts
-                .Include(u => u.Profile)
+            var user = await db.Users
                 .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower(), ct);
 
-            if (userAccount == null)
+            if (user == null)
             {
                 throw new UnauthorizedAccessException("Invalid email or password");
             }
 
-            if (!userAccount.IsActive)
+            if (!user.IsActive)
             {
                 throw new UnauthorizedAccessException("Account is disabled");
             }
 
-            // Verificar password
-            if (!VerifyPassword(request.Password, userAccount.PasswordHash, userAccount.PasswordSalt))
+            // Verificar password con Identity.PasswordHasher
+            var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<CC.Infraestructure.Tenant.Entities.User>();
+            var result = hasher.VerifyHashedPassword(null!, user.PasswordHash, request.Password);
+
+            if (result == Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
             {
                 throw new UnauthorizedAccessException("Invalid email or password");
             }
 
             // Generar JWT
-            var token = GenerateJwtToken(userAccount, _tenantAccessor.TenantInfo);
+            var token = GenerateJwtToken(user, _tenantAccessor.TenantInfo);
             var expiresAt = DateTime.UtcNow.AddHours(24);
 
             var userDto = new UserDto(
-                userAccount.Id,
-                userAccount.Email,
-                userAccount.Profile?.FirstName ?? "",
-                userAccount.Profile?.LastName ?? "",
-                userAccount.Profile?.PhoneNumber,
-                userAccount.CreatedAt,
-                userAccount.IsActive
+                user.Id,
+                user.Email,
+                user.FirstName,
+                user.LastName,
+                user.PhoneNumber,
+                user.CreatedAt,
+                user.IsActive
             );
 
             return new AuthResponse(token, expiresAt, userDto);
@@ -154,77 +177,39 @@ namespace CC.Aplication.Auth
 
             await using var db = _dbFactory.Create();
 
-            var userAccount = await db.UserAccounts
-                .Include(u => u.Profile)
+            var user = await db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
-            if (userAccount == null)
+            if (user == null)
             {
                 throw new InvalidOperationException("User not found");
             }
 
-            var profile = userAccount.Profile;
+            var profile = await db.UserProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == userId, ct);
 
             return new UserProfileDto(
-                userAccount.Id,
-                userAccount.Email,
-                profile?.FirstName ?? "",
-                profile?.LastName ?? "",
-                profile?.PhoneNumber,
+                user.Id,
+                user.Email,
+                user.FirstName,
+                user.LastName,
+                user.PhoneNumber,
                 profile?.DocumentType,
                 profile?.DocumentNumber,
                 profile?.BirthDate,
                 profile?.Address,
                 profile?.City,
                 profile?.Country,
-                userAccount.CreatedAt,
-                userAccount.IsActive
+                user.CreatedAt,
+                user.IsActive
             );
         }
 
         // ==================== PRIVATE HELPERS ====================
 
-        private (string hash, string salt) HashPassword(string password)
-        {
-            // Generar salt aleatorio
-            byte[] saltBytes = new byte[128 / 8];
-            using (var rng = RandomNumberGenerator.Create())
-            {
-                rng.GetBytes(saltBytes);
-            }
-
-            // Hash con PBKDF2
-            byte[] hashBytes = KeyDerivation.Pbkdf2(
-                password: password,
-                salt: saltBytes,
-                prf: KeyDerivationPrf.HMACSHA256,
-                iterationCount: 100000,
-                numBytesRequested: 256 / 8
-            );
-
-            return (
-                Convert.ToBase64String(hashBytes),
-                Convert.ToBase64String(saltBytes)
-            );
-        }
-
-        private bool VerifyPassword(string password, string storedHash, string storedSalt)
-        {
-            byte[] saltBytes = Convert.FromBase64String(storedSalt);
-            byte[] hashBytes = KeyDerivation.Pbkdf2(
-                password: password,
-                salt: saltBytes,
-                prf: KeyDerivationPrf.HMACSHA256,
-                iterationCount: 100000,
-                numBytesRequested: 256 / 8
-            );
-
-            string hash = Convert.ToBase64String(hashBytes);
-            return hash == storedHash;
-        }
-
-        private string GenerateJwtToken(UserAccount user, TenantInfo tenantInfo)
+        private string GenerateJwtToken(CC.Infraestructure.Tenant.Entities.User user, TenantInfo tenantInfo)
         {
             var jwtKey = _configuration["jwtKey"] ?? throw new InvalidOperationException("JWT key not configured");
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));

@@ -4,8 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace CC.Infraestructure.Tenant.Entities
 {
     /// <summary>
-    /// Permisos de un rol sobre un módulo específico
-    /// Define qué acciones puede realizar cada rol en cada módulo
+    /// Permisos de un rol sobre un mï¿½dulo especï¿½fico
+    /// Define quï¿½ acciones puede realizar cada rol en cada mï¿½dulo
     /// </summary>
     [Table("RoleModulePermissions")]
     public class RoleModulePermission
@@ -27,7 +27,7 @@ namespace CC.Infraestructure.Tenant.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation properties
-        public TenantRole Role { get; set; } = null!;
+        public Role Role { get; set; } = null!;
         public Module Module { get; set; } = null!;
     }
 }

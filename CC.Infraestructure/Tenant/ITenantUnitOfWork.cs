@@ -13,15 +13,14 @@ namespace CC.Infraestructure.Tenant
   public interface ITenantUnitOfWork : IAsyncDisposable, IDisposable
   {
     #region Authentication & Authorization
-    ITenantRepository<TenantUser> Users { get; }
-    ITenantRepository<TenantRole> Roles { get; }
-    ITenantRepository<TenantUserRole> UserRoles { get; }
+    ITenantRepository<User> Users { get; }
+    ITenantRepository<Role> Roles { get; }
+    ITenantRepository<UserRole> UserRoles { get; }
     ITenantRepository<Module> Modules { get; }
     ITenantRepository<RoleModulePermission> RoleModulePermissions { get; }
     #endregion
 
-    #region User Accounts (Consumer)
-    ITenantRepository<UserAccount> UserAccounts { get; }
+    #region User Profiles (Extended Data)
     ITenantRepository<UserProfile> UserProfiles { get; }
     #endregion
 
