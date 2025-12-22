@@ -3,7 +3,6 @@ using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
-using CC.Infraestructure.TenantSeeders;
 using CC.Domain.Helpers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -15,7 +14,7 @@ using Npgsql;
 using System.Text.RegularExpressions;
 
 // DTOs para SuperAdmin
-public record CreateTenantRequest(string Slug, string Name, string PlanCode, string? AdminEmail = null);
+public record CreateTenantRequest(string Slug, string Name, string PlanCode, string AdminEmail);
 public record ChangeTenantPlanRequest(string PlanCode);
 
 /// <summary>
@@ -117,10 +116,13 @@ namespace Api_eCommerce.Endpoints
                 return Results.Conflict(new { error = $"Tenant with slug '{request.Slug}' already exists", existingStatus = existingTenant.Status.ToString() });
             }
 
-            // Usar adminEmail proporcionado o generar uno por defecto
-            var finalAdminEmail = string.IsNullOrWhiteSpace(request.AdminEmail)
-                ? $"admin@{request.Slug}"
-                : request.AdminEmail.Trim().ToLower();
+            // Validar que el email sea válido
+            if (string.IsNullOrWhiteSpace(request.AdminEmail) || !request.AdminEmail.Contains("@"))
+            {
+                return Results.BadRequest(new { error = "AdminEmail is required and must be a valid email address" });
+            }
+
+            var finalAdminEmail = request.AdminEmail.Trim().ToLower();
 
             var plan = await adminDb.Plans.FirstOrDefaultAsync(p => p.Code == request.PlanCode);
             if (plan == null)
@@ -194,55 +196,36 @@ namespace Api_eCommerce.Endpoints
                     await tenantDb.Database.MigrateAsync();
                     logger.LogInformation("? Migrations applied");
 
-                    // Seed roles
-                    if (!await tenantDb.Roles.AnyAsync())
-                    {
-                        var roles = new[]
-                        {
-                            new Role { Id = Guid.NewGuid(), Name = "SuperAdmin", Description = "Administrador con acceso total" },
-                            new Role { Id = Guid.NewGuid(), Name = "Customer", Description = "Cliente con acceso a compras" }
-                        };
-                        tenantDb.Roles.AddRange(roles);
-                        await tenantDb.SaveChangesAsync();
-                        logger.LogInformation("? Roles created");
-                    }
+                    // PASO 1: Seed de estructura base (Roles, Módulos, Permisos)
+                    // Esto usa TenantDbSeeder que asigna permisos COMPLETOS a SuperAdmin
+                    logger.LogInformation("🌱 Seeding roles, modules and permissions...");
 
-                    // Seed m�dulos y permisos
-                    await TenantModulesSeeder.SeedAsync(tenantDb, logger);
+                    // Seed Roles (SuperAdmin, Customer)
+                    await TenantDbSeeder.SeedRolesAsync(tenantDb, logger);
 
-                    // Crear usuario admin y asignar rol
-                    if (!await tenantDb.Users.AnyAsync())
+                    // Seed Modules (7 módulos del sistema)
+                    await TenantDbSeeder.SeedModulesAsync(tenantDb, logger);
+
+                    // Seed Role Permissions (SuperAdmin gets FULL access to ALL modules)
+                    await TenantDbSeeder.SeedRolePermissionsAsync(tenantDb, logger);
+
+                    // PASO 2: Crear usuario admin con el email personalizado
+                    if (!await tenantDb.Users.AnyAsync(u => u.Email == finalAdminEmail))
                     {
                         // Generar password aleatorio seguro
                         tempPassword = PasswordExtensions.GenerateRandomPassword();
-                        var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<User>();
-                        var hash = hasher.HashPassword(null!, tempPassword);
 
-                        var adminUser = new User
-                        {
-                            Id = Guid.NewGuid(),
-                            Email = finalAdminEmail,
-                            PasswordHash = hash,
-                            FirstName = "Admin",
-                            LastName = "System",
-                            IsActive = true,
-                            MustChangePassword = true  // Forzar cambio en primer login
-                        };
+                        await TenantDbSeeder.CreateTenantUserAsync(
+                            tenantDb,
+                            email: finalAdminEmail,
+                            password: tempPassword,
+                            roleName: "SuperAdmin",
+                            firstName: "Admin",
+                            lastName: "System",
+                            logger: logger
+                        );
 
-                        tenantDb.Users.Add(adminUser);
-                        await tenantDb.SaveChangesAsync();
-
-                        // Asignar rol SuperAdmin
-                        var adminRole = await tenantDb.Roles.FirstAsync(r => r.Name == "SuperAdmin");
-                        tenantDb.UserRoles.Add(new UserRole
-                        {
-                            UserId = adminUser.Id,
-                            RoleId = adminRole.Id,
-                            AssignedAt = DateTime.UtcNow
-                        });
-                        await tenantDb.SaveChangesAsync();
-
-                        logger.LogInformation("✅ Admin user created: {Email}", adminUser.Email);
+                        logger.LogInformation("✅ Admin user created: {Email}", finalAdminEmail);
                         logger.LogWarning("⚠️  TEMP PASSWORD for {Email}: {Password}", finalAdminEmail, tempPassword);
                     }
                 }
@@ -368,7 +351,7 @@ namespace Api_eCommerce.Endpoints
             AdminDbContext adminDb,
             ILoggerFactory loggerFactory,
             string slug,
-            [FromQuery] bool hardDelete = false)
+            [FromQuery] bool hardDelete = true)  // ✅ Cambiado a true por defecto
         {
             var logger = loggerFactory.CreateLogger("SuperAdminTenants");
             var tenant = await adminDb.Tenants.FirstOrDefaultAsync(t => t.Slug == slug);

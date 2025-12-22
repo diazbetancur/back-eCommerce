@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CC.Infraestructure.TenantDbMigrations
 {
     [DbContext(typeof(TenantDbContext))]
-    [Migration("20251118180232_AddModulesAndPermissions")]
-    partial class AddModulesAndPermissions
+    [Migration("20251222123540_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -158,10 +158,7 @@ namespace CC.Infraestructure.TenantDbMigrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Email")
-                        .IsUnique();
-
-                    b.ToTable("UserAccounts", "public");
+                    b.ToTable("UserAccount", "public");
                 });
 
             modelBuilder.Entity("CC.Domain.Users.UserProfile", b =>
@@ -209,6 +206,66 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.HasKey("Id");
 
                     b.ToTable("UserProfiles", "public");
+                });
+
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Banner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ButtonText")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ImageUrlDesktop")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ImageUrlMobile")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Subtitle")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DisplayOrder");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("Position");
+
+                    b.ToTable("Banners", "public");
                 });
 
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Cart", b =>
@@ -273,12 +330,45 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MetaDescription")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MetaTitle")
+                        .HasColumnType("text");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ShowInMenu")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("DisplayOrder");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
 
                     b.ToTable("Categories", "public");
                 });
@@ -466,6 +556,14 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Brand")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("CompareAtPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -474,6 +572,18 @@ namespace CC.Infraestructure.TenantDbMigrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsFeatured")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MainImageUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MetaDescription")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MetaTitle")
+                        .HasColumnType("text");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -484,10 +594,45 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("ShortDescription")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int>("Stock")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Tags")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("TrackInventory")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("IsFeatured");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("Sku");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("Tags");
 
                     b.ToTable("Products", "public");
                 });
@@ -501,6 +646,8 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasColumnType("uuid");
 
                     b.HasKey("ProductId", "CategoryId");
+
+                    b.HasIndex("CategoryId");
 
                     b.ToTable("ProductCategories", "public");
                 });
@@ -526,7 +673,35 @@ namespace CC.Infraestructure.TenantDbMigrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ProductId");
+
                     b.ToTable("ProductImages", "public");
+                });
+
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Roles", "public");
                 });
 
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.RoleModulePermission", b =>
@@ -567,28 +742,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.ToTable("RoleModulePermissions", "public");
                 });
 
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.TenantRole", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.ToTable("TenantRoles", "public");
-                });
-
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.TenantSetting", b =>
                 {
                     b.Property<string>("Key")
@@ -604,7 +757,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.ToTable("Settings", "public");
                 });
 
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.TenantUser", b =>
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -618,22 +771,43 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("MustChangePassword")
                         .HasColumnType("boolean");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("TenantUsers", "public");
+                    b.ToTable("Users", "public");
                 });
 
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.TenantUserRole", b =>
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.UserRole", b =>
                 {
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -648,7 +822,7 @@ namespace CC.Infraestructure.TenantDbMigrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("TenantUserRoles", "public");
+                    b.ToTable("UserRoles", "public");
                 });
 
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.WebPushSubscription", b =>
@@ -718,6 +892,40 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Category", b =>
+                {
+                    b.HasOne("CC.Infraestructure.Tenant.Entities.Category", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.ProductCategory", b =>
+                {
+                    b.HasOne("CC.Infraestructure.Tenant.Entities.Category", null)
+                        .WithMany("Products")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CC.Infraestructure.Tenant.Entities.Product", null)
+                        .WithMany("Categories")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.ProductImage", b =>
+                {
+                    b.HasOne("CC.Infraestructure.Tenant.Entities.Product", null)
+                        .WithMany("Images")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.RoleModulePermission", b =>
                 {
                     b.HasOne("CC.Infraestructure.Tenant.Entities.Module", "Module")
@@ -726,7 +934,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("CC.Infraestructure.Tenant.Entities.TenantRole", "Role")
+                    b.HasOne("CC.Infraestructure.Tenant.Entities.Role", "Role")
                         .WithMany("ModulePermissions")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -737,15 +945,15 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Navigation("Role");
                 });
 
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.TenantUserRole", b =>
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.UserRole", b =>
                 {
-                    b.HasOne("CC.Infraestructure.Tenant.Entities.TenantRole", "Role")
+                    b.HasOne("CC.Infraestructure.Tenant.Entities.Role", "Role")
                         .WithMany("UserRoles")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("CC.Infraestructure.Tenant.Entities.TenantUser", "User")
+                    b.HasOne("CC.Infraestructure.Tenant.Entities.User", "User")
                         .WithMany("UserRoles")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -771,19 +979,33 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Navigation("Items");
                 });
 
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Category", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Products");
+                });
+
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Module", b =>
                 {
                     b.Navigation("RolePermissions");
                 });
 
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.TenantRole", b =>
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Product", b =>
+                {
+                    b.Navigation("Categories");
+
+                    b.Navigation("Images");
+                });
+
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Role", b =>
                 {
                     b.Navigation("ModulePermissions");
 
                     b.Navigation("UserRoles");
                 });
 
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.TenantUser", b =>
+            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.User", b =>
                 {
                     b.Navigation("UserRoles");
                 });

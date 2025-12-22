@@ -42,7 +42,7 @@ namespace CC.Infraestructure.Tenant
         /// Seed de roles del tenant (SuperAdmin, Customer)
         /// El tenant puede crear roles adicionales después
         /// </summary>
-        private static async Task SeedRolesAsync(TenantDbContext tenantDb, ILogger? logger)
+        public static async Task SeedRolesAsync(TenantDbContext tenantDb, ILogger? logger)
         {
             if (await tenantDb.Roles.AnyAsync())
             {
@@ -154,7 +154,7 @@ namespace CC.Infraestructure.Tenant
         /// Seed de módulos del sistema
         /// Define las áreas funcionales disponibles en el tenant
         /// </summary>
-        private static async Task SeedModulesAsync(TenantDbContext tenantDb, ILogger? logger)
+        public static async Task SeedModulesAsync(TenantDbContext tenantDb, ILogger? logger)
         {
             if (await tenantDb.Modules.AnyAsync())
             {
@@ -250,7 +250,7 @@ namespace CC.Infraestructure.Tenant
         /// SuperAdmin: acceso total a todos los módulos
         /// Customer: solo acceso de lectura a catálogo y órdenes
         /// </summary>
-        private static async Task SeedRolePermissionsAsync(TenantDbContext tenantDb, ILogger? logger)
+        public static async Task SeedRolePermissionsAsync(TenantDbContext tenantDb, ILogger? logger)
         {
             if (await tenantDb.RoleModulePermissions.AnyAsync())
             {
@@ -298,7 +298,8 @@ namespace CC.Infraestructure.Tenant
             var customerModules = modules.Where(m =>
                 m.Code == "catalog" ||
                 m.Code == "orders" ||
-                m.Code == "loyalty").ToList();
+                m.Code == "loyalty" ||
+                m.Code == "permissions").ToList(); // Agregado permissions para que el usuario pueda ver sus propios permisos
 
             foreach (var module in customerModules)
             {

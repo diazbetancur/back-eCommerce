@@ -21,6 +21,9 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ==================== ACTION FILTERS ====================
+builder.Services.AddScoped<Api_eCommerce.Authorization.ModuleAuthorizationActionFilter>();
+
 builder.Services.AddControllers();
 builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
@@ -219,16 +222,16 @@ storefrontGroup.MapGroup("").MapStorefrontEndpoints();
 var tenantGroup = app.MapGroup("").RequireTenantResolution();
 tenantGroup.MapGroup("").MapFeatureFlagsEndpoints();
 tenantGroup.MapGroup("").MapTenantAuth();
-tenantGroup.MapGroup("").MapPermissionsEndpoints();
+// tenantGroup.MapGroup("").MapPermissionsEndpoints();  // ✅ MIGRADO: PermissionsController
 tenantGroup.MapGroup("").MapTenantAdminEndpoints(); // Ya incluye /admin/products
 tenantGroup.MapGroup("").MapCatalogEndpoints();
-tenantGroup.MapGroup("").MapCategoryEndpoints();
+// tenantGroup.MapGroup("").MapCategoryEndpoints();  // ✅ MIGRADO: CategoryController
 // tenantGroup.MapGroup("").MapProductEndpoints();  // ❌ REMOVIDO: Duplicado con TenantAdminEndpoints
-tenantGroup.MapGroup("").MapCartEndpoints();
-tenantGroup.MapGroup("").MapCheckoutEndpoints();
-tenantGroup.MapGroup("").MapOrdersEndpoints();
-tenantGroup.MapGroup("").MapFavoritesEndpoints();
-tenantGroup.MapGroup("").MapLoyaltyEndpoints();
+// tenantGroup.MapGroup("").MapCartEndpoints();  // ✅ MIGRADO: CartController
+// tenantGroup.MapGroup("").MapCheckoutEndpoints();  // ✅ MIGRADO: CheckoutController
+// tenantGroup.MapGroup("").MapOrdersEndpoints();  // ✅ MIGRADO: OrdersController
+// tenantGroup.MapGroup("").MapFavoritesEndpoints();  // ✅ MIGRADO: FavoritesController
+// tenantGroup.MapGroup("").MapLoyaltyEndpoints();  // ✅ MIGRADO: LoyaltyController
 
 app.MapControllers();
 

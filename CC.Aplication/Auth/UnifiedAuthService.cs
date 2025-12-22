@@ -139,6 +139,7 @@ namespace CC.Aplication.Auth
                     LastName = user.LastName,
                     PhoneNumber = user.PhoneNumber,
                     Roles = roles,
+                    Modules = modules,  // Array simple de códigos: ["catalog", "orders", ...]
                     Permissions = permissions,
                     IsActive = user.IsActive,
                     MustChangePassword = user.MustChangePassword
@@ -244,7 +245,6 @@ namespace CC.Aplication.Auth
 
             await using var db = _dbFactory.Create();
 
-            // Buscar usuario en tabla Users
             var user = await db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == userId, ct);
@@ -254,7 +254,6 @@ namespace CC.Aplication.Auth
                 throw new InvalidOperationException("User not found");
             }
 
-            // Buscar perfil extendido (opcional, para datos adicionales como DocumentType, Address, etc.)
             var profile = await db.UserProfiles
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == userId, ct);
@@ -430,6 +429,7 @@ namespace CC.Aplication.Auth
         public string? LastName { get; set; }
         public string? PhoneNumber { get; set; }
         public List<string> Roles { get; set; } = new();
+        public List<string> Modules { get; set; } = new();  // Array simple de códigos de módulos para frontend
         public List<ModulePermissionDto> Permissions { get; set; } = new();
         public bool IsActive { get; set; }
         public bool MustChangePassword { get; set; }  // Indica si debe cambiar contraseña

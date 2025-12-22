@@ -6,13 +6,37 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace CC.Infraestructure.TenantDbMigrations
 {
     /// <inheritdoc />
-    public partial class InitialTenantDb : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.EnsureSchema(
                 name: "public");
+
+            migrationBuilder.CreateTable(
+                name: "Banners",
+                schema: "public",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Subtitle = table.Column<string>(type: "text", nullable: true),
+                    ImageUrlDesktop = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    ImageUrlMobile = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    TargetUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    ButtonText = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Position = table.Column<int>(type: "integer", nullable: false),
+                    StartDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    DisplayOrder = table.Column<int>(type: "integer", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Banners", x => x.Id);
+                });
 
             migrationBuilder.CreateTable(
                 name: "Carts",
@@ -37,11 +61,26 @@ namespace CC.Infraestructure.TenantDbMigrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "text", nullable: true)
+                    Slug = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
+                    ImageUrl = table.Column<string>(type: "text", nullable: true),
+                    ParentId = table.Column<Guid>(type: "uuid", nullable: true),
+                    DisplayOrder = table.Column<int>(type: "integer", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    ShowInMenu = table.Column<bool>(type: "boolean", nullable: false),
+                    MetaTitle = table.Column<string>(type: "text", nullable: true),
+                    MetaDescription = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Categories", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Categories_Categories_ParentId",
+                        column: x => x.ParentId,
+                        principalSchema: "public",
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -73,6 +112,24 @@ namespace CC.Infraestructure.TenantDbMigrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_LoyaltyAccounts", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Modules",
+                schema: "public",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    IconName = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Modules", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -136,46 +193,29 @@ namespace CC.Infraestructure.TenantDbMigrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "ProductCategories",
-                schema: "public",
-                columns: table => new
-                {
-                    ProductId = table.Column<Guid>(type: "uuid", nullable: false),
-                    CategoryId = table.Column<Guid>(type: "uuid", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProductCategories", x => new { x.ProductId, x.CategoryId });
-                });
-
-            migrationBuilder.CreateTable(
-                name: "ProductImages",
-                schema: "public",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ProductId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ImageUrl = table.Column<string>(type: "text", nullable: false),
-                    Order = table.Column<int>(type: "integer", nullable: false),
-                    IsPrimary = table.Column<bool>(type: "boolean", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProductImages", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Products",
                 schema: "public",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Slug = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Sku = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     Description = table.Column<string>(type: "text", nullable: true),
+                    ShortDescription = table.Column<string>(type: "text", nullable: true),
                     Price = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
+                    CompareAtPrice = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
                     Stock = table.Column<int>(type: "integer", nullable: false),
+                    TrackInventory = table.Column<bool>(type: "boolean", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    IsFeatured = table.Column<bool>(type: "boolean", nullable: false),
+                    Tags = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    Brand = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    MetaTitle = table.Column<string>(type: "text", nullable: true),
+                    MetaDescription = table.Column<string>(type: "text", nullable: true),
+                    MainImageUrl = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -188,7 +228,9 @@ namespace CC.Infraestructure.TenantDbMigrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Name = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false)
+                    Name = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    Description = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -209,7 +251,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "UserAccounts",
+                name: "UserAccount",
                 schema: "public",
                 columns: table => new
                 {
@@ -223,20 +265,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_UserAccounts", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "UserRoles",
-                schema: "public",
-                columns: table => new
-                {
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RoleId = table.Column<Guid>(type: "uuid", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_UserRoles", x => new { x.UserId, x.RoleId });
+                    table.PrimaryKey("PK_UserAccount", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -246,9 +275,14 @@ namespace CC.Infraestructure.TenantDbMigrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    PasswordHash = table.Column<string>(type: "text", nullable: false),
+                    PasswordHash = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    FirstName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    LastName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    PhoneNumber = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    MustChangePassword = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -323,6 +357,89 @@ namespace CC.Infraestructure.TenantDbMigrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ProductCategories",
+                schema: "public",
+                columns: table => new
+                {
+                    ProductId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CategoryId = table.Column<Guid>(type: "uuid", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProductCategories", x => new { x.ProductId, x.CategoryId });
+                    table.ForeignKey(
+                        name: "FK_ProductCategories_Categories_CategoryId",
+                        column: x => x.CategoryId,
+                        principalSchema: "public",
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ProductCategories_Products_ProductId",
+                        column: x => x.ProductId,
+                        principalSchema: "public",
+                        principalTable: "Products",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ProductImages",
+                schema: "public",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProductId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ImageUrl = table.Column<string>(type: "text", nullable: false),
+                    Order = table.Column<int>(type: "integer", nullable: false),
+                    IsPrimary = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProductImages", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ProductImages_Products_ProductId",
+                        column: x => x.ProductId,
+                        principalSchema: "public",
+                        principalTable: "Products",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "RoleModulePermissions",
+                schema: "public",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoleId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ModuleId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CanView = table.Column<bool>(type: "boolean", nullable: false),
+                    CanCreate = table.Column<bool>(type: "boolean", nullable: false),
+                    CanUpdate = table.Column<bool>(type: "boolean", nullable: false),
+                    CanDelete = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RoleModulePermissions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RoleModulePermissions_Modules_ModuleId",
+                        column: x => x.ModuleId,
+                        principalSchema: "public",
+                        principalTable: "Modules",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_RoleModulePermissions_Roles_RoleId",
+                        column: x => x.RoleId,
+                        principalSchema: "public",
+                        principalTable: "Roles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "UserProfiles",
                 schema: "public",
                 columns: table => new
@@ -342,13 +459,59 @@ namespace CC.Infraestructure.TenantDbMigrations
                 {
                     table.PrimaryKey("PK_UserProfiles", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_UserProfiles_UserAccounts_Id",
+                        name: "FK_UserProfiles_UserAccount_Id",
                         column: x => x.Id,
                         principalSchema: "public",
-                        principalTable: "UserAccounts",
+                        principalTable: "UserAccount",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
+
+            migrationBuilder.CreateTable(
+                name: "UserRoles",
+                schema: "public",
+                columns: table => new
+                {
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoleId = table.Column<Guid>(type: "uuid", nullable: false),
+                    AssignedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserRoles", x => new { x.UserId, x.RoleId });
+                    table.ForeignKey(
+                        name: "FK_UserRoles_Roles_RoleId",
+                        column: x => x.RoleId,
+                        principalSchema: "public",
+                        principalTable: "Roles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_UserRoles_Users_UserId",
+                        column: x => x.UserId,
+                        principalSchema: "public",
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Banners_DisplayOrder",
+                schema: "public",
+                table: "Banners",
+                column: "DisplayOrder");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Banners_IsActive",
+                schema: "public",
+                table: "Banners",
+                column: "IsActive");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Banners_Position",
+                schema: "public",
+                table: "Banners",
+                column: "Position");
 
             migrationBuilder.CreateIndex(
                 name: "IX_CartItems_CartId",
@@ -361,6 +524,25 @@ namespace CC.Infraestructure.TenantDbMigrations
                 schema: "public",
                 table: "Carts",
                 column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Categories_DisplayOrder",
+                schema: "public",
+                table: "Categories",
+                column: "DisplayOrder");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Categories_ParentId",
+                schema: "public",
+                table: "Categories",
+                column: "ParentId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Categories_Slug",
+                schema: "public",
+                table: "Categories",
+                column: "Slug",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_FavoriteProducts_ProductId",
@@ -409,6 +591,13 @@ namespace CC.Infraestructure.TenantDbMigrations
                 filter: "\"OrderId\" IS NOT NULL");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Modules_Code",
+                schema: "public",
+                table: "Modules",
+                column: "Code",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_OrderItems_OrderId",
                 schema: "public",
                 table: "OrderItems",
@@ -448,6 +637,68 @@ namespace CC.Infraestructure.TenantDbMigrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_ProductCategories_CategoryId",
+                schema: "public",
+                table: "ProductCategories",
+                column: "CategoryId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ProductImages_ProductId",
+                schema: "public",
+                table: "ProductImages",
+                column: "ProductId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Products_IsActive",
+                schema: "public",
+                table: "Products",
+                column: "IsActive");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Products_IsFeatured",
+                schema: "public",
+                table: "Products",
+                column: "IsFeatured");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Products_Name",
+                schema: "public",
+                table: "Products",
+                column: "Name");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Products_Sku",
+                schema: "public",
+                table: "Products",
+                column: "Sku");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Products_Slug",
+                schema: "public",
+                table: "Products",
+                column: "Slug",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Products_Tags",
+                schema: "public",
+                table: "Products",
+                column: "Tags");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RoleModulePermissions_ModuleId",
+                schema: "public",
+                table: "RoleModulePermissions",
+                column: "ModuleId");
+
+            migrationBuilder.CreateIndex(
+                name: "UQ_RoleModulePermissions_RoleId_ModuleId",
+                schema: "public",
+                table: "RoleModulePermissions",
+                columns: new[] { "RoleId", "ModuleId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Roles_Name",
                 schema: "public",
                 table: "Roles",
@@ -455,11 +706,10 @@ namespace CC.Infraestructure.TenantDbMigrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_UserAccounts_Email",
+                name: "IX_UserRoles_RoleId",
                 schema: "public",
-                table: "UserAccounts",
-                column: "Email",
-                unique: true);
+                table: "UserRoles",
+                column: "RoleId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_Email",
@@ -480,11 +730,11 @@ namespace CC.Infraestructure.TenantDbMigrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "CartItems",
+                name: "Banners",
                 schema: "public");
 
             migrationBuilder.DropTable(
-                name: "Categories",
+                name: "CartItems",
                 schema: "public");
 
             migrationBuilder.DropTable(
@@ -516,11 +766,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                 schema: "public");
 
             migrationBuilder.DropTable(
-                name: "Products",
-                schema: "public");
-
-            migrationBuilder.DropTable(
-                name: "Roles",
+                name: "RoleModulePermissions",
                 schema: "public");
 
             migrationBuilder.DropTable(
@@ -536,10 +782,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                 schema: "public");
 
             migrationBuilder.DropTable(
-                name: "Users",
-                schema: "public");
-
-            migrationBuilder.DropTable(
                 name: "WebPushSubscriptions",
                 schema: "public");
 
@@ -552,7 +794,27 @@ namespace CC.Infraestructure.TenantDbMigrations
                 schema: "public");
 
             migrationBuilder.DropTable(
-                name: "UserAccounts",
+                name: "Categories",
+                schema: "public");
+
+            migrationBuilder.DropTable(
+                name: "Products",
+                schema: "public");
+
+            migrationBuilder.DropTable(
+                name: "Modules",
+                schema: "public");
+
+            migrationBuilder.DropTable(
+                name: "UserAccount",
+                schema: "public");
+
+            migrationBuilder.DropTable(
+                name: "Roles",
+                schema: "public");
+
+            migrationBuilder.DropTable(
+                name: "Users",
                 schema: "public");
         }
     }
