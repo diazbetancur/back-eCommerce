@@ -196,6 +196,7 @@ app.UseCors("AllowFrontend");
 
 app.UseMiddleware<MeteringMiddleware>();
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
+app.UseMiddleware<TenantResolutionMiddleware>(); // ✅ AGREGADO: Resolución de tenant global
 app.UseAuthentication();
 app.UseMiddleware<ActivityLoggingMiddleware>();
 app.UseAuthorization();
@@ -215,24 +216,28 @@ app.MapPublicTenantConfig();
 
 // ==================== STOREFRONT ENDPOINTS (Public) ====================
 // Endpoints públicos del catálogo que requieren X-Tenant-Slug pero NO autenticación
-var storefrontGroup = app.MapGroup("").RequireTenantResolution();
+// NOTA: El middleware TenantResolutionMiddleware ya se ejecuta globalmente
+var storefrontGroup = app.MapGroup("");
 storefrontGroup.MapGroup("").MapStorefrontEndpoints();
 
-// ==================== TENANT ENDPOINTS (Require tenant resolution) ====================
-var tenantGroup = app.MapGroup("").RequireTenantResolution();
+// ==================== TENANT ENDPOINTS ====================
+// NOTA: El middleware TenantResolutionMiddleware ya se ejecuta globalmente
+var tenantGroup = app.MapGroup("");
 tenantGroup.MapGroup("").MapFeatureFlagsEndpoints();
 tenantGroup.MapGroup("").MapTenantAuth();
 // tenantGroup.MapGroup("").MapPermissionsEndpoints();  // ✅ MIGRADO: PermissionsController
 tenantGroup.MapGroup("").MapTenantAdminEndpoints(); // Ya incluye /admin/products
-tenantGroup.MapGroup("").MapCatalogEndpoints();
+// tenantGroup.MapGroup("").MapCatalogEndpoints();  // ✅ MIGRADO: ProductController (público)
 // tenantGroup.MapGroup("").MapCategoryEndpoints();  // ✅ MIGRADO: CategoryController
-// tenantGroup.MapGroup("").MapProductEndpoints();  // ❌ REMOVIDO: Duplicado con TenantAdminEndpoints
+// tenantGroup.MapGroup("").MapProductEndpoints();  // ✅ MIGRADO: ProductAdminController
 // tenantGroup.MapGroup("").MapCartEndpoints();  // ✅ MIGRADO: CartController
 // tenantGroup.MapGroup("").MapCheckoutEndpoints();  // ✅ MIGRADO: CheckoutController
 // tenantGroup.MapGroup("").MapOrdersEndpoints();  // ✅ MIGRADO: OrdersController
 // tenantGroup.MapGroup("").MapFavoritesEndpoints();  // ✅ MIGRADO: FavoritesController
 // tenantGroup.MapGroup("").MapLoyaltyEndpoints();  // ✅ MIGRADO: LoyaltyController
 
+// ==================== CONTROLLERS ====================
+// Los controllers ahora pasan por TenantResolutionMiddleware (agregado globalmente)
 app.MapControllers();
 
 app.Run();
