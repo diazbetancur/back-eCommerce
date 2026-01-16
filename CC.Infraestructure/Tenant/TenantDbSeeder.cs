@@ -235,6 +235,16 @@ namespace CC.Infraestructure.Tenant
                     IconName = "shield",
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
+                },
+                new Module
+                {
+                    Id = Guid.NewGuid(),
+                    Code = "inventory",
+                    Name = "Inventario",
+                    Description = "Gestión de tiendas y stock multi-ubicación",
+                    IconName = "warehouse",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
                 }
             };
 

@@ -75,6 +75,25 @@ namespace CC.Aplication.Catalog
       db.Products.Add(product);
       await db.SaveChangesAsync(ct);
 
+      // Asociar con categorías si se proporcionaron
+      if (dto.CategoryIds != null && dto.CategoryIds.Any())
+      {
+        foreach (var categoryId in dto.CategoryIds.Distinct())
+        {
+          // Verificar que la categoría existe
+          var categoryExists = await db.Categories.AnyAsync(c => c.Id == categoryId, ct);
+          if (categoryExists)
+          {
+            db.ProductCategories.Add(new ProductCategory
+            {
+              ProductId = product.Id,
+              CategoryId = categoryId
+            });
+          }
+        }
+        await db.SaveChangesAsync(ct);
+      }
+
       _logger.LogInformation("✅ Product created: {ProductId} - {Name}", product.Id, product.Name);
 
       return MapToDto(product);
@@ -122,6 +141,32 @@ namespace CC.Aplication.Catalog
 
       await db.SaveChangesAsync(ct);
 
+      // Actualizar categorías si se proporcionaron
+      if (dto.CategoryIds != null)
+      {
+        // Remover asociaciones existentes
+        var existingCategories = await db.ProductCategories
+            .Where(pc => pc.ProductId == id)
+            .ToListAsync(ct);
+        db.ProductCategories.RemoveRange(existingCategories);
+
+        // Agregar nuevas asociaciones
+        foreach (var categoryId in dto.CategoryIds.Distinct())
+        {
+          // Verificar que la categoría existe
+          var categoryExists = await db.Categories.AnyAsync(c => c.Id == categoryId, ct);
+          if (categoryExists)
+          {
+            db.ProductCategories.Add(new ProductCategory
+            {
+              ProductId = id,
+              CategoryId = categoryId
+            });
+          }
+        }
+        await db.SaveChangesAsync(ct);
+      }
+
       _logger.LogInformation("✅ Product updated: {ProductId} - {Name}", product.Id, product.Name);
 
       return MapToDto(product);
@@ -141,7 +186,10 @@ namespace CC.Aplication.Catalog
           .Include(p => p.Images)
           .FirstOrDefaultAsync(p => p.Id == id, ct);
 
-      return product == null ? null : MapToDto(product);
+      if (product == null)
+        return null;
+
+      return await MapToDtoWithCategoriesAsync(db, product, ct);
     }
 
     /// <summary>
@@ -158,7 +206,10 @@ namespace CC.Aplication.Catalog
           .Include(p => p.Images)
           .FirstOrDefaultAsync(p => p.Slug == slug.ToLower(), ct);
 
-      return product == null ? null : MapToDto(product);
+      if (product == null)
+        return null;
+
+      return await MapToDtoWithCategoriesAsync(db, product, ct);
     }
 
     /// <summary>
@@ -429,7 +480,7 @@ namespace CC.Aplication.Catalog
         MainImageUrl = product.MainImageUrl,
         CreatedAt = product.CreatedAt,
         UpdatedAt = product.UpdatedAt,
-        Categories = new List<CategorySummaryDto>(), // TODO: Cargar categorías si se necesita
+        Categories = new List<CategorySummaryDto>(),
         Images = product.Images?.Select(img => new ProductImageDto
         {
           Id = img.Id,
@@ -438,6 +489,31 @@ namespace CC.Aplication.Catalog
           IsPrimary = img.IsPrimary
         }).ToList() ?? new List<ProductImageDto>()
       };
+    }
+
+    private static async Task<ProductResponseDto> MapToDtoWithCategoriesAsync(
+        TenantDbContext db,
+        Product product,
+        CancellationToken ct)
+    {
+      var dto = MapToDto(product);
+
+      // Cargar categorías asociadas
+      var categories = await db.ProductCategories
+          .Where(pc => pc.ProductId == product.Id)
+          .Join(db.Categories,
+              pc => pc.CategoryId,
+              c => c.Id,
+              (pc, c) => new CategorySummaryDto
+              {
+                Id = c.Id,
+                Name = c.Name,
+                Slug = c.Slug
+              })
+          .ToListAsync(ct);
+
+      dto.Categories = categories;
+      return dto;
     }
   }
 
@@ -460,6 +536,7 @@ namespace CC.Aplication.Catalog
     public string? MetaTitle { get; init; }
     public string? MetaDescription { get; init; }
     public string? MainImageUrl { get; init; }
+    public List<Guid>? CategoryIds { get; init; } // IDs de categorías a asociar
   }
 
   public record UpdateProductDto
@@ -479,6 +556,7 @@ namespace CC.Aplication.Catalog
     public string? MetaTitle { get; init; }
     public string? MetaDescription { get; init; }
     public string? MainImageUrl { get; init; }
+    public List<Guid>? CategoryIds { get; init; } // IDs de categorías a asociar (null = no modificar)
   }
 
   public class ProductResponseDto

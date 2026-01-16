@@ -1,7 +1,7 @@
+using DomainEntities = CC.Domain.Entities;
 using CC.Domain.Favorites;
-using CC.Domain.Loyalty;
 using CC.Domain.Users;
-using CC.Infraestructure.Tenant.Entities;
+using TenantEntities = CC.Infraestructure.Tenant.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace CC.Infraestructure.Tenant
@@ -15,12 +15,12 @@ namespace CC.Infraestructure.Tenant
     public TenantDbContext(DbContextOptions<TenantDbContext> options) : base(options) { }
 
     #region User Authentication & Authorization
-    public DbSet<User> Users => Set<User>();
-    public DbSet<Role> Roles => Set<Role>();
-    public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<TenantEntities.User> Users => Set<TenantEntities.User>();
+    public DbSet<TenantEntities.Role> Roles => Set<TenantEntities.Role>();
+    public DbSet<TenantEntities.UserRole> UserRoles => Set<TenantEntities.UserRole>();
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
-    public DbSet<Module> Modules => Set<Module>();
-    public DbSet<RoleModulePermission> RoleModulePermissions => Set<RoleModulePermission>();
+    public DbSet<TenantEntities.Module> Modules => Set<TenantEntities.Module>();
+    public DbSet<TenantEntities.RoleModulePermission> RoleModulePermissions => Set<TenantEntities.RoleModulePermission>();
     #endregion
 
     #region Favorites
@@ -28,32 +28,40 @@ namespace CC.Infraestructure.Tenant
     #endregion
 
     #region Loyalty Program
-    public DbSet<LoyaltyAccount> LoyaltyAccounts => Set<LoyaltyAccount>();
-    public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
+    public DbSet<DomainEntities.LoyaltyAccount> LoyaltyAccounts => Set<DomainEntities.LoyaltyAccount>();
+    public DbSet<DomainEntities.LoyaltyTransaction> LoyaltyTransactions => Set<DomainEntities.LoyaltyTransaction>();
+    public DbSet<DomainEntities.LoyaltyReward> LoyaltyRewards => Set<DomainEntities.LoyaltyReward>();
+    public DbSet<DomainEntities.LoyaltyRedemption> LoyaltyRedemptions => Set<DomainEntities.LoyaltyRedemption>();
+    public DbSet<DomainEntities.LoyaltyConfiguration> LoyaltyConfigurations => Set<DomainEntities.LoyaltyConfiguration>();
     #endregion
 
     #region Settings & Configuration
-    public DbSet<TenantSetting> Settings => Set<TenantSetting>();
-    public DbSet<WebPushSubscription> WebPushSubscriptions => Set<WebPushSubscription>();
+    public DbSet<TenantEntities.TenantSetting> Settings => Set<TenantEntities.TenantSetting>();
+    public DbSet<TenantEntities.WebPushSubscription> WebPushSubscriptions => Set<TenantEntities.WebPushSubscription>();
     #endregion
 
     #region Catalog
-    public DbSet<Product> Products => Set<Product>();
-    public DbSet<Category> Categories => Set<Category>();
-    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
-    public DbSet<ProductImage> ProductImages => Set<ProductImage>();
-    public DbSet<Banner> Banners => Set<Banner>();
+    public DbSet<TenantEntities.Product> Products => Set<TenantEntities.Product>();
+    public DbSet<TenantEntities.Category> Categories => Set<TenantEntities.Category>();
+    public DbSet<TenantEntities.ProductCategory> ProductCategories => Set<TenantEntities.ProductCategory>();
+    public DbSet<TenantEntities.ProductImage> ProductImages => Set<TenantEntities.ProductImage>();
+    public DbSet<TenantEntities.Banner> Banners => Set<TenantEntities.Banner>();
     #endregion
 
     #region Shopping Cart
-    public DbSet<Cart> Carts => Set<Cart>();
-    public DbSet<CartItem> CartItems => Set<CartItem>();
+    public DbSet<TenantEntities.Cart> Carts => Set<TenantEntities.Cart>();
+    public DbSet<TenantEntities.CartItem> CartItems => Set<TenantEntities.CartItem>();
     #endregion
 
     #region Orders
-    public DbSet<Order> Orders => Set<Order>();
-    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
-    public DbSet<OrderStatus> OrderStatuses => Set<OrderStatus>();
+    public DbSet<TenantEntities.Order> Orders => Set<TenantEntities.Order>();
+    public DbSet<TenantEntities.OrderItem> OrderItems => Set<TenantEntities.OrderItem>();
+    public DbSet<TenantEntities.OrderStatus> OrderStatuses => Set<TenantEntities.OrderStatus>();
+    #endregion
+
+    #region Stores & Inventory
+    public DbSet<TenantEntities.Store> Stores => Set<TenantEntities.Store>();
+    public DbSet<TenantEntities.ProductStoreStock> ProductStoreStock => Set<TenantEntities.ProductStoreStock>();
     #endregion
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -64,7 +72,7 @@ namespace CC.Infraestructure.Tenant
       modelBuilder.HasDefaultSchema("public");
 
       #region User Authentication & Authorization
-      modelBuilder.Entity<User>(entity =>
+      modelBuilder.Entity<TenantEntities.User>(entity =>
       {
         entity.ToTable("Users");
         entity.HasKey(e => e.Id);
@@ -79,7 +87,7 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.CreatedAt).IsRequired();
       });
 
-      modelBuilder.Entity<Role>(entity =>
+      modelBuilder.Entity<TenantEntities.Role>(entity =>
       {
         entity.ToTable("Roles");
         entity.HasKey(e => e.Id);
@@ -89,7 +97,7 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.CreatedAt).IsRequired();
       });
 
-      modelBuilder.Entity<UserRole>(entity =>
+      modelBuilder.Entity<TenantEntities.UserRole>(entity =>
       {
         entity.ToTable("UserRoles");
         entity.HasKey(e => new { e.UserId, e.RoleId });
@@ -143,7 +151,7 @@ namespace CC.Infraestructure.Tenant
       #endregion
 
       #region Loyalty Program (New)
-      modelBuilder.Entity<LoyaltyAccount>(entity =>
+      modelBuilder.Entity<DomainEntities.LoyaltyAccount>(entity =>
       {
         entity.ToTable("LoyaltyAccounts");
         entity.HasKey(e => e.Id);
@@ -155,7 +163,7 @@ namespace CC.Infraestructure.Tenant
 
         entity.Property(e => e.UserId).IsRequired();
         entity.Property(e => e.PointsBalance).IsRequired();
-        entity.Property(e => e.CreatedAt).IsRequired();
+        entity.Property(e => e.DateCreated).IsRequired();
         entity.Property(e => e.UpdatedAt).IsRequired();
 
         // Relaci�n 1:N con transacciones
@@ -165,7 +173,7 @@ namespace CC.Infraestructure.Tenant
                   .OnDelete(DeleteBehavior.Cascade);
       });
 
-      modelBuilder.Entity<LoyaltyTransaction>(entity =>
+      modelBuilder.Entity<DomainEntities.LoyaltyTransaction>(entity =>
       {
         entity.ToTable("LoyaltyTransactions");
         entity.HasKey(e => e.Id);
@@ -173,7 +181,7 @@ namespace CC.Infraestructure.Tenant
         // �ndices
         entity.HasIndex(e => e.LoyaltyAccountId).HasDatabaseName("IX_LoyaltyTransactions_AccountId");
         entity.HasIndex(e => e.OrderId).HasDatabaseName("IX_LoyaltyTransactions_OrderId");
-        entity.HasIndex(e => e.CreatedAt).HasDatabaseName("IX_LoyaltyTransactions_CreatedAt");
+        entity.HasIndex(e => e.DateCreated).HasDatabaseName("IX_LoyaltyTransactions_CreatedAt");
 
         // �ndice �nico: una orden solo puede generar puntos una vez
         entity.HasIndex(e => e.OrderId)
@@ -185,12 +193,67 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.Type).IsRequired().HasMaxLength(20);
         entity.Property(e => e.Points).IsRequired();
         entity.Property(e => e.Description).HasMaxLength(500);
-        entity.Property(e => e.CreatedAt).IsRequired();
+        entity.Property(e => e.DateCreated).IsRequired();
+      });
+
+      modelBuilder.Entity<DomainEntities.LoyaltyReward>(entity =>
+      {
+        entity.ToTable("LoyaltyRewards");
+        entity.HasKey(e => e.Id);
+
+        // Índices
+        entity.HasIndex(e => e.IsActive).HasDatabaseName("IX_LoyaltyRewards_IsActive");
+        entity.HasIndex(e => e.RewardType).HasDatabaseName("IX_LoyaltyRewards_RewardType");
+        entity.HasIndex(e => e.DisplayOrder).HasDatabaseName("IX_LoyaltyRewards_DisplayOrder");
+
+        entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+        entity.Property(e => e.Description).HasMaxLength(1000);
+        entity.Property(e => e.PointsCost).IsRequired();
+        entity.Property(e => e.RewardType).IsRequired().HasMaxLength(30);
+        entity.Property(e => e.ImageUrl).HasMaxLength(500);
+        entity.Property(e => e.IsActive).IsRequired();
+        entity.Property(e => e.DateCreated).IsRequired();
+        entity.Property(e => e.UpdatedAt).IsRequired();
+
+        // Relación 1:N con canjes
+        entity.HasMany(r => r.Redemptions)
+              .WithOne(rd => rd.Reward)
+              .HasForeignKey(rd => rd.RewardId)
+              .OnDelete(DeleteBehavior.Restrict);
+      });
+
+      modelBuilder.Entity<DomainEntities.LoyaltyRedemption>(entity =>
+      {
+        entity.ToTable("LoyaltyRedemptions");
+        entity.HasKey(e => e.Id);
+
+        // Índices
+        entity.HasIndex(e => e.LoyaltyAccountId).HasDatabaseName("IX_LoyaltyRedemptions_AccountId");
+        entity.HasIndex(e => e.RewardId).HasDatabaseName("IX_LoyaltyRedemptions_RewardId");
+        entity.HasIndex(e => e.Status).HasDatabaseName("IX_LoyaltyRedemptions_Status");
+        entity.HasIndex(e => e.RedeemedAt).HasDatabaseName("IX_LoyaltyRedemptions_RedeemedAt");
+        entity.HasIndex(e => e.CouponCode).HasDatabaseName("IX_LoyaltyRedemptions_CouponCode");
+
+        entity.Property(e => e.LoyaltyAccountId).IsRequired();
+        entity.Property(e => e.RewardId).IsRequired();
+        entity.Property(e => e.PointsSpent).IsRequired();
+        entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+        entity.Property(e => e.CouponCode).HasMaxLength(50);
+        entity.Property(e => e.AdminNotes).HasMaxLength(500);
+        entity.Property(e => e.RedeemedAt).IsRequired();
+        entity.Property(e => e.DateCreated).IsRequired();
+        entity.Property(e => e.UpdatedAt).IsRequired();
+
+        // Relación con LoyaltyAccount
+        entity.HasOne(rd => rd.LoyaltyAccount)
+              .WithMany()
+              .HasForeignKey(rd => rd.LoyaltyAccountId)
+              .OnDelete(DeleteBehavior.Cascade);
       });
       #endregion
 
       #region Modules & Permissions
-      modelBuilder.Entity<Module>(entity =>
+      modelBuilder.Entity<TenantEntities.Module>(entity =>
       {
         entity.ToTable("Modules");
         entity.HasKey(e => e.Id);
@@ -203,7 +266,7 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.CreatedAt).IsRequired();
       });
 
-      modelBuilder.Entity<RoleModulePermission>(entity =>
+      modelBuilder.Entity<TenantEntities.RoleModulePermission>(entity =>
       {
         entity.ToTable("RoleModulePermissions");
         entity.HasKey(e => e.Id);
@@ -234,7 +297,7 @@ namespace CC.Infraestructure.Tenant
       #endregion
 
       #region Settings
-      modelBuilder.Entity<TenantSetting>(entity =>
+      modelBuilder.Entity<TenantEntities.TenantSetting>(entity =>
       {
         entity.ToTable("Settings");
         entity.HasKey(e => e.Key);
@@ -242,7 +305,7 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.Value).IsRequired();
       });
 
-      modelBuilder.Entity<WebPushSubscription>(entity =>
+      modelBuilder.Entity<TenantEntities.WebPushSubscription>(entity =>
       {
         entity.ToTable("WebPushSubscriptions");
         entity.HasKey(e => e.Id);
@@ -251,7 +314,7 @@ namespace CC.Infraestructure.Tenant
       #endregion
 
       #region Catalog
-      modelBuilder.Entity<Category>(entity =>
+      modelBuilder.Entity<TenantEntities.Category>(entity =>
       {
         entity.ToTable("Categories");
         entity.HasKey(e => e.Id);
@@ -268,7 +331,7 @@ namespace CC.Infraestructure.Tenant
                   .OnDelete(DeleteBehavior.Restrict);
       });
 
-      modelBuilder.Entity<Product>(entity =>
+      modelBuilder.Entity<TenantEntities.Product>(entity =>
       {
         entity.ToTable("Products");
         entity.HasKey(e => e.Id);
@@ -289,35 +352,35 @@ namespace CC.Infraestructure.Tenant
         entity.HasIndex(e => e.Tags);
       });
 
-      modelBuilder.Entity<ProductCategory>(entity =>
+      modelBuilder.Entity<TenantEntities.ProductCategory>(entity =>
       {
         entity.ToTable("ProductCategories");
         entity.HasKey(e => new { e.ProductId, e.CategoryId });
 
-        entity.HasOne<Product>()
+        entity.HasOne<TenantEntities.Product>()
                   .WithMany(p => p.Categories)
                   .HasForeignKey(pc => pc.ProductId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-        entity.HasOne<Category>()
+        entity.HasOne<TenantEntities.Category>()
                   .WithMany(c => c.Products)
                   .HasForeignKey(pc => pc.CategoryId)
                   .OnDelete(DeleteBehavior.Cascade);
       });
 
-      modelBuilder.Entity<ProductImage>(entity =>
+      modelBuilder.Entity<TenantEntities.ProductImage>(entity =>
       {
         entity.ToTable("ProductImages");
         entity.HasKey(e => e.Id);
         entity.HasIndex(e => e.ProductId);
 
-        entity.HasOne<Product>()
+        entity.HasOne<TenantEntities.Product>()
                   .WithMany(p => p.Images)
                   .HasForeignKey(pi => pi.ProductId)
                   .OnDelete(DeleteBehavior.Cascade);
       });
 
-      modelBuilder.Entity<Banner>(entity =>
+      modelBuilder.Entity<TenantEntities.Banner>(entity =>
       {
         entity.ToTable("Banners");
         entity.HasKey(e => e.Id);
@@ -334,14 +397,14 @@ namespace CC.Infraestructure.Tenant
       #endregion
 
       #region Shopping Cart
-      modelBuilder.Entity<Cart>(entity =>
+      modelBuilder.Entity<TenantEntities.Cart>(entity =>
       {
         entity.ToTable("Carts");
         entity.HasKey(e => e.Id);
         entity.HasIndex(e => e.UserId);
       });
 
-      modelBuilder.Entity<CartItem>(entity =>
+      modelBuilder.Entity<TenantEntities.CartItem>(entity =>
       {
         entity.ToTable("CartItems");
         entity.HasKey(e => e.Id);
@@ -350,7 +413,7 @@ namespace CC.Infraestructure.Tenant
       #endregion
 
       #region Orders
-      modelBuilder.Entity<Order>(entity =>
+      modelBuilder.Entity<TenantEntities.Order>(entity =>
       {
         entity.ToTable("Orders");
         entity.HasKey(e => e.Id);
@@ -358,6 +421,7 @@ namespace CC.Infraestructure.Tenant
         entity.HasIndex(e => e.SessionId);
         entity.HasIndex(e => e.IdempotencyKey).IsUnique();
         entity.HasIndex(e => e.OrderNumber).IsUnique();
+        entity.HasIndex(e => e.StoreId); // NEW: Index for store lookup
         entity.Property(e => e.Total).HasPrecision(18, 2);
         entity.Property(e => e.Subtotal).HasPrecision(18, 2);
         entity.Property(e => e.Tax).HasPrecision(18, 2);
@@ -369,7 +433,7 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
       });
 
-      modelBuilder.Entity<OrderItem>(entity =>
+      modelBuilder.Entity<TenantEntities.OrderItem>(entity =>
       {
         entity.ToTable("OrderItems");
         entity.HasKey(e => e.Id);
@@ -378,11 +442,53 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.Subtotal).HasPrecision(18, 2);
       });
 
-      modelBuilder.Entity<OrderStatus>(entity =>
+      modelBuilder.Entity<TenantEntities.OrderStatus>(entity =>
       {
         entity.ToTable("OrderStatuses");
         entity.HasKey(e => e.Id);
         entity.HasIndex(e => e.Code).IsUnique();
+      });
+      #endregion
+
+      #region Stores & Inventory
+      modelBuilder.Entity<TenantEntities.Store>(entity =>
+      {
+        entity.ToTable("Stores");
+        entity.HasKey(e => e.Id);
+
+        // Unique code constraint (when not null)
+        entity.HasIndex(e => e.Code)
+              .IsUnique()
+              .HasFilter("\"Code\" IS NOT NULL")
+              .HasDatabaseName("UQ_Stores_Code");
+
+        entity.HasIndex(e => e.IsActive).HasDatabaseName("IX_Stores_IsActive");
+        entity.HasIndex(e => e.IsDefault).HasDatabaseName("IX_Stores_IsDefault");
+
+        entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+        entity.Property(e => e.Code).HasMaxLength(50);
+        entity.Property(e => e.Address).HasMaxLength(500);
+        entity.Property(e => e.City).HasMaxLength(100);
+        entity.Property(e => e.Country).HasMaxLength(100);
+        entity.Property(e => e.Phone).HasMaxLength(20);
+      });
+
+      modelBuilder.Entity<TenantEntities.ProductStoreStock>(entity =>
+      {
+        entity.ToTable("ProductStoreStock");
+        entity.HasKey(e => e.Id);
+
+        // Unique constraint: one record per product per store
+        entity.HasIndex(e => new { e.ProductId, e.StoreId })
+              .IsUnique()
+              .HasDatabaseName("UQ_ProductStoreStock_ProductStore");
+
+        entity.HasIndex(e => e.ProductId).HasDatabaseName("IX_ProductStoreStock_ProductId");
+        entity.HasIndex(e => e.StoreId).HasDatabaseName("IX_ProductStoreStock_StoreId");
+
+        entity.Property(e => e.Stock).IsRequired();
+        entity.Property(e => e.ReservedStock).IsRequired();
+        entity.Property(e => e.UpdatedAt).IsRequired();
       });
       #endregion
     }

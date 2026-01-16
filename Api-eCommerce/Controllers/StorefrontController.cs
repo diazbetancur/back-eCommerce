@@ -1,86 +1,47 @@
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
-namespace Api_eCommerce.Endpoints
+namespace Api_eCommerce.Controllers
 {
   /// <summary>
   /// Endpoints públicos del storefront (no requieren autenticación).
   /// Usados por la PWA/Web del cliente para mostrar el catálogo.
   /// Requieren X-Tenant-Slug para resolver el tenant.
   /// </summary>
-  public static class StorefrontEndpoints
+  [ApiController]
+  [Route("api/store")]
+  [AllowAnonymous]
+  [Tags("Storefront (Public)")]
+  public class StorefrontController : ControllerBase
   {
-    public static IEndpointRouteBuilder MapStorefrontEndpoints(this IEndpointRouteBuilder app)
+    private readonly TenantDbContextFactory _dbFactory;
+    private readonly ITenantResolver _tenantResolver;
+
+    public StorefrontController(
+        TenantDbContextFactory dbFactory,
+        ITenantResolver tenantResolver)
     {
-      var group = app.MapGroup("/api/store")
-          .WithTags("Storefront (Public)")
-          .AllowAnonymous();
-
-      // ==================== BANNERS ====================
-      group.MapGet("/banners", GetBanners)
-          .WithName("GetStoreBanners")
-          .WithSummary("Get active banners for the store")
-          .WithDescription("Returns banners filtered by position, respecting date range scheduling")
-          .Produces<List<StoreBannerDto>>(StatusCodes.Status200OK);
-
-      // ==================== CATEGORIES ====================
-      group.MapGet("/categories", GetCategories)
-          .WithName("GetStoreCategories")
-          .WithSummary("Get category tree")
-          .WithDescription("Returns all active categories with hierarchy (parent/children)")
-          .Produces<List<StoreCategoryDto>>(StatusCodes.Status200OK);
-
-      group.MapGet("/categories/{slug}", GetCategoryBySlug)
-          .WithName("GetCategoryBySlug")
-          .WithSummary("Get category by slug")
-          .Produces<StoreCategoryDetailDto>(StatusCodes.Status200OK)
-          .Produces(StatusCodes.Status404NotFound);
-
-      // ==================== PRODUCTS ====================
-      group.MapGet("/products", GetProducts)
-          .WithName("GetStoreProducts")
-          .WithSummary("Get products with filters and pagination")
-          .WithDescription("Filter by category, search, price range, featured, etc.")
-          .Produces<StoreProductListResponse>(StatusCodes.Status200OK);
-
-      group.MapGet("/products/featured", GetFeaturedProducts)
-          .WithName("GetFeaturedProducts")
-          .WithSummary("Get featured products for homepage")
-          .Produces<List<StoreProductDto>>(StatusCodes.Status200OK);
-
-      group.MapGet("/products/search", SearchProducts)
-          .WithName("SearchStoreProducts")
-          .WithSummary("Typeahead/autocomplete search")
-          .WithDescription("Returns products matching the query (name, tags, sku)")
-          .Produces<List<StoreProductSearchResult>>(StatusCodes.Status200OK);
-
-      group.MapGet("/products/{slug}", GetProductBySlug)
-          .WithName("GetProductBySlug")
-          .WithSummary("Get product detail by slug")
-          .Produces<StoreProductDetailDto>(StatusCodes.Status200OK)
-          .Produces(StatusCodes.Status404NotFound);
-
-      return app;
+      _dbFactory = dbFactory;
+      _tenantResolver = tenantResolver;
     }
 
-    // ==================== BANNER HANDLERS ====================
+    // ==================== BANNERS ====================
 
-    private static async Task<IResult> GetBanners(
-        HttpContext context,
-        TenantDbContextFactory dbFactory,
-        ITenantResolver tenantResolver,
-        [FromQuery] BannerPosition? position = null)
+    /// <summary>
+    /// Get active banners for the store
+    /// </summary>
+    [HttpGet("banners")]
+    [ProducesResponseType(typeof(List<StoreBannerDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetBanners([FromQuery] BannerPosition? position = null)
     {
-      var tenant = await tenantResolver.ResolveAsync(context);
-      if (tenant == null) return Results.Problem(statusCode: 400, detail: "Tenant not resolved");
+      var tenant = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenant == null) return Problem(statusCode: 400, detail: "Tenant not resolved");
 
-      await using var db = dbFactory.Create();
+      await using var db = _dbFactory.Create();
       var now = DateTime.UtcNow;
 
       var query = db.Banners
@@ -109,21 +70,22 @@ namespace Api_eCommerce.Endpoints
           })
           .ToListAsync();
 
-      return Results.Ok(banners);
+      return Ok(banners);
     }
 
-    // ==================== CATEGORY HANDLERS ====================
+    // ==================== CATEGORIES ====================
 
-    private static async Task<IResult> GetCategories(
-        HttpContext context,
-        TenantDbContextFactory dbFactory,
-        ITenantResolver tenantResolver,
-        [FromQuery] bool includeInactive = false)
+    /// <summary>
+    /// Get category tree
+    /// </summary>
+    [HttpGet("categories")]
+    [ProducesResponseType(typeof(List<StoreCategoryDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCategories([FromQuery] bool includeInactive = false)
     {
-      var tenant = await tenantResolver.ResolveAsync(context);
-      if (tenant == null) return Results.Problem(statusCode: 400, detail: "Tenant not resolved");
+      var tenant = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenant == null) return Problem(statusCode: 400, detail: "Tenant not resolved");
 
-      await using var db = dbFactory.Create();
+      await using var db = _dbFactory.Create();
 
       var query = db.Categories
           .AsNoTracking()
@@ -141,19 +103,21 @@ namespace Api_eCommerce.Endpoints
           .ToListAsync();
 
       var result = categories.Select(c => MapCategoryToDto(c, includeInactive)).ToList();
-      return Results.Ok(result);
+      return Ok(result);
     }
 
-    private static async Task<IResult> GetCategoryBySlug(
-        string slug,
-        HttpContext context,
-        TenantDbContextFactory dbFactory,
-        ITenantResolver tenantResolver)
+    /// <summary>
+    /// Get category by slug
+    /// </summary>
+    [HttpGet("categories/{slug}")]
+    [ProducesResponseType(typeof(StoreCategoryDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetCategoryBySlug(string slug)
     {
-      var tenant = await tenantResolver.ResolveAsync(context);
-      if (tenant == null) return Results.Problem(statusCode: 400, detail: "Tenant not resolved");
+      var tenant = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenant == null) return Problem(statusCode: 400, detail: "Tenant not resolved");
 
-      await using var db = dbFactory.Create();
+      await using var db = _dbFactory.Create();
 
       var category = await db.Categories
           .AsNoTracking()
@@ -162,13 +126,13 @@ namespace Api_eCommerce.Endpoints
           .FirstOrDefaultAsync(c => c.Slug == slug.ToLower() && c.IsActive);
 
       if (category == null)
-        return Results.NotFound(new { error = "Category not found", slug });
+        return NotFound(new { error = "Category not found", slug });
 
       // Obtener productos de la categoría
       var productCount = await db.ProductCategories
           .CountAsync(pc => pc.CategoryId == category.Id);
 
-      return Results.Ok(new StoreCategoryDetailDto
+      return Ok(new StoreCategoryDetailDto
       {
         Id = category.Id,
         Name = category.Name,
@@ -194,12 +158,14 @@ namespace Api_eCommerce.Endpoints
       });
     }
 
-    // ==================== PRODUCT HANDLERS ====================
+    // ==================== PRODUCTS ====================
 
-    private static async Task<IResult> GetProducts(
-        HttpContext context,
-        TenantDbContextFactory dbFactory,
-        ITenantResolver tenantResolver,
+    /// <summary>
+    /// Get products with filters and pagination
+    /// </summary>
+    [HttpGet("products")]
+    [ProducesResponseType(typeof(StoreProductListResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetProducts(
         [FromQuery] string? category = null,      // slug de categoría
         [FromQuery] string? search = null,        // búsqueda general
         [FromQuery] decimal? minPrice = null,
@@ -212,10 +178,10 @@ namespace Api_eCommerce.Endpoints
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
     {
-      var tenant = await tenantResolver.ResolveAsync(context);
-      if (tenant == null) return Results.Problem(statusCode: 400, detail: "Tenant not resolved");
+      var tenant = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenant == null) return Problem(statusCode: 400, detail: "Tenant not resolved");
 
-      await using var db = dbFactory.Create();
+      await using var db = _dbFactory.Create();
 
       // Query base - solo productos activos
       var query = db.Products
@@ -231,11 +197,11 @@ namespace Api_eCommerce.Endpoints
 
         if (categoryEntity != null)
         {
-          var productIds = db.ProductCategories
+          var categoryProductIds = db.ProductCategories
               .Where(pc => pc.CategoryId == categoryEntity.Id)
               .Select(pc => pc.ProductId);
 
-          query = query.Where(p => productIds.Contains(p.Id));
+          query = query.Where(p => categoryProductIds.Contains(p.Id));
         }
       }
 
@@ -288,25 +254,58 @@ namespace Api_eCommerce.Endpoints
       pageSize = Math.Min(pageSize, 50); // Máximo 50 por página
       var skip = (page - 1) * pageSize;
 
-      var products = await query
+      // Obtener productos con sus IDs para luego cargar las categorías
+      var productData = await query
           .Skip(skip)
           .Take(pageSize)
-          .Select(p => new StoreProductDto
+          .Select(p => new
           {
-            Id = p.Id,
-            Name = p.Name,
-            Slug = p.Slug,
-            ShortDescription = p.ShortDescription,
-            Price = p.Price,
-            CompareAtPrice = p.CompareAtPrice,
-            MainImageUrl = p.MainImageUrl,
-            Brand = p.Brand,
-            InStock = !p.TrackInventory || p.Stock > 0,
-            IsFeatured = p.IsFeatured
+            p.Id,
+            p.Name,
+            p.Slug,
+            p.ShortDescription,
+            p.Price,
+            p.CompareAtPrice,
+            p.MainImageUrl,
+            p.Brand,
+            p.TrackInventory,
+            p.Stock,
+            p.IsFeatured
           })
           .ToListAsync();
 
-      return Results.Ok(new StoreProductListResponse
+      var productIds = productData.Select(p => p.Id).ToList();
+
+      // Cargar las categorías de los productos
+      var productCategories = await db.ProductCategories
+          .AsNoTracking()
+          .Where(pc => productIds.Contains(pc.ProductId))
+          .Join(db.Categories,
+              pc => pc.CategoryId,
+              c => c.Id,
+              (pc, c) => new { pc.ProductId, c.Name, c.Slug })
+          .ToListAsync();
+
+      // Mapear a DTOs con categorías
+      var products = productData.Select(p => new StoreProductDto
+      {
+        Id = p.Id,
+        Name = p.Name,
+        Slug = p.Slug,
+        ShortDescription = p.ShortDescription,
+        Price = p.Price,
+        CompareAtPrice = p.CompareAtPrice,
+        MainImageUrl = p.MainImageUrl,
+        Brand = p.Brand,
+        InStock = !p.TrackInventory || p.Stock > 0,
+        IsFeatured = p.IsFeatured,
+        Categories = productCategories
+            .Where(pc => pc.ProductId == p.Id)
+            .Select(pc => new StoreCategoryRefDto { Name = pc.Name, Slug = pc.Slug })
+            .ToList()
+      }).ToList();
+
+      return Ok(new StoreProductListResponse
       {
         Items = products,
         Page = page,
@@ -316,61 +315,91 @@ namespace Api_eCommerce.Endpoints
       });
     }
 
-    private static async Task<IResult> GetFeaturedProducts(
-        HttpContext context,
-        TenantDbContextFactory dbFactory,
-        ITenantResolver tenantResolver,
-        [FromQuery] int limit = 8)
+    /// <summary>
+    /// Get featured products for homepage
+    /// </summary>
+    [HttpGet("products/featured")]
+    [ProducesResponseType(typeof(List<StoreProductDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetFeaturedProducts([FromQuery] int limit = 8)
     {
-      var tenant = await tenantResolver.ResolveAsync(context);
-      if (tenant == null) return Results.Problem(statusCode: 400, detail: "Tenant not resolved");
+      var tenant = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenant == null) return Problem(statusCode: 400, detail: "Tenant not resolved");
 
-      await using var db = dbFactory.Create();
+      await using var db = _dbFactory.Create();
 
       limit = Math.Min(limit, 20); // Máximo 20
 
-      var products = await db.Products
+      var productData = await db.Products
           .AsNoTracking()
           .Where(p => p.IsActive && p.IsFeatured)
           .OrderByDescending(p => p.CreatedAt)
           .Take(limit)
-          .Select(p => new StoreProductDto
+          .Select(p => new
           {
-            Id = p.Id,
-            Name = p.Name,
-            Slug = p.Slug,
-            ShortDescription = p.ShortDescription,
-            Price = p.Price,
-            CompareAtPrice = p.CompareAtPrice,
-            MainImageUrl = p.MainImageUrl,
-            Brand = p.Brand,
-            InStock = !p.TrackInventory || p.Stock > 0,
-            IsFeatured = true
+            p.Id,
+            p.Name,
+            p.Slug,
+            p.ShortDescription,
+            p.Price,
+            p.CompareAtPrice,
+            p.MainImageUrl,
+            p.Brand,
+            p.TrackInventory,
+            p.Stock
           })
           .ToListAsync();
 
-      return Results.Ok(products);
+      var productIds = productData.Select(p => p.Id).ToList();
+
+      // Cargar las categorías de los productos
+      var productCategories = await db.ProductCategories
+          .AsNoTracking()
+          .Where(pc => productIds.Contains(pc.ProductId))
+          .Join(db.Categories,
+              pc => pc.CategoryId,
+              c => c.Id,
+              (pc, c) => new { pc.ProductId, c.Name, c.Slug })
+          .ToListAsync();
+
+      var products = productData.Select(p => new StoreProductDto
+      {
+        Id = p.Id,
+        Name = p.Name,
+        Slug = p.Slug,
+        ShortDescription = p.ShortDescription,
+        Price = p.Price,
+        CompareAtPrice = p.CompareAtPrice,
+        MainImageUrl = p.MainImageUrl,
+        Brand = p.Brand,
+        InStock = !p.TrackInventory || p.Stock > 0,
+        IsFeatured = true,
+        Categories = productCategories
+            .Where(pc => pc.ProductId == p.Id)
+            .Select(pc => new StoreCategoryRefDto { Name = pc.Name, Slug = pc.Slug })
+            .ToList()
+      }).ToList();
+
+      return Ok(products);
     }
 
     /// <summary>
-    /// Typeahead/Autocomplete search - optimizado para respuesta rápida
+    /// Typeahead/autocomplete search
     /// </summary>
-    private static async Task<IResult> SearchProducts(
-        HttpContext context,
-        TenantDbContextFactory dbFactory,
-        ITenantResolver tenantResolver,
+    [HttpGet("products/search")]
+    [ProducesResponseType(typeof(List<StoreProductSearchResult>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SearchProducts(
         [FromQuery] string q,
         [FromQuery] int limit = 10)
     {
       if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
       {
-        return Results.Ok(new List<StoreProductSearchResult>());
+        return Ok(new List<StoreProductSearchResult>());
       }
 
-      var tenant = await tenantResolver.ResolveAsync(context);
-      if (tenant == null) return Results.Problem(statusCode: 400, detail: "Tenant not resolved");
+      var tenant = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenant == null) return Problem(statusCode: 400, detail: "Tenant not resolved");
 
-      await using var db = dbFactory.Create();
+      await using var db = _dbFactory.Create();
 
       limit = Math.Min(limit, 20);
       var searchLower = q.ToLower().Trim();
@@ -397,19 +426,21 @@ namespace Api_eCommerce.Endpoints
           })
           .ToListAsync();
 
-      return Results.Ok(products);
+      return Ok(products);
     }
 
-    private static async Task<IResult> GetProductBySlug(
-        string slug,
-        HttpContext context,
-        TenantDbContextFactory dbFactory,
-        ITenantResolver tenantResolver)
+    /// <summary>
+    /// Get product detail by slug
+    /// </summary>
+    [HttpGet("products/{slug}")]
+    [ProducesResponseType(typeof(StoreProductDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetProductBySlug(string slug)
     {
-      var tenant = await tenantResolver.ResolveAsync(context);
-      if (tenant == null) return Results.Problem(statusCode: 400, detail: "Tenant not resolved");
+      var tenant = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenant == null) return Problem(statusCode: 400, detail: "Tenant not resolved");
 
-      await using var db = dbFactory.Create();
+      await using var db = _dbFactory.Create();
 
       var product = await db.Products
           .AsNoTracking()
@@ -418,7 +449,7 @@ namespace Api_eCommerce.Endpoints
           .FirstOrDefaultAsync(p => p.Slug == slug.ToLower() && p.IsActive);
 
       if (product == null)
-        return Results.NotFound(new { error = "Product not found", slug });
+        return NotFound(new { error = "Product not found", slug });
 
       // Obtener categorías
       var categoryIds = product.Categories?.Select(pc => pc.CategoryId).ToList() ?? new();
@@ -428,7 +459,7 @@ namespace Api_eCommerce.Endpoints
           .Select(c => new { c.Name, c.Slug })
           .ToListAsync();
 
-      return Results.Ok(new StoreProductDetailDto
+      return Ok(new StoreProductDetailDto
       {
         Id = product.Id,
         Name = product.Name,
@@ -541,6 +572,7 @@ namespace Api_eCommerce.Endpoints
     public string? Brand { get; init; }
     public bool InStock { get; init; }
     public bool IsFeatured { get; init; }
+    public List<StoreCategoryRefDto> Categories { get; init; } = new();
   }
 
   public record StoreProductDetailDto

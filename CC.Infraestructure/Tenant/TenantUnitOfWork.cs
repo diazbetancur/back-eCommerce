@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using CC.Domain.Favorites;
 using CC.Domain.Interfaces.Repositories;
-using CC.Domain.Loyalty;
+using DomainEntities = CC.Domain.Entities;
 using CC.Domain.Users;
-using CC.Infraestructure.Tenant.Entities;
+using TenantEntities = CC.Infraestructure.Tenant.Entities;
 using CC.Infraestructure.Tenant.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -24,26 +24,28 @@ namespace CC.Infraestructure.Tenant
     private bool _disposed;
 
     #region Lazy-loaded Repositories
-    private ITenantRepository<User>? _users;
-    private ITenantRepository<Role>? _roles;
-    private ITenantRepository<UserRole>? _userRoles;
-    private ITenantRepository<Module>? _modules;
-    private ITenantRepository<RoleModulePermission>? _roleModulePermissions;
+    private ITenantRepository<TenantEntities.User>? _users;
+    private ITenantRepository<TenantEntities.Role>? _roles;
+    private ITenantRepository<TenantEntities.UserRole>? _userRoles;
+    private ITenantRepository<TenantEntities.Module>? _modules;
+    private ITenantRepository<TenantEntities.RoleModulePermission>? _roleModulePermissions;
     private ITenantRepository<UserProfile>? _userProfiles;
-    private ITenantRepository<Product>? _products;
-    private ITenantRepository<Category>? _categories;
-    private ITenantRepository<ProductCategory>? _productCategories;
-    private ITenantRepository<ProductImage>? _productImages;
-    private ITenantRepository<Cart>? _carts;
-    private ITenantRepository<CartItem>? _cartItems;
-    private ITenantRepository<Order>? _orders;
-    private ITenantRepository<OrderItem>? _orderItems;
-    private ITenantRepository<OrderStatus>? _orderStatuses;
+    private ITenantRepository<TenantEntities.Product>? _products;
+    private ITenantRepository<TenantEntities.Category>? _categories;
+    private ITenantRepository<TenantEntities.ProductCategory>? _productCategories;
+    private ITenantRepository<TenantEntities.ProductImage>? _productImages;
+    private ITenantRepository<TenantEntities.Cart>? _carts;
+    private ITenantRepository<TenantEntities.CartItem>? _cartItems;
+    private ITenantRepository<TenantEntities.Order>? _orders;
+    private ITenantRepository<TenantEntities.OrderItem>? _orderItems;
+    private ITenantRepository<TenantEntities.OrderStatus>? _orderStatuses;
     private ITenantRepository<FavoriteProduct>? _favoriteProducts;
-    private ITenantRepository<LoyaltyAccount>? _loyaltyAccounts;
-    private ITenantRepository<LoyaltyTransaction>? _loyaltyTransactions;
-    private ITenantRepository<TenantSetting>? _settings;
-    private ITenantRepository<WebPushSubscription>? _webPushSubscriptions;
+    private ITenantRepository<DomainEntities.LoyaltyAccount>? _loyaltyAccounts;
+    private ITenantRepository<DomainEntities.LoyaltyTransaction>? _loyaltyTransactions;
+    private ITenantRepository<TenantEntities.TenantSetting>? _settings;
+    private ITenantRepository<TenantEntities.WebPushSubscription>? _webPushSubscriptions;
+    private ITenantRepository<TenantEntities.Store>? _stores;
+    private ITenantRepository<TenantEntities.ProductStoreStock>? _productStoreStock;
     #endregion
 
     public TenantUnitOfWork(TenantDbContext context, ILogger<TenantUnitOfWork> logger)
@@ -53,20 +55,20 @@ namespace CC.Infraestructure.Tenant
     }
 
     #region Authentication & Authorization
-    public ITenantRepository<User> Users =>
-        _users ??= new TenantRepository<User>(_context);
+    public ITenantRepository<TenantEntities.User> Users =>
+        _users ??= new TenantRepository<TenantEntities.User>(_context);
 
-    public ITenantRepository<Role> Roles =>
-        _roles ??= new TenantRepository<Role>(_context);
+    public ITenantRepository<TenantEntities.Role> Roles =>
+        _roles ??= new TenantRepository<TenantEntities.Role>(_context);
 
-    public ITenantRepository<UserRole> UserRoles =>
-        _userRoles ??= new TenantRepository<UserRole>(_context);
+    public ITenantRepository<TenantEntities.UserRole> UserRoles =>
+        _userRoles ??= new TenantRepository<TenantEntities.UserRole>(_context);
 
-    public ITenantRepository<Module> Modules =>
-        _modules ??= new TenantRepository<Module>(_context);
+    public ITenantRepository<TenantEntities.Module> Modules =>
+        _modules ??= new TenantRepository<TenantEntities.Module>(_context);
 
-    public ITenantRepository<RoleModulePermission> RoleModulePermissions =>
-        _roleModulePermissions ??= new TenantRepository<RoleModulePermission>(_context);
+    public ITenantRepository<TenantEntities.RoleModulePermission> RoleModulePermissions =>
+        _roleModulePermissions ??= new TenantRepository<TenantEntities.RoleModulePermission>(_context);
     #endregion
 
     #region User Profiles (Extended Data)
@@ -75,36 +77,36 @@ namespace CC.Infraestructure.Tenant
     #endregion
 
     #region Catalog
-    public ITenantRepository<Product> Products =>
-        _products ??= new TenantRepository<Product>(_context);
+    public ITenantRepository<TenantEntities.Product> Products =>
+        _products ??= new TenantRepository<TenantEntities.Product>(_context);
 
-    public ITenantRepository<Category> Categories =>
-        _categories ??= new TenantRepository<Category>(_context);
+    public ITenantRepository<TenantEntities.Category> Categories =>
+        _categories ??= new TenantRepository<TenantEntities.Category>(_context);
 
-    public ITenantRepository<ProductCategory> ProductCategories =>
-        _productCategories ??= new TenantRepository<ProductCategory>(_context);
+    public ITenantRepository<TenantEntities.ProductCategory> ProductCategories =>
+        _productCategories ??= new TenantRepository<TenantEntities.ProductCategory>(_context);
 
-    public ITenantRepository<ProductImage> ProductImages =>
-        _productImages ??= new TenantRepository<ProductImage>(_context);
+    public ITenantRepository<TenantEntities.ProductImage> ProductImages =>
+        _productImages ??= new TenantRepository<TenantEntities.ProductImage>(_context);
     #endregion
 
     #region Shopping Cart
-    public ITenantRepository<Cart> Carts =>
-        _carts ??= new TenantRepository<Cart>(_context);
+    public ITenantRepository<TenantEntities.Cart> Carts =>
+        _carts ??= new TenantRepository<TenantEntities.Cart>(_context);
 
-    public ITenantRepository<CartItem> CartItems =>
-        _cartItems ??= new TenantRepository<CartItem>(_context);
+    public ITenantRepository<TenantEntities.CartItem> CartItems =>
+        _cartItems ??= new TenantRepository<TenantEntities.CartItem>(_context);
     #endregion
 
     #region Orders
-    public ITenantRepository<Order> Orders =>
-        _orders ??= new TenantRepository<Order>(_context);
+    public ITenantRepository<TenantEntities.Order> Orders =>
+        _orders ??= new TenantRepository<TenantEntities.Order>(_context);
 
-    public ITenantRepository<OrderItem> OrderItems =>
-        _orderItems ??= new TenantRepository<OrderItem>(_context);
+    public ITenantRepository<TenantEntities.OrderItem> OrderItems =>
+        _orderItems ??= new TenantRepository<TenantEntities.OrderItem>(_context);
 
-    public ITenantRepository<OrderStatus> OrderStatuses =>
-        _orderStatuses ??= new TenantRepository<OrderStatus>(_context);
+    public ITenantRepository<TenantEntities.OrderStatus> OrderStatuses =>
+        _orderStatuses ??= new TenantRepository<TenantEntities.OrderStatus>(_context);
     #endregion
 
     #region Favorites
@@ -113,19 +115,27 @@ namespace CC.Infraestructure.Tenant
     #endregion
 
     #region Loyalty Program
-    public ITenantRepository<LoyaltyAccount> LoyaltyAccounts =>
-        _loyaltyAccounts ??= new TenantRepository<LoyaltyAccount>(_context);
+    public ITenantRepository<DomainEntities.LoyaltyAccount> LoyaltyAccounts =>
+        _loyaltyAccounts ??= new TenantRepository<DomainEntities.LoyaltyAccount>(_context);
 
-    public ITenantRepository<LoyaltyTransaction> LoyaltyTransactions =>
-        _loyaltyTransactions ??= new TenantRepository<LoyaltyTransaction>(_context);
+    public ITenantRepository<DomainEntities.LoyaltyTransaction> LoyaltyTransactions =>
+        _loyaltyTransactions ??= new TenantRepository<DomainEntities.LoyaltyTransaction>(_context);
     #endregion
 
     #region Settings
-    public ITenantRepository<TenantSetting> Settings =>
-        _settings ??= new TenantRepository<TenantSetting>(_context);
+    public ITenantRepository<TenantEntities.TenantSetting> Settings =>
+        _settings ??= new TenantRepository<TenantEntities.TenantSetting>(_context);
 
-    public ITenantRepository<WebPushSubscription> WebPushSubscriptions =>
-        _webPushSubscriptions ??= new TenantRepository<WebPushSubscription>(_context);
+    public ITenantRepository<TenantEntities.WebPushSubscription> WebPushSubscriptions =>
+        _webPushSubscriptions ??= new TenantRepository<TenantEntities.WebPushSubscription>(_context);
+    #endregion
+
+    #region Stores & Inventory
+    public ITenantRepository<TenantEntities.Store> Stores =>
+        _stores ??= new TenantRepository<TenantEntities.Store>(_context);
+
+    public ITenantRepository<TenantEntities.ProductStoreStock> ProductStoreStock =>
+        _productStoreStock ??= new TenantRepository<TenantEntities.ProductStoreStock>(_context);
     #endregion
 
     #region DbContext Access

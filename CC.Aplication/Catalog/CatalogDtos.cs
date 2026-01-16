@@ -125,6 +125,11 @@ namespace CC.Aplication.Catalog
         [Required]
         [RegularExpression("^(CARD|CASH|TRANSFER)$")]
         public string PaymentMethod { get; set; } = "CARD";
+
+        /// <summary>
+        /// ID de la tienda que cumplirÃ¡ esta orden (opcional, null = usar stock legacy)
+        /// </summary>
+        public Guid? StoreId { get; set; }
     }
 
     public class PlaceOrderResponse
@@ -134,7 +139,7 @@ namespace CC.Aplication.Catalog
         public decimal Total { get; set; }
         public string Status { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
-        public int? LoyaltyPointsEarned { get; set; }  // Puntos ganados (si loyalty está habilitado)
+        public int? LoyaltyPointsEarned { get; set; }  // Puntos ganados (si loyalty estï¿½ habilitado)
     }
     #endregion
 }

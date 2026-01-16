@@ -8,7 +8,7 @@ namespace CC.Aplication.Catalog
   public interface ICategoryManagementService
   {
     Task<CategoryResponse> CreateAsync(CreateCategoryRequest request, CancellationToken ct = default);
-    Task<CategoryResponse> UpdateAsync(UpdateCategoryRequest request, CancellationToken ct = default);
+    Task<CategoryResponse> UpdateAsync(Guid id, UpdateCategoryRequest request, CancellationToken ct = default);
     Task DeleteAsync(Guid id, CancellationToken ct = default);
     Task<CategoryResponse?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<CategoryResponse?> GetBySlugAsync(string slug, CancellationToken ct = default);
@@ -77,19 +77,19 @@ namespace CC.Aplication.Catalog
           ?? throw new InvalidOperationException("Error al recuperar la categoría creada");
     }
 
-    public async Task<CategoryResponse> UpdateAsync(UpdateCategoryRequest request, CancellationToken ct = default)
+    public async Task<CategoryResponse> UpdateAsync(Guid id, UpdateCategoryRequest request, CancellationToken ct = default)
     {
       if (!_tenantAccessor.HasTenant)
         throw new InvalidOperationException("Tenant context not available");
 
       await using var db = _dbFactory.Create();
 
-      var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == request.Id, ct);
+      var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == id, ct);
       if (category == null)
         throw new InvalidOperationException("Categoría no encontrada");
 
       // Validar nombre único (excepto la misma categoría)
-      if (await db.Categories.AnyAsync(c => c.Name.ToLower() == request.Name.ToLower() && c.Id != request.Id, ct))
+      if (await db.Categories.AnyAsync(c => c.Name.ToLower() == request.Name.ToLower() && c.Id != id, ct))
       {
         throw new InvalidOperationException($"Ya existe otra categoría con el nombre '{request.Name}'");
       }
@@ -101,7 +101,7 @@ namespace CC.Aplication.Catalog
         var originalSlug = slug;
         var counter = 1;
 
-        while (await db.Categories.AnyAsync(c => c.Slug == slug && c.Id != request.Id, ct))
+        while (await db.Categories.AnyAsync(c => c.Slug == slug && c.Id != id, ct))
         {
           slug = $"{originalSlug}-{counter++}";
         }
@@ -112,7 +112,7 @@ namespace CC.Aplication.Catalog
       // Validar parent si se especifica
       if (request.ParentId.HasValue)
       {
-        if (request.ParentId.Value == request.Id)
+        if (request.ParentId.Value == id)
           throw new InvalidOperationException("Una categoría no puede ser su propio padre");
 
         var parentExists = await db.Categories.AnyAsync(c => c.Id == request.ParentId.Value, ct);
@@ -174,22 +174,29 @@ namespace CC.Aplication.Catalog
 
       var category = await db.Categories
           .Where(c => c.Id == id)
-          .Select(c => new CategoryResponse
-          {
-            Id = c.Id,
-            Name = c.Name,
-            Slug = c.Slug,
-            Description = c.Description,
-            ImageUrl = c.ImageUrl,
-            IsActive = c.IsActive,
-            ParentId = c.ParentId,
-            ProductCount = c.Products!.Count,
-            CreatedAt = DateTime.MinValue,
-            UpdatedAt = null
-          })
           .FirstOrDefaultAsync(ct);
 
-      return category;
+      if (category == null)
+        return null;
+
+      // Contar productos asociados explícitamente
+      var productCount = await db.ProductCategories
+          .Where(pc => pc.CategoryId == id)
+          .CountAsync(ct);
+
+      return new CategoryResponse
+      {
+        Id = category.Id,
+        Name = category.Name,
+        Slug = category.Slug,
+        Description = category.Description,
+        ImageUrl = category.ImageUrl,
+        IsActive = category.IsActive,
+        ParentId = category.ParentId,
+        ProductCount = productCount,
+        CreatedAt = DateTime.MinValue,
+        UpdatedAt = null
+      };
     }
 
     public async Task<CategoryResponse?> GetBySlugAsync(string slug, CancellationToken ct = default)
@@ -201,22 +208,29 @@ namespace CC.Aplication.Catalog
 
       var category = await db.Categories
           .Where(c => c.Slug == slug)
-          .Select(c => new CategoryResponse
-          {
-            Id = c.Id,
-            Name = c.Name,
-            Slug = c.Slug,
-            Description = c.Description,
-            ImageUrl = c.ImageUrl,
-            IsActive = c.IsActive,
-            ParentId = c.ParentId,
-            ProductCount = c.Products!.Count,
-            CreatedAt = DateTime.MinValue,
-            UpdatedAt = null
-          })
           .FirstOrDefaultAsync(ct);
 
-      return category;
+      if (category == null)
+        return null;
+
+      // Contar productos asociados explícitamente
+      var productCount = await db.ProductCategories
+          .Where(pc => pc.CategoryId == category.Id)
+          .CountAsync(ct);
+
+      return new CategoryResponse
+      {
+        Id = category.Id,
+        Name = category.Name,
+        Slug = category.Slug,
+        Description = category.Description,
+        ImageUrl = category.ImageUrl,
+        IsActive = category.IsActive,
+        ParentId = category.ParentId,
+        ProductCount = productCount,
+        CreatedAt = DateTime.MinValue,
+        UpdatedAt = null
+      };
     }
 
     public async Task<CategoryListResponse> GetAllAsync(
@@ -248,20 +262,30 @@ namespace CC.Aplication.Catalog
 
       var total = await query.CountAsync(ct);
 
-      var items = await query
+      var categories = await query
           .OrderBy(c => c.Name)
           .Skip((page - 1) * pageSize)
           .Take(pageSize)
-          .Select(c => new CategoryListItem
-          {
-            Id = c.Id,
-            Name = c.Name,
-            Slug = c.Slug,
-            ImageUrl = c.ImageUrl,
-            IsActive = c.IsActive,
-            ProductCount = c.Products!.Count
-          })
           .ToListAsync(ct);
+
+      // Contar productos para cada categoría
+      var items = new List<CategoryListItem>();
+      foreach (var cat in categories)
+      {
+        var productCount = await db.ProductCategories
+            .Where(pc => pc.CategoryId == cat.Id)
+            .CountAsync(ct);
+
+        items.Add(new CategoryListItem
+        {
+          Id = cat.Id,
+          Name = cat.Name,
+          Slug = cat.Slug,
+          ImageUrl = cat.ImageUrl,
+          IsActive = cat.IsActive,
+          ProductCount = productCount
+        });
+      }
 
       return new CategoryListResponse
       {

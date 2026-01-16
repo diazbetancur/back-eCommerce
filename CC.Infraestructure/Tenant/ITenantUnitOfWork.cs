@@ -1,8 +1,8 @@
 using CC.Domain.Favorites;
 using CC.Domain.Interfaces.Repositories;
-using CC.Domain.Loyalty;
+using DomainEntities = CC.Domain.Entities;
 using CC.Domain.Users;
-using CC.Infraestructure.Tenant.Entities;
+using TenantEntities = CC.Infraestructure.Tenant.Entities;
 
 namespace CC.Infraestructure.Tenant
 {
@@ -13,11 +13,11 @@ namespace CC.Infraestructure.Tenant
   public interface ITenantUnitOfWork : IAsyncDisposable, IDisposable
   {
     #region Authentication & Authorization
-    ITenantRepository<User> Users { get; }
-    ITenantRepository<Role> Roles { get; }
-    ITenantRepository<UserRole> UserRoles { get; }
-    ITenantRepository<Module> Modules { get; }
-    ITenantRepository<RoleModulePermission> RoleModulePermissions { get; }
+    ITenantRepository<TenantEntities.User> Users { get; }
+    ITenantRepository<TenantEntities.Role> Roles { get; }
+    ITenantRepository<TenantEntities.UserRole> UserRoles { get; }
+    ITenantRepository<TenantEntities.Module> Modules { get; }
+    ITenantRepository<TenantEntities.RoleModulePermission> RoleModulePermissions { get; }
     #endregion
 
     #region User Profiles (Extended Data)
@@ -25,21 +25,21 @@ namespace CC.Infraestructure.Tenant
     #endregion
 
     #region Catalog
-    ITenantRepository<Product> Products { get; }
-    ITenantRepository<Category> Categories { get; }
-    ITenantRepository<ProductCategory> ProductCategories { get; }
-    ITenantRepository<ProductImage> ProductImages { get; }
+    ITenantRepository<TenantEntities.Product> Products { get; }
+    ITenantRepository<TenantEntities.Category> Categories { get; }
+    ITenantRepository<TenantEntities.ProductCategory> ProductCategories { get; }
+    ITenantRepository<TenantEntities.ProductImage> ProductImages { get; }
     #endregion
 
     #region Shopping Cart
-    ITenantRepository<Cart> Carts { get; }
-    ITenantRepository<CartItem> CartItems { get; }
+    ITenantRepository<TenantEntities.Cart> Carts { get; }
+    ITenantRepository<TenantEntities.CartItem> CartItems { get; }
     #endregion
 
     #region Orders
-    ITenantRepository<Order> Orders { get; }
-    ITenantRepository<OrderItem> OrderItems { get; }
-    ITenantRepository<OrderStatus> OrderStatuses { get; }
+    ITenantRepository<TenantEntities.Order> Orders { get; }
+    ITenantRepository<TenantEntities.OrderItem> OrderItems { get; }
+    ITenantRepository<TenantEntities.OrderStatus> OrderStatuses { get; }
     #endregion
 
     #region Favorites
@@ -47,13 +47,18 @@ namespace CC.Infraestructure.Tenant
     #endregion
 
     #region Loyalty Program
-    ITenantRepository<LoyaltyAccount> LoyaltyAccounts { get; }
-    ITenantRepository<LoyaltyTransaction> LoyaltyTransactions { get; }
+    ITenantRepository<DomainEntities.LoyaltyAccount> LoyaltyAccounts { get; }
+    ITenantRepository<DomainEntities.LoyaltyTransaction> LoyaltyTransactions { get; }
     #endregion
 
     #region Settings
-    ITenantRepository<TenantSetting> Settings { get; }
-    ITenantRepository<WebPushSubscription> WebPushSubscriptions { get; }
+    ITenantRepository<TenantEntities.TenantSetting> Settings { get; }
+    ITenantRepository<TenantEntities.WebPushSubscription> WebPushSubscriptions { get; }
+    #endregion
+
+    #region Stores & Inventory
+    ITenantRepository<TenantEntities.Store> Stores { get; }
+    ITenantRepository<TenantEntities.ProductStoreStock> ProductStoreStock { get; }
     #endregion
 
     #region Database Operations

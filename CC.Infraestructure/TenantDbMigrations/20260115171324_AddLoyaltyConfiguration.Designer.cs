@@ -3,6 +3,7 @@ using System;
 using CC.Infraestructure.Tenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CC.Infraestructure.TenantDbMigrations
 {
     [DbContext(typeof(TenantDbContext))]
-    partial class TenantDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260115171324_AddLoyaltyConfiguration")]
+    partial class AddLoyaltyConfiguration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -23,13 +26,43 @@ namespace CC.Infraestructure.TenantDbMigrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyAccount", b =>
+            modelBuilder.Entity("CC.Domain.Favorites.FavoriteProduct", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("DateCreated")
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("IX_FavoriteProducts_ProductId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_FavoriteProducts_UserId");
+
+                    b.HasIndex("UserId", "ProductId")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_FavoriteProducts_UserId_ProductId");
+
+                    b.ToTable("FavoriteProducts", "public");
+                });
+
+            modelBuilder.Entity("CC.Domain.Loyalty.LoyaltyAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("PointsBalance")
@@ -50,36 +83,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.ToTable("LoyaltyAccounts", "public");
                 });
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyConfiguration", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("ConversionRate")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("DateCreated")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<decimal?>("MinPurchaseForPoints")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int?>("PointsExpirationDays")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("LoyaltyConfigurations", "public");
-                });
-
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyRedemption", b =>
+            modelBuilder.Entity("CC.Domain.Loyalty.LoyaltyRedemption", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -93,7 +97,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<DateTime>("DateCreated")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("DeliveredAt")
@@ -145,13 +149,13 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.ToTable("LoyaltyRedemptions", "public");
                 });
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyReward", b =>
+            modelBuilder.Entity("CC.Domain.Loyalty.LoyaltyReward", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("DateCreated")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
@@ -210,7 +214,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.ToTable("LoyaltyRewards", "public");
                 });
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyTransaction", b =>
+            modelBuilder.Entity("CC.Domain.Loyalty.LoyaltyTransaction", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -219,7 +223,7 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Property<decimal?>("ConversionRateUsed")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<DateTime>("DateCreated")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
@@ -245,7 +249,7 @@ namespace CC.Infraestructure.TenantDbMigrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DateCreated")
+                    b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_LoyaltyTransactions_CreatedAt");
 
                     b.HasIndex("LoyaltyAccountId")
@@ -257,36 +261,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasFilter("\"OrderId\" IS NOT NULL");
 
                     b.ToTable("LoyaltyTransactions", "public");
-                });
-
-            modelBuilder.Entity("CC.Domain.Favorites.FavoriteProduct", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProductId")
-                        .HasDatabaseName("IX_FavoriteProducts_ProductId");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_FavoriteProducts_UserId");
-
-                    b.HasIndex("UserId", "ProductId")
-                        .IsUnique()
-                        .HasDatabaseName("UQ_FavoriteProducts_UserId_ProductId");
-
-                    b.ToTable("FavoriteProducts", "public");
                 });
 
             modelBuilder.Entity("CC.Domain.Users.UserAccount", b =>
@@ -624,9 +598,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<Guid?>("StoreId")
-                        .HasColumnType("uuid");
-
                     b.Property<decimal>("Subtotal")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -651,8 +622,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .IsUnique();
 
                     b.HasIndex("SessionId");
-
-                    b.HasIndex("StoreId");
 
                     b.HasIndex("UserId");
 
@@ -846,42 +815,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.ToTable("ProductImages", "public");
                 });
 
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.ProductStoreStock", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("ReservedStock")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Stock")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("StoreId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProductId")
-                        .HasDatabaseName("IX_ProductStoreStock_ProductId");
-
-                    b.HasIndex("StoreId")
-                        .HasDatabaseName("IX_ProductStoreStock_StoreId");
-
-                    b.HasIndex("ProductId", "StoreId")
-                        .IsUnique()
-                        .HasDatabaseName("UQ_ProductStoreStock_ProductStore");
-
-                    b.ToTable("ProductStoreStock", "public");
-                });
-
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -944,65 +877,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasDatabaseName("UQ_RoleModulePermissions_RoleId_ModuleId");
 
                     b.ToTable("RoleModulePermissions", "public");
-                });
-
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Store", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Address")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("City")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Code")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Country")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDefault")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Phone")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique()
-                        .HasDatabaseName("UQ_Stores_Code")
-                        .HasFilter("\"Code\" IS NOT NULL");
-
-                    b.HasIndex("IsActive")
-                        .HasDatabaseName("IX_Stores_IsActive");
-
-                    b.HasIndex("IsDefault")
-                        .HasDatabaseName("IX_Stores_IsDefault");
-
-                    b.ToTable("Stores", "public");
                 });
 
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.TenantSetting", b =>
@@ -1124,15 +998,15 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.ToTable("WebPushSubscriptions", "public");
                 });
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyRedemption", b =>
+            modelBuilder.Entity("CC.Domain.Loyalty.LoyaltyRedemption", b =>
                 {
-                    b.HasOne("CC.Domain.Entities.LoyaltyAccount", "LoyaltyAccount")
+                    b.HasOne("CC.Domain.Loyalty.LoyaltyAccount", "LoyaltyAccount")
                         .WithMany()
                         .HasForeignKey("LoyaltyAccountId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("CC.Domain.Entities.LoyaltyReward", "Reward")
+                    b.HasOne("CC.Domain.Loyalty.LoyaltyReward", "Reward")
                         .WithMany("Redemptions")
                         .HasForeignKey("RewardId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -1143,9 +1017,9 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Navigation("Reward");
                 });
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyTransaction", b =>
+            modelBuilder.Entity("CC.Domain.Loyalty.LoyaltyTransaction", b =>
                 {
-                    b.HasOne("CC.Domain.Entities.LoyaltyAccount", "LoyaltyAccount")
+                    b.HasOne("CC.Domain.Loyalty.LoyaltyAccount", "LoyaltyAccount")
                         .WithMany("Transactions")
                         .HasForeignKey("LoyaltyAccountId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1184,15 +1058,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Navigation("Parent");
                 });
 
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.Order", b =>
-                {
-                    b.HasOne("CC.Infraestructure.Tenant.Entities.Store", "Store")
-                        .WithMany()
-                        .HasForeignKey("StoreId");
-
-                    b.Navigation("Store");
-                });
-
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.ProductCategory", b =>
                 {
                     b.HasOne("CC.Infraestructure.Tenant.Entities.Category", null)
@@ -1215,25 +1080,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.ProductStoreStock", b =>
-                {
-                    b.HasOne("CC.Infraestructure.Tenant.Entities.Product", "Product")
-                        .WithMany()
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("CC.Infraestructure.Tenant.Entities.Store", "Store")
-                        .WithMany()
-                        .HasForeignKey("StoreId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Product");
-
-                    b.Navigation("Store");
                 });
 
             modelBuilder.Entity("CC.Infraestructure.Tenant.Entities.RoleModulePermission", b =>
@@ -1274,12 +1120,12 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyAccount", b =>
+            modelBuilder.Entity("CC.Domain.Loyalty.LoyaltyAccount", b =>
                 {
                     b.Navigation("Transactions");
                 });
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyReward", b =>
+            modelBuilder.Entity("CC.Domain.Loyalty.LoyaltyReward", b =>
                 {
                     b.Navigation("Redemptions");
                 });

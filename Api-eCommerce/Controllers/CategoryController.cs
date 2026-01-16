@@ -235,17 +235,7 @@ namespace Api_eCommerce.Controllers
           );
         }
 
-        // Validar que el ID del path coincida con el del body
-        if (id != request.Id)
-        {
-          return Problem(
-              statusCode: StatusCodes.Status400BadRequest,
-              title: "ID Mismatch",
-              detail: "El ID de la URL no coincide con el ID del cuerpo de la petición"
-          );
-        }
-
-        var category = await _categoryService.UpdateAsync(request);
+        var category = await _categoryService.UpdateAsync(id, request);
         return Ok(category);
       }
       catch (InvalidOperationException ex)

@@ -1,5 +1,6 @@
 using CC.Aplication.Catalog;
 using CC.Aplication.Loyalty;
+using CC.Aplication.Stores;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -21,18 +22,21 @@ namespace CC.Aplication.Services
         private readonly IFeatureService _featureService;
         private readonly ILogger<CheckoutService> _logger;
         private readonly ILoyaltyService? _loyaltyService;
+        private readonly IStockService _stockService;
 
         public CheckoutService(
             TenantDbContextFactory dbFactory,
             IConfiguration configuration,
             IFeatureService featureService,
             ILogger<CheckoutService> logger,
+            IStockService stockService,
             ILoyaltyService? loyaltyService = null)
         {
             _dbFactory = dbFactory;
             _configuration = configuration;
             _featureService = featureService;
             _logger = logger;
+            _stockService = stockService;
             _loyaltyService = loyaltyService;
         }
 
@@ -100,7 +104,7 @@ namespace CC.Aplication.Services
 
         public async Task<PlaceOrderResponse> PlaceOrderAsync(string sessionId, PlaceOrderRequest request, Guid? userId = null, CancellationToken ct = default)
         {
-            // Verificar si el checkout como guest está permitido
+            // Verificar si el checkout como guest estï¿½ permitido
             if (!userId.HasValue)
             {
                 var allowGuestCheckout = await _featureService.IsEnabledAsync("AllowGuestCheckout", ct);
@@ -119,7 +123,7 @@ namespace CC.Aplication.Services
             if (existingOrder != null)
             {
                 _logger.LogWarning("Order already exists with idempotency key: {IdempotencyKey}", request.IdempotencyKey);
-                
+
                 return new PlaceOrderResponse
                 {
                     OrderId = existingOrder.Id,
@@ -141,12 +145,22 @@ namespace CC.Aplication.Services
                 throw new InvalidOperationException("Cart is empty");
             }
 
-            // Verificar límite de items del carrito (feature flag)
+            // Verificar lï¿½mite de items del carrito (feature flag)
             var maxCartItems = await _featureService.GetValueAsync("MaxCartItems", 100, ct);
             var totalItems = cart.Items.Sum(i => i.Quantity);
             if (totalItems > maxCartItems)
             {
                 throw new InvalidOperationException($"Cart exceeds maximum allowed items ({maxCartItems})");
+            }
+
+            // Validar tienda si se especificÃ³
+            if (request.StoreId.HasValue)
+            {
+                var store = await db.Stores.FindAsync(new object[] { request.StoreId.Value }, ct);
+                if (store == null || !store.IsActive)
+                {
+                    throw new InvalidOperationException($"Store with ID '{request.StoreId}' not found or is inactive");
+                }
             }
 
             // Calcular totales
@@ -161,10 +175,24 @@ namespace CC.Aplication.Services
                     throw new InvalidOperationException($"Product {item.ProductId} is not available");
                 }
 
-                if (product.Stock < item.Quantity)
+                // Verificar y reservar stock usando StockService (backward compatible)
+                var stockCheck = await _stockService.CheckStockAsync(
+                    item.ProductId,
+                    item.Quantity,
+                    request.StoreId,
+                    ct);
+
+                if (!stockCheck.IsAvailable)
                 {
-                    throw new InvalidOperationException($"Insufficient stock for {product.Name}. Available: {product.Stock}");
+                    throw new InvalidOperationException($"Insufficient stock for {product.Name}. {stockCheck.Message}");
                 }
+
+                // Reservar el stock
+                await _stockService.ReserveStockAsync(
+                    item.ProductId,
+                    item.Quantity,
+                    request.StoreId,
+                    ct);
 
                 var itemSubtotal = item.Price * item.Quantity;
                 subtotal += itemSubtotal;
@@ -178,15 +206,12 @@ namespace CC.Aplication.Services
                     Price = item.Price,
                     Subtotal = itemSubtotal
                 });
-
-                // Reducir stock
-                product.Stock -= item.Quantity;
             }
 
-            // Calcular impuesto y envío
+            // Calcular impuesto y envï¿½o
             var taxRateSetting = await db.Settings.FirstOrDefaultAsync(s => s.Key == "TaxRate", ct);
             var taxRate = taxRateSetting != null ? decimal.Parse(taxRateSetting.Value) : 0.15m;
-            
+
             var tax = subtotal * taxRate;
             var shipping = CalculateShipping(subtotal);
             var total = subtotal + tax + shipping;
@@ -209,6 +234,7 @@ namespace CC.Aplication.Services
                 Email = request.Email,
                 Phone = request.Phone,
                 PaymentMethod = request.PaymentMethod,
+                StoreId = request.StoreId, // Asignar tienda (nullable para backward compatibility)
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -221,25 +247,35 @@ namespace CC.Aplication.Services
                 db.OrderItems.Add(orderItem);
             }
 
+            // Decrementar stock definitivamente
+            foreach (var item in cart.Items)
+            {
+                await _stockService.DecrementStockAsync(
+                    item.ProductId,
+                    item.Quantity,
+                    request.StoreId,
+                    ct);
+            }
+
             // Limpiar carrito
             db.CartItems.RemoveRange(cart.Items);
 
             await db.SaveChangesAsync(ct);
 
-            _logger.LogInformation("Order placed: {OrderId} - {OrderNumber}. Total: {Total}", 
+            _logger.LogInformation("Order placed: {OrderId} - {OrderNumber}. Total: {Total}",
                 order.Id, order.OrderNumber, order.Total);
 
             // ==================== LOYALTY: Agregar puntos ====================
             int? loyaltyPointsEarned = null;
-            
+
             if (userId.HasValue && _loyaltyService != null)
             {
                 try
                 {
                     var pointsEarned = await _loyaltyService.AddPointsForOrderAsync(
-                        userId.Value, 
-                        order.Id, 
-                        order.Total, 
+                        userId.Value,
+                        order.Id,
+                        order.Total,
                         ct);
 
                     if (pointsEarned > 0)
@@ -253,7 +289,7 @@ namespace CC.Aplication.Services
                 catch (Exception ex)
                 {
                     // No fallar el checkout si falla loyalty
-                    _logger.LogError(ex, 
+                    _logger.LogError(ex,
                         "Failed to award loyalty points for order {OrderNumber}. Continuing with checkout.",
                         order.OrderNumber);
                 }
@@ -272,11 +308,11 @@ namespace CC.Aplication.Services
 
         private decimal CalculateShipping(decimal subtotal)
         {
-            // Envío gratis sobre $100
+            // Envï¿½o gratis sobre $100
             if (subtotal >= 100)
                 return 0;
 
-            // Envío fijo $10
+            // Envï¿½o fijo $10
             return 10m;
         }
 

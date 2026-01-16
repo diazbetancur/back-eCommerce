@@ -102,6 +102,11 @@ builder.Services.AddScoped<CC.Aplication.Plans.IPlanLimitService, CC.Aplication.
 builder.Services.AddScoped<CC.Aplication.Orders.IOrderService, CC.Aplication.Orders.OrderService>();
 builder.Services.AddScoped<CC.Aplication.Favorites.IFavoritesService, CC.Aplication.Favorites.FavoritesService>();
 builder.Services.AddScoped<CC.Aplication.Loyalty.ILoyaltyService, CC.Aplication.Loyalty.LoyaltyService>();
+builder.Services.AddScoped<CC.Aplication.Loyalty.ILoyaltyRewardsService, CC.Aplication.Loyalty.LoyaltyRewardsService>();
+
+// Store services (multi-location inventory)
+builder.Services.AddScoped<CC.Aplication.Stores.IStoreService, CC.Aplication.Stores.StoreService>();
+builder.Services.AddScoped<CC.Aplication.Stores.IStockService, CC.Aplication.Stores.StockService>();
 
 // ==================== SWAGGER ====================
 builder.Services.AddMultiTenantSwagger();
@@ -215,10 +220,10 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 app.MapPublicTenantConfig();
 
 // ==================== STOREFRONT ENDPOINTS (Public) ====================
+// ✅ MIGRADO: StorefrontController (público)
 // Endpoints públicos del catálogo que requieren X-Tenant-Slug pero NO autenticación
-// NOTA: El middleware TenantResolutionMiddleware ya se ejecuta globalmente
-var storefrontGroup = app.MapGroup("");
-storefrontGroup.MapGroup("").MapStorefrontEndpoints();
+// var storefrontGroup = app.MapGroup("");
+// storefrontGroup.MapGroup("").MapStorefrontEndpoints();
 
 // ==================== TENANT ENDPOINTS ====================
 // NOTA: El middleware TenantResolutionMiddleware ya se ejecuta globalmente

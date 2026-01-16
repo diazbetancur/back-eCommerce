@@ -22,7 +22,7 @@ namespace CC.Aplication.Loyalty
         string Type,              // EARN, REDEEM, ADJUST
         int Points,               // Positivo para earn, negativo para redeem
         string? Description,
-        string? OrderNumber,      // Si est� asociado a una orden
+        string? OrderNumber,      // Si est� asociado a una orden
         DateTime CreatedAt
     );
 
@@ -50,5 +50,30 @@ namespace CC.Aplication.Loyalty
         bool Enabled,
         int PointsPerCurrencyUnit,
         decimal CurrencyUnit
+    );
+
+    // ==================== CONFIGURATION DTOs ====================
+
+    /// <summary>
+    /// Configuración del programa de lealtad del tenant
+    /// </summary>
+    public record LoyaltyConfigDto(
+        Guid Id,
+        decimal ConversionRate,
+        int? PointsExpirationDays,
+        bool IsEnabled,
+        decimal? MinPurchaseForPoints,
+        DateTime CreatedAt,
+        DateTime? UpdatedAt
+    );
+
+    /// <summary>
+    /// Request para actualizar la configuración de lealtad
+    /// </summary>
+    public record UpdateLoyaltyConfigRequest(
+        decimal ConversionRate,
+        int? PointsExpirationDays,
+        bool IsEnabled,
+        decimal? MinPurchaseForPoints
     );
 }

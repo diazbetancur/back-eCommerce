@@ -124,5 +124,14 @@ namespace CC.Infraestructure.Tenant.Entities
         public string PaymentMethod { get; set; } = "CARD";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? CompletedAt { get; set; }
+
+        /// <summary>
+        /// Store that fulfills this order (optional for backward compatibility)
+        /// If null, uses legacy stock management
+        /// </summary>
+        public Guid? StoreId { get; set; }
+
+        // Navigation property
+        public Store? Store { get; set; }
     }
 }
