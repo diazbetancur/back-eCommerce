@@ -124,6 +124,13 @@ namespace Api_eCommerce.Endpoints
                 .WithMetadata(new RequireModuleAttribute("settings", "update"))
                 .Produces<SocialSettingsDto>(StatusCodes.Status200OK);
 
+            // ==================== FIX MISSING MODULES (TEMPORAL) ====================
+            group.MapPost("/fix-modules", FixMissingModulesAndPermissions)
+                .WithName("AdminFixModules")
+                .WithSummary("🔧 Fix missing modules and permissions (temporary endpoint)")
+                .WithMetadata(new RequireModuleAttribute("permissions", "update"))
+                .Produces(StatusCodes.Status200OK);
+
             return group;
         }
 
@@ -1163,6 +1170,142 @@ namespace Api_eCommerce.Endpoints
         public SocialSettingsDto? Social { get; set; }
         public LocaleSettingsDto? Locale { get; set; }
         public SeoSettingsDto? Seo { get; set; }
+    }
+
+    #endregion
+
+    #region Fix Missing Modules and Permissions
+
+    /// <summary>
+    /// 🔧 ENDPOINT TEMPORAL: Actualiza módulos y permisos faltantes en tenants existentes
+    /// Usar cuando un tenant fue creado antes de que existieran los módulos de loyalty o inventory
+    /// </summary>
+    private static async Task<IResult> FixMissingModulesAndPermissions(
+        HttpContext context,
+        [FromServices] TenantDbContext tenantDb,
+        [FromServices] ILogger<Program> logger)
+    {
+        var tenantSlug = context.Request.Headers["X-Tenant-Slug"].ToString();
+        logger.LogInformation("🔧 Fixing missing modules and permissions for tenant: {TenantSlug}", tenantSlug);
+
+        var results = new List<string>();
+
+        // 1. Verificar y crear módulos faltantes
+        var existingModuleCodes = await tenantDb.Modules.Select(m => m.Code).ToListAsync();
+        var requiredModules = new[]
+        {
+            new { Code = "loyalty", Name = "Programa de Lealtad", Description = "Gestión de puntos y recompensas", IconName = "star" },
+            new { Code = "inventory", Name = "Inventario", Description = "Gestión de tiendas y stock multi-ubicación", IconName = "warehouse" }
+        };
+
+        var newModules = new List<Module>();
+        foreach (var moduleData in requiredModules)
+        {
+            if (!existingModuleCodes.Contains(moduleData.Code))
+            {
+                var module = new Module
+                {
+                    Id = Guid.NewGuid(),
+                    Code = moduleData.Code,
+                    Name = moduleData.Name,
+                    Description = moduleData.Description,
+                    IconName = moduleData.IconName,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                newModules.Add(module);
+                tenantDb.Modules.Add(module);
+                results.Add($"✅ Módulo '{moduleData.Code}' creado");
+            }
+            else
+            {
+                results.Add($"⏭️ Módulo '{moduleData.Code}' ya existe");
+            }
+        }
+
+        await tenantDb.SaveChangesAsync();
+
+        // 2. Obtener todos los módulos actualizados
+        var allModules = await tenantDb.Modules.ToListAsync();
+        var superAdminRole = await tenantDb.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
+        var customerRole = await tenantDb.Roles.FirstOrDefaultAsync(r => r.Name == "Customer");
+
+        if (superAdminRole == null || customerRole == null)
+        {
+            return Results.BadRequest(new { error = "Roles SuperAdmin o Customer no encontrados" });
+        }
+
+        // 3. Verificar y crear permisos faltantes para SuperAdmin
+        var existingPermissions = await tenantDb.RoleModulePermissions
+            .Where(p => p.RoleId == superAdminRole.Id)
+            .Select(p => p.ModuleId)
+            .ToListAsync();
+
+        var newPermissions = new List<RoleModulePermission>();
+
+        foreach (var module in allModules)
+        {
+            if (!existingPermissions.Contains(module.Id))
+            {
+                // SuperAdmin: acceso completo
+                newPermissions.Add(new RoleModulePermission
+                {
+                    Id = Guid.NewGuid(),
+                    RoleId = superAdminRole.Id,
+                    ModuleId = module.Id,
+                    CanView = true,
+                    CanCreate = true,
+                    CanUpdate = true,
+                    CanDelete = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+                results.Add($"✅ Permisos de SuperAdmin para '{module.Code}' creados");
+            }
+        }
+
+        // 4. Verificar y crear permisos para Customer en loyalty
+        var existingCustomerPermissions = await tenantDb.RoleModulePermissions
+            .Where(p => p.RoleId == customerRole.Id)
+            .Select(p => p.ModuleId)
+            .ToListAsync();
+
+        var loyaltyModule = allModules.FirstOrDefault(m => m.Code == "loyalty");
+        if (loyaltyModule != null && !existingCustomerPermissions.Contains(loyaltyModule.Id))
+        {
+            // Customer: solo vista y creación en loyalty
+            newPermissions.Add(new RoleModulePermission
+            {
+                Id = Guid.NewGuid(),
+                RoleId = customerRole.Id,
+                ModuleId = loyaltyModule.Id,
+                CanView = true,
+                CanCreate = true, // Puede redimir recompensas
+                CanUpdate = false,
+                CanDelete = false,
+                CreatedAt = DateTime.UtcNow
+            });
+            results.Add($"✅ Permisos de Customer para 'loyalty' creados");
+        }
+
+        if (newPermissions.Any())
+        {
+            tenantDb.RoleModulePermissions.AddRange(newPermissions);
+            await tenantDb.SaveChangesAsync();
+        }
+        else
+        {
+            results.Add("⏭️ No se requieren permisos nuevos");
+        }
+
+        logger.LogInformation("✅ Fix completed for tenant: {TenantSlug}", tenantSlug);
+
+        return Results.Ok(new
+        {
+            message = "Módulos y permisos actualizados correctamente",
+            modulesCreated = newModules.Count,
+            permissionsCreated = newPermissions.Count,
+            details = results
+        });
     }
 
     #endregion
