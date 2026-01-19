@@ -12,7 +12,7 @@ namespace Api_eCommerce.Controllers
   /// Controlador administrativo para gestión de tiendas (multi-location inventory)
   /// </summary>
   [ApiController]
-  [Route("admin/stores")]
+  [Route("api/admin/stores")]
   [Authorize]
   [Tags("Stores Admin")]
   public class StoresAdminController : ControllerBase
@@ -452,12 +452,5 @@ namespace Api_eCommerce.Controllers
         );
       }
     }
-  }
-
-  public class MigrateLegacyStockResponse
-  {
-    public int MigratedProductsCount { get; set; }
-    public Guid TargetStoreId { get; set; }
-    public string Message { get; set; } = string.Empty;
   }
 }

@@ -1,6 +1,7 @@
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
+using CC.Domain.Dto;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Security.Claims;
@@ -159,7 +160,7 @@ namespace CC.Aplication.TenantAuth
         private async Task<string> GenerateJwtTokenWithRolesAsync(
             User user,
             List<string> roles,
-            TenantInfo tenantInfo,
+            CC.Infraestructure.Tenancy.TenantInfo tenantInfo,
             TenantDbContext db)
         {
             var jwtKey = _configuration["jwtKey"] ?? throw new InvalidOperationException("JWT key not configured");
@@ -245,38 +246,5 @@ namespace CC.Aplication.TenantAuth
                 .Replace('+', '-')
                 .Replace('/', '_');
         }
-    }
-
-    // ==================== DTOs ====================
-
-    public record TenantLoginRequest(
-        string Email,
-        string Password
-    );
-
-    public record TenantAuthResponse(
-        string Token,
-        DateTime ExpiresAt,
-        TenantUserDto User
-    );
-
-    public record TenantUserDto(
-        Guid Id,
-        string Email,
-        List<string> Roles,
-        List<ModulePermissionDto> Permissions,  // ? NUEVO
-        bool IsActive,
-        DateTime CreatedAt
-    );
-
-    public record ModulePermissionDto
-    {
-        public string ModuleCode { get; set; } = string.Empty;
-        public string ModuleName { get; set; } = string.Empty;
-        public string? IconName { get; set; }
-        public bool CanView { get; set; }
-        public bool CanCreate { get; set; }
-        public bool CanUpdate { get; set; }
-        public bool CanDelete { get; set; }
     }
 }

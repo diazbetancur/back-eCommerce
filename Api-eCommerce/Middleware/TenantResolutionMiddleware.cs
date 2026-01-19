@@ -18,14 +18,13 @@ namespace Api_eCommerce.Middleware
         private readonly RequestDelegate _next;
         private readonly ILogger<TenantResolutionMiddleware> _logger;
 
-        // ?? RUTAS EXCLUIDAS - NO requieren resolución de tenant
-        private static readonly string[] ExcludedPaths = 
+        private static readonly string[] ExcludedPaths =
         {
             "/swagger",
             "/health",
-            "/admin",                    // ? Panel administrativo (NO usa tenant)
+            "/admin",                    // ? SuperAdmin endpoints (usa AdminDb) - Los tenant admin usan /api/admin/*
             "/provision",                // ? Provisioning (usa AdminDb)
-            "/superadmin",               // ? SuperAdmin (usa AdminDb)
+            "/superadmin",               // ? SuperAdmin endpoints (usa AdminDb)
             "/_framework",               // ? Blazor/framework routes
             "/_vs"                       // ? Visual Studio routes
         };
@@ -44,10 +43,9 @@ namespace Api_eCommerce.Middleware
             ITenantAccessor tenantAccessor,
             IConfiguration configuration)
         {
-            // ==================== VERIFICAR SI LA RUTA ESTÁ EXCLUIDA ====================
+            // ==================== VERIFICAR SI LA RUTA ESTÃ EXCLUIDA ====================
             if (IsExcludedPath(context.Request.Path))
             {
-                _logger.LogDebug("Path {Path} is excluded from tenant resolution", context.Request.Path);
                 await _next(context);
                 return;
             }
@@ -94,9 +92,9 @@ namespace Api_eCommerce.Middleware
                 if (tenant.Status != TenantStatus.Ready)
                 {
                     _logger.LogWarning(
-                        "Tenant not available. Slug: {Slug}, Status: {Status}", 
+                        "Tenant not available. Slug: {Slug}, Status: {Status}",
                         slug, tenant.Status);
-                    
+
                     context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
                     await context.Response.WriteAsJsonAsync(new
                     {
@@ -121,19 +119,17 @@ namespace Api_eCommerce.Middleware
                     ConnectionString = connectionString
                 };
 
-                // Guardar en el accessor para que esté disponible en todo el request
+                // Guardar en el accessor para que estÃ© disponible en todo el request
                 tenantAccessor.SetTenant(tenantInfo);
 
-                _logger.LogInformation(
-                    "? Tenant resolved: {Slug} ? {DbName} (Plan: {Plan})",
-                    tenant.Slug, tenant.DbName, tenantInfo.Plan);
+                _logger.LogDebug("Tenant resolved: {Slug}", tenant.Slug);
 
                 // ==================== CONTINUAR CON EL PIPELINE ====================
                 await _next(context);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "? Error resolving tenant for path: {Path}", context.Request.Path);
+                _logger.LogError(ex, "Error resolving tenant for path: {Path}", context.Request.Path);
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 await context.Response.WriteAsJsonAsync(new
                 {
@@ -154,12 +150,19 @@ namespace Api_eCommerce.Middleware
 
         private static string GetTenantSlug(HttpContext context)
         {
-            // Prioridad: Header > Query String
+            // Prioridad: Header > Query String > JWT
             var slug = context.Request.Headers["X-Tenant-Slug"].FirstOrDefault();
-            
+
             if (string.IsNullOrWhiteSpace(slug))
             {
                 slug = context.Request.Query["tenant"].FirstOrDefault();
+            }
+
+            // Si no se encuentra en header ni query, intentar leer desde JWT
+            if (string.IsNullOrWhiteSpace(slug))
+            {
+                var tenantSlugClaim = context.User?.FindFirst("tenant_slug");
+                slug = tenantSlugClaim?.Value;
             }
 
             return slug?.Trim() ?? string.Empty;
@@ -168,7 +171,7 @@ namespace Api_eCommerce.Middleware
         private static string BuildConnectionString(IConfiguration configuration, string dbName)
         {
             var template = configuration["Tenancy:TenantDbTemplate"];
-            
+
             if (string.IsNullOrWhiteSpace(template))
             {
                 throw new InvalidOperationException(

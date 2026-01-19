@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using CC.Domain.Dto;
 
 namespace CC.Aplication.Provisioning
 {
@@ -13,7 +14,7 @@ namespace CC.Aplication.Provisioning
         public string Name { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "El slug es requerido")]
-        [RegularExpression("^[a-z0-9-]+$", ErrorMessage = "El slug solo puede contener letras minúsculas, números y guiones")]
+        [RegularExpression("^[a-z0-9-]+$", ErrorMessage = "El slug solo puede contener letras minï¿½sculas, nï¿½meros y guiones")]
         [MinLength(3, ErrorMessage = "El slug debe tener al menos 3 caracteres")]
         [MaxLength(50, ErrorMessage = "El slug no puede exceder 50 caracteres")]
         public string Slug { get; set; } = string.Empty;
@@ -23,7 +24,7 @@ namespace CC.Aplication.Provisioning
     }
 
     /// <summary>
-    /// Response de inicialización de aprovisionamiento
+    /// Response de inicializaciï¿½n de aprovisionamiento
     /// </summary>
     public class InitProvisioningResponse
     {
@@ -34,7 +35,7 @@ namespace CC.Aplication.Provisioning
     }
 
     /// <summary>
-    /// Response de confirmación de aprovisionamiento
+    /// Response de confirmaciï¿½n de aprovisionamiento
     /// </summary>
     public class ConfirmProvisioningResponse
     {
@@ -53,18 +54,5 @@ namespace CC.Aplication.Provisioning
         public string? TenantSlug { get; set; }
         public string? DbName { get; set; }
         public List<ProvisioningStepDto> Steps { get; set; } = new();
-    }
-
-    /// <summary>
-    /// DTO de paso de aprovisionamiento
-    /// </summary>
-    public class ProvisioningStepDto
-    {
-        public string Step { get; set; } = string.Empty;
-        public string Status { get; set; } = string.Empty;
-        public DateTime StartedAt { get; set; }
-        public DateTime? CompletedAt { get; set; }
-        public string? Log { get; set; }
-        public string? ErrorMessage { get; set; }
     }
 }

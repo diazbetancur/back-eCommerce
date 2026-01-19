@@ -1,6 +1,7 @@
 using Api_eCommerce.Authorization;
 using CC.Aplication.Catalog;
 using CC.Infraestructure.Tenancy;
+using CC.Domain.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -505,11 +506,6 @@ namespace Api_eCommerce.Controllers
       }
     }
   }
-
-  /// <summary>
-  /// Request para actualizar stock
-  /// </summary>
-  public record UpdateStockRequest(int Quantity);
 
   // ==================== CONTROLLER PÚBLICO ====================
 

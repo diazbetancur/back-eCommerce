@@ -201,8 +201,8 @@ app.UseCors("AllowFrontend");
 
 app.UseMiddleware<MeteringMiddleware>();
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
-app.UseMiddleware<TenantResolutionMiddleware>(); // ✅ AGREGADO: Resolución de tenant global
-app.UseAuthentication();
+app.UseAuthentication(); // ✅ Autenticación PRIMERO
+app.UseMiddleware<TenantResolutionMiddleware>(); // ✅ Tenant resolution DESPUÉS de auth para leer JWT
 app.UseMiddleware<ActivityLoggingMiddleware>();
 app.UseAuthorization();
 

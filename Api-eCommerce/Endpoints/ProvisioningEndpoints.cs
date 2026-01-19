@@ -3,6 +3,7 @@ using Api_eCommerce.Workers;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
 using CC.Aplication.Admin;
+using CC.Domain.Dto;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -24,7 +25,7 @@ namespace Api_eCommerce.Endpoints
             group.MapPost("/init", InitProvisioning)
                 .WithName("InitProvisioning")
                 .WithSummary("Inicializa el aprovisionamiento de un nuevo tenant")
-                .WithDescription("Crea un tenant en estado PENDING_VALIDATION y genera un token de confirmación válido por 15 minutos")
+                .WithDescription("Crea un tenant en estado PENDING_VALIDATION y genera un token de confirmaciï¿½n vï¿½lido por 15 minutos")
                 .Produces<InitProvisioningResponse>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
                 .Produces<ProblemDetails>(StatusCodes.Status409Conflict);
@@ -32,7 +33,7 @@ namespace Api_eCommerce.Endpoints
             group.MapPost("/confirm", ConfirmProvisioning)
                 .WithName("ConfirmProvisioning")
                 .WithSummary("Confirma el aprovisionamiento y lo encola para procesamiento")
-                .WithDescription("Valida el token de confirmación y encola el tenant para aprovisionamiento en background")
+                .WithDescription("Valida el token de confirmaciï¿½n y encola el tenant para aprovisionamiento en background")
                 .Produces<ConfirmProvisioningResponse>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
                 .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
@@ -96,7 +97,7 @@ namespace Api_eCommerce.Endpoints
                     PlanId = plan.Id,
                     DbName = dbName,
                     Status = TenantStatus.Pending,
-                    EncryptedConnection = "", // Se llenará durante el aprovisionamiento
+                    EncryptedConnection = "", // Se llenarï¿½ durante el aprovisionamiento
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -116,7 +117,7 @@ namespace Api_eCommerce.Endpoints
                 adminDb.TenantProvisionings.Add(provisioning);
                 await adminDb.SaveChangesAsync();
 
-                // Generar token de confirmación (válido por 15 minutos)
+                // Generar token de confirmaciï¿½n (vï¿½lido por 15 minutos)
                 var confirmToken = tokenService.GenerateConfirmToken(tenant.Id, tenant.Slug);
 
                 logger.LogInformation(
@@ -151,7 +152,7 @@ namespace Api_eCommerce.Endpoints
         {
             try
             {
-                // Extraer y validar token de autorización
+                // Extraer y validar token de autorizaciï¿½n
                 var authHeader = context.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
@@ -201,7 +202,7 @@ namespace Api_eCommerce.Endpoints
                         statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                // Cambiar estado a SEEDING (será procesado por el worker)
+                // Cambiar estado a SEEDING (serï¿½ procesado por el worker)
                 tenant.Status = TenantStatus.Seeding;
                 tenant.UpdatedAt = DateTime.UtcNow;
                 await adminDb.SaveChangesAsync();
@@ -258,14 +259,14 @@ namespace Api_eCommerce.Endpoints
 
                 // Ahora mapear a DTOs fuera del query de EF
                 var steps = provisioningSteps
-                    .Select(p => new ProvisioningStepDto(
-                        p.Id,
-                        p.Step,
-                        p.Status,
-                        p.StartedAt,
-                        p.CompletedAt,
-                        p.Message ?? p.ErrorMessage
-                    ))
+                    .Select(p => new CC.Domain.Dto.ProvisioningStepDto
+                    {
+                        Step = p.Step,
+                        Status = p.Status,
+                        StartedAt = p.StartedAt,
+                        CompletedAt = p.CompletedAt,
+                        Log = p.Message ?? p.ErrorMessage
+                    })
                     .ToList();
 
                 var response = new ProvisioningStatusResponse(
@@ -287,10 +288,4 @@ namespace Api_eCommerce.Endpoints
             }
         }
     }
-
-    // DTOs - solo para este endpoint, usando el ProvisioningStepDto del Application layer
-    public record InitProvisioningRequest(string Slug, string Name, string Plan);
-    public record InitProvisioningResponse(Guid ProvisioningId, string ConfirmToken, string Next, string Message);
-    public record ConfirmProvisioningResponse(Guid ProvisioningId, string Status, string Message, string StatusEndpoint);
-    public record ProvisioningStatusResponse(string Status, string? TenantSlug, string? DbName, List<ProvisioningStepDto> Steps);
 }

@@ -1,5 +1,6 @@
 using CC.Aplication.Favorites;
 using CC.Infraestructure.Tenancy;
+using CC.Domain.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -285,8 +286,4 @@ namespace Api_eCommerce.Controllers
     }
   }
 
-  /// <summary>
-  /// Response DTO para check endpoint
-  /// </summary>
-  public record CheckFavoriteResponse(bool IsFavorite);
 }

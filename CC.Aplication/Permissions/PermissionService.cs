@@ -1,5 +1,6 @@
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
+using CC.Domain.Dto;
 using Microsoft.EntityFrameworkCore;
 
 namespace CC.Aplication.Permissions
@@ -50,7 +51,7 @@ namespace CC.Aplication.Permissions
 
             await using var db = _dbFactory.Create();
 
-            // Obtener el permiso más permisivo si el usuario tiene múltiples roles
+            // Obtener el permiso mï¿½s permisivo si el usuario tiene mï¿½ltiples roles
             var permissions = await db.UserRoles
                 .Where(ur => ur.UserId == userId)
                 .SelectMany(ur => ur.Role.ModulePermissions)
@@ -62,7 +63,7 @@ namespace CC.Aplication.Permissions
                 return new ModulePermissions { ModuleCode = moduleCode };
             }
 
-            // Si tiene múltiples roles, usar OR lógico (el más permisivo gana)
+            // Si tiene mï¿½ltiples roles, usar OR lï¿½gico (el mï¿½s permisivo gana)
             return new ModulePermissions
             {
                 ModuleCode = moduleCode,
@@ -121,25 +122,5 @@ namespace CC.Aplication.Permissions
 
             return modules;
         }
-    }
-
-    // ==================== DTOs ====================
-
-    public class ModuleDto
-    {
-        public string Code { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public string? IconName { get; set; }
-        public ModulePermissions Permissions { get; set; } = new();
-    }
-
-    public class ModulePermissions
-    {
-        public string ModuleCode { get; set; } = string.Empty;
-        public bool CanView { get; set; }
-        public bool CanCreate { get; set; }
-        public bool CanUpdate { get; set; }
-        public bool CanDelete { get; set; }
     }
 }

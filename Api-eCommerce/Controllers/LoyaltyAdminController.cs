@@ -12,7 +12,7 @@ namespace Api_eCommerce.Controllers
   /// Controlador administrativo para gestión del programa de lealtad
   /// </summary>
   [ApiController]
-  [Route("admin/loyalty")]
+  [Route("api/admin/loyalty")]
   [Authorize]
   [Tags("Loyalty Admin")]
   public class LoyaltyAdminController : ControllerBase
