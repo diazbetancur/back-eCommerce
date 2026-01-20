@@ -113,6 +113,39 @@ namespace CC.Aplication.Stores
       db.Stores.Add(newStore);
       await db.SaveChangesAsync(ct);
 
+      // ✅ NUEVO: Copiar inventario de otra tienda si se especificó
+      if (request.CopyInventoryFromStoreId.HasValue)
+      {
+        var sourceStore = await db.Stores.FindAsync(new object[] { request.CopyInventoryFromStoreId.Value }, ct);
+        if (sourceStore == null)
+        {
+          throw new InvalidOperationException($"Source store with ID '{request.CopyInventoryFromStoreId.Value}' not found");
+        }
+
+        // Obtener todo el inventario de la tienda origen
+        var sourceInventory = await db.ProductStoreStock
+            .Where(pss => pss.StoreId == request.CopyInventoryFromStoreId.Value)
+            .ToListAsync(ct);
+
+        // Copiar al nuevo store
+        foreach (var sourceStock in sourceInventory)
+        {
+          db.ProductStoreStock.Add(new ProductStoreStock
+          {
+            Id = Guid.NewGuid(),
+            ProductId = sourceStock.ProductId,
+            StoreId = newStore.Id,
+            Stock = sourceStock.Stock,
+            ReservedStock = 0, // No copiar stock reservado
+            UpdatedAt = DateTime.UtcNow
+          });
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        Console.WriteLine($"📦 Copied inventory from store {sourceStore.Name} ({sourceInventory.Count} products) to new store {newStore.Name}");
+      }
+
       return MapToDto(newStore);
     }
 

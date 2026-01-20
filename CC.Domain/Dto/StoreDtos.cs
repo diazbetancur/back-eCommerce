@@ -24,6 +24,7 @@ namespace CC.Domain.Dto
     public string? Country { get; set; }
     public string? Phone { get; set; }
     public bool IsDefault { get; set; }
+    public Guid? CopyInventoryFromStoreId { get; set; } // Copiar inventario de otra tienda
   }
 
   public class UpdateStoreRequest
@@ -75,5 +76,11 @@ namespace CC.Domain.Dto
   public class MigrateStockToStoresRequest
   {
     public Guid DefaultStoreId { get; set; }
+  }
+
+  public class InitialStoreStockDto
+  {
+    public Guid StoreId { get; set; }
+    public int Stock { get; set; }
   }
 }

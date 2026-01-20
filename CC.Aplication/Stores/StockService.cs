@@ -276,6 +276,20 @@ namespace CC.Aplication.Stores
         throw new InvalidOperationException($"Store with ID '{request.StoreId}' not found or is inactive");
       }
 
+      // ✅ NUEVO: Validar que la suma de stock en todas las tiendas no exceda Product.Stock
+      var currentStockInAllStores = await db.ProductStoreStock
+          .Where(pss => pss.ProductId == productId && pss.StoreId != request.StoreId)
+          .SumAsync(pss => pss.Stock, ct);
+
+      var newTotalStock = currentStockInAllStores + request.Stock;
+
+      if (newTotalStock > product.Stock)
+      {
+        throw new InvalidOperationException(
+            $"La suma del stock en todas las tiendas ({newTotalStock}) no puede exceder el stock total del producto ({product.Stock}). " +
+            $"Stock actual en otras tiendas: {currentStockInAllStores}, Stock solicitado para esta tienda: {request.Stock}");
+      }
+
       // Buscar o crear el registro de stock
       var storeStock = await db.ProductStoreStock
           .FirstOrDefaultAsync(pss => pss.ProductId == productId && pss.StoreId == request.StoreId, ct);

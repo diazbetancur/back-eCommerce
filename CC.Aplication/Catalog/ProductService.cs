@@ -1,3 +1,4 @@
+using CC.Domain.Dto;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
@@ -94,6 +95,42 @@ namespace CC.Aplication.Catalog
         await db.SaveChangesAsync(ct);
       }
 
+      // ✅ NUEVO: Crear stock inicial por tiendas si se proporcionó
+      if (dto.InitialStoreStock != null && dto.InitialStoreStock.Any())
+      {
+        // Validar que la suma de stock por tiendas no exceda el stock total
+        var totalStoreStock = dto.InitialStoreStock.Sum(s => s.Stock);
+        if (totalStoreStock > dto.Stock)
+        {
+          throw new InvalidOperationException(
+              $"La suma del stock distribuido en tiendas ({totalStoreStock}) no puede exceder el stock total del producto ({dto.Stock})");
+        }
+
+        foreach (var storeStock in dto.InitialStoreStock)
+        {
+          // Verificar que la tienda existe
+          var storeExists = await db.Stores.AnyAsync(s => s.Id == storeStock.StoreId && s.IsActive, ct);
+          if (!storeExists)
+          {
+            throw new InvalidOperationException($"Store with ID '{storeStock.StoreId}' not found or is inactive");
+          }
+
+          db.ProductStoreStock.Add(new ProductStoreStock
+          {
+            Id = Guid.NewGuid(),
+            ProductId = product.Id,
+            StoreId = storeStock.StoreId,
+            Stock = storeStock.Stock,
+            ReservedStock = 0,
+            UpdatedAt = DateTime.UtcNow
+          });
+        }
+        await db.SaveChangesAsync(ct);
+
+        _logger.LogInformation("📦 Created initial stock for product {ProductId} in {StoreCount} stores",
+            product.Id, dto.InitialStoreStock.Count);
+      }
+
       _logger.LogInformation("✅ Product created: {ProductId} - {Name}", product.Id, product.Name);
 
       return MapToDto(product);
@@ -119,6 +156,21 @@ namespace CC.Aplication.Catalog
       if (!string.IsNullOrEmpty(dto.Name) && dto.Name != product.Name)
       {
         product.Slug = await GenerateUniqueSlugAsync(db, dto.Name, ct, product.Id);
+      }
+
+      // Validar que el nuevo stock no sea menor que la suma del stock distribuido en tiendas
+      if (dto.Stock.HasValue && dto.Stock.Value != product.Stock)
+      {
+        var totalStockInStores = await db.ProductStoreStock
+            .Where(pss => pss.ProductId == id)
+            .SumAsync(pss => pss.Stock, ct);
+
+        if (dto.Stock.Value < totalStockInStores)
+        {
+          throw new InvalidOperationException(
+              $"No se puede establecer el stock del producto en {dto.Stock.Value} porque la suma del stock distribuido en las tiendas es {totalStockInStores}. " +
+              $"Debe ajustar primero el stock en las tiendas o establecer un valor mayor o igual a {totalStockInStores}.");
+        }
       }
 
       // Actualizar campos
@@ -513,6 +565,27 @@ namespace CC.Aplication.Catalog
           .ToListAsync(ct);
 
       dto.Categories = categories;
+
+      // Cargar distribución de stock por tiendas
+      var storeStock = await db.ProductStoreStock
+          .Where(pss => pss.ProductId == product.Id)
+          .Join(db.Stores,
+              pss => pss.StoreId,
+              s => s.Id,
+              (pss, s) => new ProductStoreStockDto
+              {
+                Id = pss.Id,
+                ProductId = pss.ProductId,
+                StoreId = pss.StoreId,
+                StoreName = s.Name,
+                Stock = pss.Stock,
+                ReservedStock = pss.ReservedStock,
+                AvailableStock = pss.Stock - pss.ReservedStock
+              })
+          .ToListAsync(ct);
+
+      dto.StoreStock = storeStock.Any() ? storeStock : null;
+
       return dto;
     }
   }
@@ -533,6 +606,7 @@ namespace CC.Aplication.Catalog
     public bool IsFeatured { get; init; } = false;
     public string? Tags { get; init; }
     public string? Brand { get; init; }
+    public List<InitialStoreStockDto>? InitialStoreStock { get; init; } // Stock inicial por tienda
     public string? MetaTitle { get; init; }
     public string? MetaDescription { get; init; }
     public string? MainImageUrl { get; init; }
@@ -582,6 +656,7 @@ namespace CC.Aplication.Catalog
     public DateTime? UpdatedAt { get; set; }
     public List<CategorySummaryDto> Categories { get; set; } = new();
     public List<ProductImageDto> Images { get; set; } = new();
+    public List<ProductStoreStockDto>? StoreStock { get; set; } // Distribución de stock por tienda
   }
 
   public class CategorySummaryDto
