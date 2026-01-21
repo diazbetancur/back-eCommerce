@@ -13,6 +13,7 @@ namespace CC.Domain.Features
         // Catalog Features
         public const string ShowStock = "showStock";
         public const string HasVariants = "hasVariants";
+        public const string EnableMultiStore = "enableMultiStore";
         public const string EnableWishlist = "enableWishlist";
         public const string EnableReviews = "enableReviews";
 

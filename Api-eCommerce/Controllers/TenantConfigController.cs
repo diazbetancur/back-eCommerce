@@ -88,8 +88,8 @@ namespace Api_eCommerce.Controllers
             // Loyalty = wishlist/favorites
             Loyalty = features.EnableWishlist,
 
-            // Multistore = soporte de variantes
-            Multistore = features.HasVariants,
+            // Multistore = soporte de múltiples tiendas físicas
+            Multistore = features.EnableMultiStore,
 
             // Wompi payment gateway
             PaymentsWompiEnabled = features.Payments.WompiEnabled,

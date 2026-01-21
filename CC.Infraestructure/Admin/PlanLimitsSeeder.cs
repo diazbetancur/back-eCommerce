@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace CC.Infraestructure.Admin
 {
     /// <summary>
-    /// Seeder para planes y sus lÌmites (MVP)
+    /// Seeder para planes y sus lÔøΩmites (MVP)
     /// Solo 2 planes: Basic ($5/mes) y Premium ($15/mes)
     /// Los planes NO tienen CRUD por API - solo configurables en DB
     /// </summary>
@@ -38,7 +38,7 @@ namespace CC.Infraestructure.Admin
                 {
                     Id = Guid.Parse("11111111-0000-0000-0000-000000000001"),
                     Code = "Basic",
-                    Name = "Plan B·sico - $5/mes"
+                    Name = "Plan BÔøΩsico - $5/mes"
                 },
                 new Plan
                 {
@@ -71,42 +71,49 @@ namespace CC.Infraestructure.Admin
 
             // ==================== PLAN BASIC ($5/mes) ====================
             limits.AddRange(new[]
-            {
+            {                // üè™ Tiendas
+                new PlanLimit
+                {
+                    PlanId = basicPlanId,
+                    LimitCode = PlanLimitCodes.MaxStores,
+                    LimitValue = 1,
+                    Description = "Solo 1 tienda (plan b√°sico)"
+                },
                 // ?? Productos
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxProducts,
                     LimitValue = 500,
-                    Description = "M·ximo 500 productos"
+                    Description = "MÔøΩximo 500 productos"
                 },
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxCategories,
                     LimitValue = 100,
-                    Description = "M·ximo 100 categorÌas"
+                    Description = "MÔøΩximo 100 categorÔøΩas"
                 },
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxProductImages,
                     LimitValue = 4,
-                    Description = "M·ximo 4 im·genes por producto"
+                    Description = "MÔøΩximo 4 imÔøΩgenes por producto"
                 },
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxProductVideos,
                     LimitValue = 1,
-                    Description = "M·ximo 1 video por producto"
+                    Description = "MÔøΩximo 1 video por producto"
                 },
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = "max_video_duration_seconds",
                     LimitValue = 30,
-                    Description = "Videos de m·ximo 30 segundos"
+                    Description = "Videos de mÔøΩximo 30 segundos"
                 },
 
                 // ?? Usuarios Admin/Staff
@@ -115,23 +122,23 @@ namespace CC.Infraestructure.Admin
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxAdminUsers,
                     LimitValue = 3,
-                    Description = "M·ximo 3 usuarios admin/staff"
+                    Description = "MÔøΩximo 3 usuarios admin/staff"
                 },
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = "max_customer_inactivity_days",
                     LimitValue = 90,  // 3 meses
-                    Description = "Clientes eliminados despuÈs de 90 dÌas de inactividad"
+                    Description = "Clientes eliminados despuÔøΩs de 90 dÔøΩas de inactividad"
                 },
 
-                // ?? ”rdenes (Ilimitadas)
+                // ?? ÔøΩrdenes (Ilimitadas)
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxOrdersPerMonth,
                     LimitValue = -1,  // Ilimitado
-                    Description = "”rdenes ilimitadas por mes"
+                    Description = "ÔøΩrdenes ilimitadas por mes"
                 },
 
                 // ?? Almacenamiento
@@ -147,48 +154,57 @@ namespace CC.Infraestructure.Admin
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxFileUploadMB,
                     LimitValue = 5,
-                    Description = "M·ximo 5 MB por archivo"
+                    Description = "MÔøΩximo 5 MB por archivo"
                 }
             });
 
             // ==================== PLAN PREMIUM ($15/mes) ====================
             limits.AddRange(new[]
             {
-                // ?? Productos
+                // üè™ Tiendas
+                new PlanLimit
+                {
+                    PlanId = premiumPlanId,
+                    LimitCode = PlanLimitCodes.MaxStores,
+                    LimitValue = 20,
+                    Description = "M√°ximo 20 tiendas"
+                },
+
+                // üì¶ Productos
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxProducts,
                     LimitValue = 5000,
-                    Description = "M·ximo 5000 productos"
+                    Description = "MÔøΩximo 5000 productos"
                 },
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxCategories,
                     LimitValue = 1000,
-                    Description = "M·ximo 1000 categorÌas"
+                    Description = "MÔøΩximo 1000 categorÔøΩas"
                 },
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxProductImages,
                     LimitValue = 20,
-                    Description = "M·ximo 20 im·genes por producto"
+                    Description = "MÔøΩximo 20 imÔøΩgenes por producto"
                 },
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxProductVideos,
                     LimitValue = 5,
-                    Description = "M·ximo 5 videos por producto"
+                    Description = "MÔøΩximo 5 videos por producto"
                 },
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = "max_video_duration_seconds",
                     LimitValue = 60,
-                    Description = "Videos de m·ximo 60 segundos"
+                    Description = "Videos de mÔøΩximo 60 segundos"
                 },
 
                 // ?? Usuarios Admin/Staff
@@ -197,23 +213,23 @@ namespace CC.Infraestructure.Admin
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxAdminUsers,
                     LimitValue = 15,
-                    Description = "M·ximo 15 usuarios admin/staff"
+                    Description = "MÔøΩximo 15 usuarios admin/staff"
                 },
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = "max_customer_inactivity_days",
                     LimitValue = 365,  // 12 meses
-                    Description = "Clientes eliminados despuÈs de 365 dÌas de inactividad"
+                    Description = "Clientes eliminados despuÔøΩs de 365 dÔøΩas de inactividad"
                 },
 
-                // ?? ”rdenes (Ilimitadas)
+                // ?? ÔøΩrdenes (Ilimitadas)
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxOrdersPerMonth,
                     LimitValue = -1,  // Ilimitado
-                    Description = "”rdenes ilimitadas por mes"
+                    Description = "ÔøΩrdenes ilimitadas por mes"
                 },
 
                 // ?? Almacenamiento
@@ -229,7 +245,7 @@ namespace CC.Infraestructure.Admin
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxFileUploadMB,
                     LimitValue = 20,
-                    Description = "M·ximo 20 MB por archivo"
+                    Description = "MÔøΩximo 20 MB por archivo"
                 }
             });
 

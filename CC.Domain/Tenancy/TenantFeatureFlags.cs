@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace CC.Domain.Tenancy
 {
     /// <summary>
-    /// Configuración de feature flags por tenant
+    /// Configuraciï¿½n de feature flags por tenant
     /// </summary>
     public class TenantFeatureFlags
     {
@@ -15,6 +15,7 @@ namespace CC.Domain.Tenancy
         // Catalog Features
         public bool ShowStock { get; set; } = true;
         public bool HasVariants { get; set; } = false;
+        public bool EnableMultiStore { get; set; } = false;
         public bool EnableWishlist { get; set; } = false;
         public bool EnableReviews { get; set; } = false;
 
@@ -34,7 +35,7 @@ namespace CC.Domain.Tenancy
         public bool EnableNewsletterSignup { get; set; } = false;
 
         /// <summary>
-        /// Obtiene el valor de una feature específica por path (ej: "payments.wompiEnabled")
+        /// Obtiene el valor de una feature especï¿½fica por path (ej: "payments.wompiEnabled")
         /// </summary>
         public T? GetValue<T>(string path, T? defaultValue = default)
         {
@@ -60,7 +61,7 @@ namespace CC.Domain.Tenancy
         }
 
         /// <summary>
-        /// Verifica si una feature está habilitada (asume que es booleana)
+        /// Verifica si una feature estï¿½ habilitada (asume que es booleana)
         /// </summary>
         public bool IsEnabled(string path)
         {
@@ -77,7 +78,7 @@ namespace CC.Domain.Tenancy
     }
 
     /// <summary>
-    /// Feature flags por defecto según el plan
+    /// Feature flags por defecto segï¿½n el plan
     /// </summary>
     public static class DefaultFeatureFlags
     {
@@ -90,6 +91,7 @@ namespace CC.Domain.Tenancy
                     AllowGuestCheckout = true,
                     ShowStock = true,
                     HasVariants = false,
+                    EnableMultiStore = false,
                     EnableWishlist = false,
                     EnableReviews = false,
                     EnableAdvancedSearch = false,
@@ -108,6 +110,7 @@ namespace CC.Domain.Tenancy
                     AllowGuestCheckout = true,
                     ShowStock = true,
                     HasVariants = true,
+                    EnableMultiStore = true,
                     EnableWishlist = true,
                     EnableReviews = true,
                     EnableAdvancedSearch = true,
@@ -126,6 +129,7 @@ namespace CC.Domain.Tenancy
                     AllowGuestCheckout = true,
                     ShowStock = true,
                     HasVariants = true,
+                    EnableMultiStore = true,
                     EnableWishlist = true,
                     EnableReviews = true,
                     EnableAdvancedSearch = true,
@@ -141,7 +145,7 @@ namespace CC.Domain.Tenancy
                         PayPalEnabled = true
                     }
                 },
-                _ => new TenantFeatureFlags() // Default básico
+                _ => new TenantFeatureFlags() // Default bï¿½sico
             };
         }
     }

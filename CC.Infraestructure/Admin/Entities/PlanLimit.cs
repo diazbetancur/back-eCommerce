@@ -4,8 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace CC.Infraestructure.Admin.Entities
 {
     /// <summary>
-    /// Límites configurables por plan
-    /// Define restricciones numéricas como máximo de imágenes, productos, usuarios, etc.
+    /// Lï¿½mites configurables por plan
+    /// Define restricciones numï¿½ricas como mï¿½ximo de imï¿½genes, productos, usuarios, etc.
     /// Valor -1 = ilimitado
     /// </summary>
     [Table("PlanLimits", Schema = "admin")]
@@ -18,20 +18,20 @@ namespace CC.Infraestructure.Admin.Entities
         public Guid PlanId { get; set; }
 
         /// <summary>
-        /// Código del límite (ej: "max_product_images", "max_users", "max_storage_mb")
+        /// Cï¿½digo del lï¿½mite (ej: "max_product_images", "max_users", "max_storage_mb")
         /// </summary>
         [Required]
         [MaxLength(100)]
         public string LimitCode { get; set; } = string.Empty;
 
         /// <summary>
-        /// Valor del límite (-1 = ilimitado, 0 = bloqueado, N = límite específico)
+        /// Valor del lï¿½mite (-1 = ilimitado, 0 = bloqueado, N = lï¿½mite especï¿½fico)
         /// </summary>
         [Required]
         public int LimitValue { get; set; }
 
         /// <summary>
-        /// Descripción del límite (opcional)
+        /// Descripciï¿½n del lï¿½mite (opcional)
         /// </summary>
         [MaxLength(500)]
         public string? Description { get; set; }
@@ -43,10 +43,13 @@ namespace CC.Infraestructure.Admin.Entities
     }
 
     /// <summary>
-    /// Códigos estándar de límites del sistema
+    /// Cï¿½digos estï¿½ndar de lï¿½mites del sistema
     /// </summary>
     public static class PlanLimitCodes
     {
+        // Tiendas
+        public const string MaxStores = "max_stores";
+
         // Productos
         public const string MaxProductImages = "max_product_images";
         public const string MaxProductVideos = "max_product_videos";
@@ -59,7 +62,7 @@ namespace CC.Infraestructure.Admin.Entities
         public const string MaxAdminUsers = "max_admin_users";
         public const string MaxCustomerInactivityDays = "max_customer_inactivity_days";  // ? NUEVO
 
-        // Órdenes
+        // ï¿½rdenes
         public const string MaxOrdersPerMonth = "max_orders_per_month";
         public const string MaxOrdersPerDay = "max_orders_per_day";
 
