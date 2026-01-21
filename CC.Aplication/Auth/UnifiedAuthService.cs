@@ -190,6 +190,7 @@ namespace CC.Aplication.Auth
                 PhoneNumber = request.PhoneNumber,
                 IsActive = true,
                 MustChangePassword = false,
+                TenantId = _tenantAccessor.TenantInfo.Id, // ✅ Asignar tenant
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -305,11 +306,17 @@ namespace CC.Aplication.Auth
 
                 _logger.LogInformation("🔑 JWT key found, creating payload...");
 
+                // Obtener issuer y audience de configuración
+                var issuer = _configuration["Jwt:Issuer"] ?? "ecommerce-api";
+                var audience = _configuration["Jwt:Audience"] ?? "ecommerce-clients";
+
                 var payload = new Dictionary<string, object>
                 {
                     { "sub", userId.ToString() },
                     { "email", email },
                     { "jti", Guid.NewGuid().ToString() },
+                    { "iss", issuer },
+                    { "aud", audience },
                     { "tenant_id", _tenantAccessor.TenantInfo!.Id.ToString() },
                     { "tenant_slug", _tenantAccessor.TenantInfo.Slug },
                     { "roles", roles },

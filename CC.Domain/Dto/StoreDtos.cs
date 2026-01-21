@@ -51,6 +51,27 @@ namespace CC.Domain.Dto
     public DateTime UpdatedAt { get; set; }
   }
 
+  /// <summary>
+  /// DTO para listar stock de productos en una tienda específica (admin UI)
+  /// </summary>
+  public class StoreProductStockDto
+  {
+    public Guid ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public int Stock { get; set; }
+    public int ReservedStock { get; set; }
+    public int AvailableStock { get; set; }
+    public DateTime UpdatedAt { get; set; }
+  }
+
+  /// <summary>
+  /// Request para actualizar stock de un producto en una tienda
+  /// </summary>
+  public class UpdateStoreStockRequest
+  {
+    public int Stock { get; set; }
+  }
+
   public class UpdateProductStoreStockRequest
   {
     public Guid StoreId { get; set; }

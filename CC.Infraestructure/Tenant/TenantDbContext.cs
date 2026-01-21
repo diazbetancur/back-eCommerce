@@ -84,7 +84,12 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.PhoneNumber).HasMaxLength(20);
         entity.Property(e => e.IsActive).IsRequired();
         entity.Property(e => e.MustChangePassword).IsRequired();
+        entity.Property(e => e.TenantId).IsRequired();
         entity.Property(e => e.CreatedAt).IsRequired();
+
+        // Índice para mejorar performance en validación de ownership
+        entity.HasIndex(e => new { e.Id, e.TenantId })
+          .HasDatabaseName("IX_Users_Id_TenantId");
       });
 
       modelBuilder.Entity<TenantEntities.Role>(entity =>

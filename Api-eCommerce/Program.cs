@@ -115,16 +115,31 @@ builder.Services.AddMultiTenantSwagger();
 DependencyInyectionHandler.DepencyInyectionConfig(builder.Services);
 
 // ==================== JWT AUTHENTICATION ====================
+var jwtStrictValidation = builder.Configuration.GetValue<bool>("Jwt:StrictValidation", true);
+var jwtSigningKey = builder.Configuration["Jwt:SigningKey"] ?? builder.Configuration["jwtKey"]!;
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "ecommerce-api";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "ecommerce-clients";
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(x => x.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        ValidateIssuer = jwtStrictValidation,
+        ValidIssuer = jwtIssuer,
+        ValidateAudience = jwtStrictValidation,
+        ValidAudience = jwtAudience,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(builder.Configuration["jwtKey"]!)),
+        IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtSigningKey)),
         ClockSkew = TimeSpan.Zero
     });
+
+// Log JWT configuration for debugging (only in Development)
+if (builder.Environment.IsDevelopment())
+{
+    Console.WriteLine($"[JWT Config] StrictValidation: {jwtStrictValidation}");
+    Console.WriteLine($"[JWT Config] Issuer: {jwtIssuer}");
+    Console.WriteLine($"[JWT Config] Audience: {jwtAudience}");
+}
 
 var app = builder.Build();
 
@@ -203,6 +218,7 @@ app.UseMiddleware<MeteringMiddleware>();
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
 app.UseAuthentication(); // ✅ Autenticación PRIMERO
 app.UseMiddleware<TenantResolutionMiddleware>(); // ✅ Tenant resolution DESPUÉS de auth para leer JWT
+app.UseTenantUserOwnershipValidation(); // ✅ Validar que JWT tenant == tenant actual
 app.UseMiddleware<ActivityLoggingMiddleware>();
 app.UseAuthorization();
 
@@ -282,3 +298,5 @@ public static class TenantMiddlewareExtensions
         });
     }
 }
+// Make Program class accessible for testing
+public partial class Program { }

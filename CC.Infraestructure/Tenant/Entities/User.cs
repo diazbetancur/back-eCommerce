@@ -40,6 +40,13 @@ namespace CC.Infraestructure.Tenant.Entities
     /// </summary>
     public bool MustChangePassword { get; set; } = false;
 
+    /// <summary>
+    /// ID del tenant al que pertenece este usuario (para validación de ownership)
+    /// NOTA: No es FK porque AdminDb está separado
+    /// </summary>
+    [Required]
+    public Guid TenantId { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 

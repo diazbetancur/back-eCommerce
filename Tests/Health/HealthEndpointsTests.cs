@@ -26,7 +26,7 @@ namespace Api_eCommerce.Tests.Health
 
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            
+
             var content = await response.Content.ReadAsStringAsync();
             content.Should().NotBeEmpty();
         }
@@ -42,7 +42,7 @@ namespace Api_eCommerce.Tests.Health
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().Be(HttpStatusCode.OK, 
+            response.StatusCode.Should().Be(HttpStatusCode.OK,
                 "Global health check should not require tenant");
         }
 
@@ -113,7 +113,7 @@ namespace Api_eCommerce.Tests.Health
 
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            
+
             var content = await response.Content.ReadAsStringAsync();
             content.Should().Contain("Healthy", StringComparison.OrdinalIgnoreCase);
         }
@@ -133,12 +133,12 @@ namespace Api_eCommerce.Tests.Health
             {
                 var content = await response.Content.ReadAsStringAsync();
                 content.Should().NotBeEmpty();
-                // Debería incluir información sobre la base de datos del tenant
+                // Deberï¿½a incluir informaciï¿½n sobre la base de datos del tenant
             }
         }
 
         [Fact]
-        public async Task HealthCheck_CanBeCalled Repeatedly()
+        public async Task HealthCheck_CanBeCalled_Repeatedly()
         {
             // Arrange
             var requests = Enumerable.Range(0, 10)
@@ -150,7 +150,7 @@ namespace Api_eCommerce.Tests.Health
             );
 
             // Assert
-            responses.Should().AllSatisfy(r => 
+            responses.Should().AllSatisfy(r =>
                 r.StatusCode.Should().Be(HttpStatusCode.OK));
         }
 
@@ -222,7 +222,7 @@ namespace Api_eCommerce.Tests.Health
 
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            stopwatch.ElapsedMilliseconds.Should().BeLessThan(1000, 
+            stopwatch.ElapsedMilliseconds.Should().BeLessThan(1000,
                 "Health check should respond in less than 1 second");
         }
     }

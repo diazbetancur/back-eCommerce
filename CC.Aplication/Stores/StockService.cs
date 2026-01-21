@@ -48,6 +48,16 @@ namespace CC.Aplication.Stores
     /// Migra el stock legacy (Product.Stock) a una tienda específica
     /// </summary>
     Task<int> MigrateAllLegacyStockToStoreAsync(Guid targetStoreId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Obtiene el stock de todos los productos en una tienda específica
+    /// </summary>
+    Task<List<StoreProductStockDto>> GetStoreStockAsync(Guid storeId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Actualiza el stock de un producto en una tienda (versión simplificada)
+    /// </summary>
+    Task<StoreProductStockDto> UpdateStoreProductStockAsync(Guid storeId, Guid productId, int stock, CancellationToken ct = default);
   }
 
   public class StockService : IStockService
@@ -379,8 +389,103 @@ namespace CC.Aplication.Stores
       }
 
       await db.SaveChangesAsync(ct);
-
       return migratedCount;
+    }
+
+    /// <summary>
+    /// Obtiene el stock de todos los productos en una tienda específica
+    /// </summary>
+    public async Task<List<StoreProductStockDto>> GetStoreStockAsync(Guid storeId, CancellationToken ct = default)
+    {
+      await using var db = _dbFactory.Create();
+
+      // Verificar que la tienda existe
+      var store = await db.Stores.FindAsync(new object[] { storeId }, ct);
+      if (store == null)
+      {
+        throw new InvalidOperationException($"Store with ID '{storeId}' not found");
+      }
+
+      // Obtener stock de productos en esta tienda con información del producto
+      var stockRecords = await db.ProductStoreStock
+          .Where(pss => pss.StoreId == storeId)
+          .Include(pss => pss.Product)
+          .OrderBy(pss => pss.Product!.Name)
+          .ToListAsync(ct);
+
+      return stockRecords.Select(pss => new StoreProductStockDto
+      {
+        ProductId = pss.ProductId,
+        ProductName = pss.Product?.Name ?? "Unknown",
+        Stock = pss.Stock,
+        ReservedStock = pss.ReservedStock,
+        AvailableStock = pss.Stock - pss.ReservedStock,
+        UpdatedAt = pss.UpdatedAt
+      }).ToList();
+    }
+
+    /// <summary>
+    /// Actualiza el stock de un producto en una tienda
+    /// </summary>
+    public async Task<StoreProductStockDto> UpdateStoreProductStockAsync(Guid storeId, Guid productId, int stock, CancellationToken ct = default)
+    {
+      if (stock < 0)
+      {
+        throw new ArgumentException("Stock cannot be negative", nameof(stock));
+      }
+
+      await using var db = _dbFactory.Create();
+
+      // Verificar que la tienda existe
+      var store = await db.Stores.FindAsync(new object[] { storeId }, ct);
+      if (store == null)
+      {
+        throw new InvalidOperationException($"Store with ID '{storeId}' not found");
+      }
+
+      // Verificar que el producto existe
+      var product = await db.Products.FindAsync(new object[] { productId }, ct);
+      if (product == null)
+      {
+        throw new InvalidOperationException($"Product with ID '{productId}' not found");
+      }
+
+      // Buscar o crear el registro de stock
+      var storeStock = await db.ProductStoreStock
+          .FirstOrDefaultAsync(pss => pss.ProductId == productId && pss.StoreId == storeId, ct);
+
+      if (storeStock == null)
+      {
+        // Crear nuevo registro
+        storeStock = new ProductStoreStock
+        {
+          Id = Guid.NewGuid(),
+          ProductId = productId,
+          StoreId = storeId,
+          Stock = stock,
+          ReservedStock = 0,
+          UpdatedAt = DateTime.UtcNow
+        };
+        db.ProductStoreStock.Add(storeStock);
+      }
+      else
+      {
+        // Actualizar stock existente (mantener reservedStock)
+        storeStock.Stock = stock;
+        storeStock.UpdatedAt = DateTime.UtcNow;
+      }
+
+      await db.SaveChangesAsync(ct);
+
+      return new StoreProductStockDto
+      {
+        ProductId = productId,
+        ProductName = product.Name,
+        Stock = storeStock.Stock,
+        ReservedStock = storeStock.ReservedStock,
+        AvailableStock = storeStock.Stock - storeStock.ReservedStock,
+        UpdatedAt = storeStock.UpdatedAt
+      };
     }
   }
 }

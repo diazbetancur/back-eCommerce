@@ -452,5 +452,125 @@ namespace Api_eCommerce.Controllers
         );
       }
     }
+
+    // ==================== STORE STOCK MANAGEMENT ====================
+
+    /// <summary>
+    /// Obtener el stock de todos los productos en una tienda específica
+    /// </summary>
+    /// <param name="storeId">ID de la tienda</param>
+    /// <response code="200">Lista de productos con su stock en la tienda</response>
+    /// <response code="403">No tiene permisos para ver inventario</response>
+    /// <response code="404">Tienda no encontrada</response>
+    [HttpGet("{storeId:guid}/stock")]
+    [RequireModule("inventory", "view")]
+    [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [ProducesResponseType<List<StoreProductStockDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetStoreStock(Guid storeId)
+    {
+      try
+      {
+        var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+        if (tenantContext == null)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status409Conflict,
+              title: "Tenant Not Resolved",
+              detail: "Unable to resolve tenant from request"
+          );
+        }
+
+        var stock = await _stockService.GetStoreStockAsync(storeId);
+        return Ok(stock);
+      }
+      catch (InvalidOperationException ex)
+      {
+        return NotFound(new ProblemDetails
+        {
+          Status = StatusCodes.Status404NotFound,
+          Title = "Store not found",
+          Detail = ex.Message
+        });
+      }
+      catch (Exception ex)
+      {
+        return Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Error retrieving store stock",
+            detail: ex.Message
+        );
+      }
+    }
+
+    /// <summary>
+    /// Actualizar el stock de un producto en una tienda específica
+    /// </summary>
+    /// <param name="storeId">ID de la tienda</param>
+    /// <param name="productId">ID del producto</param>
+    /// <param name="request">Nuevo valor de stock</param>
+    /// <remarks>
+    /// El stock debe ser mayor o igual a 0. La operación es idempotente.
+    /// El ReservedStock no se modifica, solo el Stock total.
+    /// </remarks>
+    /// <response code="200">Stock actualizado exitosamente</response>
+    /// <response code="400">Stock inválido (negativo)</response>
+    /// <response code="403">No tiene permisos para actualizar inventario</response>
+    /// <response code="404">Tienda o producto no encontrado</response>
+    [HttpPut("{storeId:guid}/stock/{productId:guid}")]
+    [RequireModule("inventory", "update")]
+    [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [ProducesResponseType<StoreProductStockDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateStoreProductStock(
+        Guid storeId,
+        Guid productId,
+        [FromBody] UpdateStoreStockRequest request)
+    {
+      try
+      {
+        var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+        if (tenantContext == null)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status409Conflict,
+              title: "Tenant Not Resolved",
+              detail: "Unable to resolve tenant from request"
+          );
+        }
+
+        var updatedStock = await _stockService.UpdateStoreProductStockAsync(storeId, productId, request.Stock);
+        return Ok(updatedStock);
+      }
+      catch (ArgumentException ex)
+      {
+        return BadRequest(new ProblemDetails
+        {
+          Status = StatusCodes.Status400BadRequest,
+          Title = "Invalid stock value",
+          Detail = ex.Message
+        });
+      }
+      catch (InvalidOperationException ex)
+      {
+        return NotFound(new ProblemDetails
+        {
+          Status = StatusCodes.Status404NotFound,
+          Title = "Store or Product not found",
+          Detail = ex.Message
+        });
+      }
+      catch (Exception ex)
+      {
+        return Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Error updating stock",
+            detail: ex.Message
+        );
+      }
+    }
   }
 }
