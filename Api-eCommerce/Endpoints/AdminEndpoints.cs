@@ -24,6 +24,7 @@ namespace Api_eCommerce.Endpoints
             auth.MapPost("/login", AdminLogin)
                 .WithName("AdminLogin")
                 .WithSummary("Admin login")
+                .WithDescription("Authenticates an admin user and returns JWT token. Does NOT require X-Tenant-Slug header.")
                 .AllowAnonymous()
                 .Produces<AdminLoginResponse>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
@@ -31,8 +32,11 @@ namespace Api_eCommerce.Endpoints
             auth.MapGet("/me", GetAdminProfile)
                 .WithName("GetAdminProfile")
                 .WithSummary("Get current admin user profile")
+                .WithDescription("Returns the authenticated admin user's profile. Does NOT require X-Tenant-Slug header.")
                 .RequireAuthorization()
-                .Produces<AdminUserDto>(StatusCodes.Status200OK);
+                .Produces<AdminUserDto>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
+                .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
 
             // ==================== TENANTS ====================
             var tenants = admin.MapGroup("/tenants")
@@ -106,7 +110,11 @@ namespace Api_eCommerce.Endpoints
                 var userId = GetAdminUserIdFromJwt(context);
                 if (!userId.HasValue)
                 {
-                    return Results.Unauthorized();
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        title: "Unauthorized",
+                        detail: "Invalid or missing admin credentials in token"
+                    );
                 }
 
                 var user = await authService.GetCurrentUserAsync(userId.Value);
@@ -118,6 +126,14 @@ namespace Api_eCommerce.Endpoints
                     statusCode: StatusCodes.Status404NotFound,
                     title: "Not Found",
                     detail: ex.Message
+                );
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Internal Server Error",
+                    detail: "An error occurred while retrieving admin profile"
                 );
             }
         }

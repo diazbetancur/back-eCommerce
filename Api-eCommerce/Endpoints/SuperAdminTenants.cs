@@ -217,6 +217,7 @@ namespace Api_eCommerce.Endpoints
 
                         await TenantDbSeeder.CreateTenantUserAsync(
                             tenantDb,
+                            tenantId: tenant.Id, // ✅ Pasar TenantId
                             email: finalAdminEmail,
                             password: tempPassword,
                             roleName: "SuperAdmin",

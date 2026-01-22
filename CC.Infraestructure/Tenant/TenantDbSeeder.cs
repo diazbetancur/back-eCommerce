@@ -341,6 +341,7 @@ namespace CC.Infraestructure.Tenant
         /// </summary>
         public static async Task CreateTenantUserAsync(
             TenantDbContext tenantDb,
+            Guid tenantId,
             string email,
             string password,
             string roleName,
@@ -376,6 +377,7 @@ namespace CC.Infraestructure.Tenant
                 LastName = lastName,
                 IsActive = true,
                 MustChangePassword = false,
+                TenantId = tenantId, // ✅ Establecer TenantId
                 CreatedAt = DateTime.UtcNow
             };
 

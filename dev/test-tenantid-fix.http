@@ -1,0 +1,9 @@
+### Test: Crear tenant después de fix TenantId
+POST http://localhost:5000/superadmin/tenants
+Content-Type: application/json
+
+{
+  "slug": "barberia-test",
+  "name": "Barbería Test",
+  "planCode": "Standard"
+}

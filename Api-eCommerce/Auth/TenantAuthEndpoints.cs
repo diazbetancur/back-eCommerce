@@ -33,8 +33,8 @@ namespace Api_eCommerce.Auth
             group.MapGet("/me", GetProfile)
                 .RequireAuthorization()
                 .WithName("GetProfile")
-                .WithSummary("Get current user profile")
-                .WithDescription("Returns the authenticated user's profile information")
+                .WithSummary("Get current user profile (tenant user)")
+                .WithDescription("Returns the authenticated tenant user's profile information. REQUIRES X-Tenant-Slug header. For admin users, use GET /admin/auth/me instead.")
                 .Produces<UserProfileDto>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
 
