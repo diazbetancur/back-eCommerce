@@ -28,17 +28,20 @@ namespace CC.Aplication.Auth
         private readonly ITenantAccessor _tenantAccessor;
         private readonly IConfiguration _configuration;
         private readonly ILogger<UnifiedAuthService> _logger;
+        private readonly CC.Aplication.Services.IFeatureService _featureService;
 
         public UnifiedAuthService(
             TenantDbContextFactory dbFactory,
             ITenantAccessor tenantAccessor,
             IConfiguration configuration,
-            ILogger<UnifiedAuthService> logger)
+            ILogger<UnifiedAuthService> logger,
+            CC.Aplication.Services.IFeatureService featureService)
         {
             _dbFactory = dbFactory;
             _tenantAccessor = tenantAccessor;
             _configuration = configuration;
             _logger = logger;
+            _featureService = featureService;
         }
 
         /// <summary>
@@ -126,6 +129,32 @@ namespace CC.Aplication.Auth
             var token = GenerateJwtToken(user.Id, user.Email, roles, modules);
             var expiresAt = DateTime.UtcNow.AddHours(24);
 
+            // Cargar features del plan para incluirlas en la respuesta de login
+            _logger.LogInformation("🎯 Loading tenant features...");
+            var tenantFeatures = await _featureService.GetFeaturesAsync(ct);
+            var featuresDto = new TenantFeaturesDto
+            {
+                AllowGuestCheckout = tenantFeatures.AllowGuestCheckout,
+                EnableExpressCheckout = tenantFeatures.EnableExpressCheckout,
+                ShowStock = tenantFeatures.ShowStock,
+                HasVariants = tenantFeatures.HasVariants,
+                EnableMultiStore = tenantFeatures.EnableMultiStore,
+                EnableWishlist = tenantFeatures.EnableWishlist,
+                EnableReviews = tenantFeatures.EnableReviews,
+                EnableCartSave = tenantFeatures.EnableCartSave,
+                MaxCartItems = tenantFeatures.MaxCartItems,
+                EnableAdvancedSearch = tenantFeatures.EnableAdvancedSearch,
+                EnableAnalytics = tenantFeatures.EnableAnalytics,
+                EnableNewsletterSignup = tenantFeatures.EnableNewsletterSignup,
+                Payments = new PaymentFeaturesDto
+                {
+                    WompiEnabled = tenantFeatures.Payments.WompiEnabled,
+                    StripeEnabled = tenantFeatures.Payments.StripeEnabled,
+                    PayPalEnabled = tenantFeatures.Payments.PayPalEnabled,
+                    CashOnDelivery = tenantFeatures.Payments.CashOnDelivery
+                }
+            };
+
             _logger.LogInformation("✅ Login successful for user {Email} with {RoleCount} roles", user.Email, roles.Count);
 
             return new UnifiedAuthResponse(
@@ -142,7 +171,8 @@ namespace CC.Aplication.Auth
                     Modules = modules,  // Array simple de códigos: ["catalog", "orders", ...]
                     Permissions = permissions,
                     IsActive = user.IsActive,
-                    MustChangePassword = user.MustChangePassword
+                    MustChangePassword = user.MustChangePassword,
+                    Features = featuresDto  // Features basadas en el plan del tenant
                 }
             );
         }
@@ -440,6 +470,46 @@ namespace CC.Aplication.Auth
         public List<ModulePermissionDto> Permissions { get; set; } = new();
         public bool IsActive { get; set; }
         public bool MustChangePassword { get; set; }  // Indica si debe cambiar contraseña
+
+        // Features del plan - permite al frontend armar menú basado en plan + permisos
+        public TenantFeaturesDto? Features { get; set; }
+    }
+
+    /// <summary>
+    /// Features del tenant basadas en su plan - incluido en login para simplificar frontend
+    /// </summary>
+    public class TenantFeaturesDto
+    {
+        // Checkout Features
+        public bool AllowGuestCheckout { get; set; }
+        public bool EnableExpressCheckout { get; set; }
+
+        // Catalog Features
+        public bool ShowStock { get; set; }
+        public bool HasVariants { get; set; }
+        public bool EnableMultiStore { get; set; }  // Determina si mostrar menú de Stores
+        public bool EnableWishlist { get; set; }
+        public bool EnableReviews { get; set; }
+
+        // Cart & Search
+        public bool EnableCartSave { get; set; }
+        public int MaxCartItems { get; set; }
+        public bool EnableAdvancedSearch { get; set; }
+
+        // Marketing
+        public bool EnableAnalytics { get; set; }
+        public bool EnableNewsletterSignup { get; set; }
+
+        // Payment Methods
+        public PaymentFeaturesDto Payments { get; set; } = new();
+    }
+
+    public class PaymentFeaturesDto
+    {
+        public bool WompiEnabled { get; set; }
+        public bool StripeEnabled { get; set; }
+        public bool PayPalEnabled { get; set; }
+        public bool CashOnDelivery { get; set; }
     }
 
     public class ModulePermissionDto
