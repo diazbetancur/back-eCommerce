@@ -1,0 +1,380 @@
+### ========================================
+### 🔐 RBAC API - Users, Roles & Permissions
+### ========================================
+
+# Variables
+@baseUrl = https://api-ecommerce-d9fxeccbeeehdjd3.eastus-01.azurewebsites.net
+# @baseUrl = http://localhost:5000
+@tenantSlug = demo-store
+@token = YOUR_JWT_TOKEN_HERE
+
+### ========================================
+### 👥 USER MANAGEMENT
+### ========================================
+
+### 1. Get All Users (with pagination)
+GET {{baseUrl}}/admin/users?page=1&pageSize=10
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### 2. Get All Users (with search)
+GET {{baseUrl}}/admin/users?search=john&isActive=true
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### 3. Get User by ID
+GET {{baseUrl}}/admin/users/{{userId}}
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### 4. Create User
+POST {{baseUrl}}/admin/users
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "phoneNumber": "+1234567890",
+  "password": "SecurePass123!",
+  "roleIds": []
+}
+
+### 5. Update User Roles
+PUT {{baseUrl}}/admin/users/{{userId}}/roles
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "roleIds": [
+    "role-uuid-1",
+    "role-uuid-2"
+  ]
+}
+
+### 6. Activate User
+PATCH {{baseUrl}}/admin/users/{{userId}}/status
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "isActive": true
+}
+
+### 7. Deactivate User
+PATCH {{baseUrl}}/admin/users/{{userId}}/status
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "isActive": false
+}
+
+### 8. Delete User (Soft Delete)
+DELETE {{baseUrl}}/admin/users/{{userId}}
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+
+### ========================================
+### 🎭 ROLE MANAGEMENT
+### ========================================
+
+### 1. Get All Roles
+GET {{baseUrl}}/admin/roles
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### 2. Get Role by ID (with users and permissions)
+GET {{baseUrl}}/admin/roles/{{roleId}}
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### 3. Create Role
+POST {{baseUrl}}/admin/roles
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "name": "Warehouse Manager",
+  "description": "Manages inventory and warehouse operations"
+}
+
+### 4. Update Role
+PUT {{baseUrl}}/admin/roles/{{roleId}}
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "name": "Warehouse & Inventory Manager",
+  "description": "Updated description for the role"
+}
+
+### 5. Delete Role
+DELETE {{baseUrl}}/admin/roles/{{roleId}}
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+
+### ========================================
+### 🔑 PERMISSION MANAGEMENT
+### ========================================
+
+### 1. Get Available Modules (Catalog)
+GET {{baseUrl}}/admin/roles/available-modules
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### 2. Get Role Permissions
+GET {{baseUrl}}/admin/roles/{{roleId}}/permissions
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### 3. Update Role Permissions - Full Access Example
+PUT {{baseUrl}}/admin/roles/{{roleId}}/permissions
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "permissions": [
+    {
+      "moduleCode": "inventory",
+      "canView": true,
+      "canCreate": true,
+      "canUpdate": true,
+      "canDelete": true
+    },
+    {
+      "moduleCode": "sales",
+      "canView": true,
+      "canCreate": true,
+      "canUpdate": true,
+      "canDelete": false
+    },
+    {
+      "moduleCode": "reports",
+      "canView": true,
+      "canCreate": false,
+      "canUpdate": false,
+      "canDelete": false
+    }
+  ]
+}
+
+### 4. Update Role Permissions - Read Only Example
+PUT {{baseUrl}}/admin/roles/{{roleId}}/permissions
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "permissions": [
+    {
+      "moduleCode": "inventory",
+      "canView": true,
+      "canCreate": false,
+      "canUpdate": false,
+      "canDelete": false
+    },
+    {
+      "moduleCode": "sales",
+      "canView": true,
+      "canCreate": false,
+      "canUpdate": false,
+      "canDelete": false
+    }
+  ]
+}
+
+### 5. Update Role Permissions - Sales Manager Example
+PUT {{baseUrl}}/admin/roles/{{roleId}}/permissions
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "permissions": [
+    {
+      "moduleCode": "sales",
+      "canView": true,
+      "canCreate": true,
+      "canUpdate": true,
+      "canDelete": true
+    },
+    {
+      "moduleCode": "customers",
+      "canView": true,
+      "canCreate": false,
+      "canUpdate": true,
+      "canDelete": false
+    },
+    {
+      "moduleCode": "reports",
+      "canView": true,
+      "canCreate": false,
+      "canUpdate": false,
+      "canDelete": false
+    }
+  ]
+}
+
+
+### ========================================
+### 🧪 TESTING SCENARIOS
+### ========================================
+
+### Scenario 1: Create Complete Workflow
+# Step 1: Create a new role
+POST {{baseUrl}}/admin/roles
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "name": "Store Manager",
+  "description": "Full store management access"
+}
+
+### Step 2: Assign permissions to the role (use roleId from Step 1)
+PUT {{baseUrl}}/admin/roles/{roleId-from-step-1}/permissions
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "permissions": [
+    {
+      "moduleCode": "inventory",
+      "canView": true,
+      "canCreate": true,
+      "canUpdate": true,
+      "canDelete": true
+    },
+    {
+      "moduleCode": "sales",
+      "canView": true,
+      "canCreate": true,
+      "canUpdate": true,
+      "canDelete": false
+    },
+    {
+      "moduleCode": "customers",
+      "canView": true,
+      "canCreate": true,
+      "canUpdate": true,
+      "canDelete": false
+    }
+  ]
+}
+
+### Step 3: Create a user with that role
+POST {{baseUrl}}/admin/users
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "email": "manager@example.com",
+  "firstName": "Store",
+  "lastName": "Manager",
+  "password": "SecurePass123!",
+  "roleIds": ["{roleId-from-step-1}"]
+}
+
+
+### Scenario 2: Test Error Cases
+
+### Try to create user with existing email (should return 400)
+POST {{baseUrl}}/admin/users
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "email": "existing@example.com",
+  "firstName": "Test",
+  "lastName": "User",
+  "password": "SecurePass123!"
+}
+
+### Try to delete system role (should return 400)
+DELETE {{baseUrl}}/admin/roles/{superadmin-role-id}
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Try to remove your own admin role (should return 400)
+PUT {{baseUrl}}/admin/users/{your-user-id}/roles
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "roleIds": []
+}
+
+
+### ========================================
+### 📊 USEFUL QUERIES
+### ========================================
+
+### Get all active users with Admin role
+GET {{baseUrl}}/admin/users?isActive=true&roleId={admin-role-id}
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Search users by email/name
+GET {{baseUrl}}/admin/users?search=john.doe
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Get paginated results
+GET {{baseUrl}}/admin/users?page=2&pageSize=20
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+
+### ========================================
+### 🔍 PERMISSION CHECK
+### ========================================
+
+### Check current user's permissions
+GET {{baseUrl}}/api/permissions/my-permissions
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Check if user can access specific module
+GET {{baseUrl}}/api/permissions/can-access/inventory
+Authorization: Bearer {{token}}
+X-Tenant-Slug: {{tenantSlug}}
+
+
+### ========================================
+### 📝 NOTES
+### ========================================
+
+# Module Codes Available:
+# - inventory: Inventory Management
+# - sales: Sales Management
+# - customers: Customer Management
+# - users: User & Role Management
+# - settings: Store Settings
+# - marketing: Marketing & Promotions
+# - reports: Reports & Analytics
+
+# System Roles (cannot be deleted or renamed):
+# - SuperAdmin: Full system access
+# - Customer: Default customer role
+
+# Permission Types:
+# - canView: Read access
+# - canCreate: Create new items
+# - canUpdate: Edit existing items
+# - canDelete: Delete items
