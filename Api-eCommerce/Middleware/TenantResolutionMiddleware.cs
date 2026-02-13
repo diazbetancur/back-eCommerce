@@ -43,6 +43,14 @@ namespace Api_eCommerce.Middleware
             ITenantAccessor tenantAccessor,
             IConfiguration configuration)
         {
+            // ==================== IGNORAR PETICIONES OPTIONS (CORS Preflight) ====================
+            // Las peticiones OPTIONS deben ser manejadas por el middleware CORS
+            if (context.Request.Method == "OPTIONS")
+            {
+                await _next(context);
+                return;
+            }
+
             // ==================== VERIFICAR SI LA RUTA ESTÁ EXCLUIDA ====================
             if (IsExcludedPath(context.Request.Path))
             {
