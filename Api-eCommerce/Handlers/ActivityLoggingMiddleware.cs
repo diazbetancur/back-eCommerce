@@ -17,6 +17,13 @@ namespace Api_eCommerce.Handlers
 
         public async Task Invoke(HttpContext context)
         {
+            // Ignorar peticiones OPTIONS (CORS preflight)
+            if (context.Request.Method == HttpMethods.Options)
+            {
+                await _next(context);
+                return;
+            }
+
             if (context.Request.Method == HttpMethods.Put ||
                 context.Request.Method == HttpMethods.Post ||
                 context.Request.Method == HttpMethods.Delete)

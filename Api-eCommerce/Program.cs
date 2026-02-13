@@ -198,6 +198,9 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ==================== HTTP PIPELINE ====================
+// ⚠️ IMPORTANTE: CORS debe ir PRIMERO para manejar preflight requests
+app.UseCors("AllowFrontend");
+
 if (app.Environment.IsDevelopment())
 {
     app.UseMultiTenantSwaggerUI();
@@ -209,11 +212,8 @@ else
 
 app.UseHttpsRedirection();
 
-// ? Routing debe estar ANTES de CORS para endpoint matching
+// ? Routing después de CORS
 app.UseRouting();
-
-// ? CORS debe ir lo más arriba posible para manejar preflight requests
-app.UseCors("AllowFrontend");
 
 // ? Autenticación antes de cualquier lógica de negocio
 app.UseAuthentication();
