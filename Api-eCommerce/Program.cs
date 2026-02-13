@@ -28,20 +28,16 @@ builder.Services.AddControllers();
 builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
 // ==================== CORS ====================
+// NOTA: Configuración temporal - Permite cualquier dominio para testing
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(
-                "https://pwaecommercee.netlify.app",   // Producci�n
-                "http://localhost:4200",                // Desarrollo local - Angular
-                "http://localhost:3000",                // Desarrollo local - React/Next
-                "http://localhost:5173"                 // Desarrollo local - Vite
-            )
+        policy.AllowAnyOrigin()      // ⚠️ TEMPORAL: Permite cualquier dominio
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials()
             .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
+        // NOTA: AllowCredentials() no se puede usar con AllowAnyOrigin()
     });
 });
 
