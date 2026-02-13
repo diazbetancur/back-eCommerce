@@ -213,16 +213,28 @@ else
 
 app.UseHttpsRedirection();
 
-// ? CORS debe ir ANTES de Authentication
+// ? Routing debe estar ANTES de CORS para endpoint matching
+app.UseRouting();
+
+// ? CORS debe ir lo más arriba posible para manejar preflight requests
 app.UseCors("AllowFrontend");
 
+// ? Autenticación antes de cualquier lógica de negocio
+app.UseAuthentication();
+
+// ? Middlewares de tenant ENTRE Authentication y Authorization
+// para leer JWT y validar tenant antes de autorización
+app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseTenantUserOwnershipValidation();
+
+// ? Autorización después de validar tenant
+app.UseAuthorization();
+
+// ? Middlewares personalizados DESPUÉS de autorización
+// para evitar interferencia con peticiones OPTIONS de CORS
 app.UseMiddleware<MeteringMiddleware>();
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
-app.UseAuthentication(); // ✅ Autenticación PRIMERO
-app.UseMiddleware<TenantResolutionMiddleware>(); // ✅ Tenant resolution DESPUÉS de auth para leer JWT
-app.UseTenantUserOwnershipValidation(); // ✅ Validar que JWT tenant == tenant actual
 app.UseMiddleware<ActivityLoggingMiddleware>();
-app.UseAuthorization();
 
 // ==================== ROUTES ====================
 app.MapAdminEndpoints();

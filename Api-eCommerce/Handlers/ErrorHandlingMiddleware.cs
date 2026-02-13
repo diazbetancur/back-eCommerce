@@ -46,6 +46,8 @@ namespace Api_eCommerce.Handlers
             code = GetHttpCode(exception, code);
             result = GetHttpResult(exception, message);
 
+            // ✅ Preservar headers de CORS al escribir respuesta de error
+            // No sobrescribir si ya existen (fueron agregados por UseCors middleware)
             context.Response.ContentType = "application/json";
             context.Response.StatusCode = (int)code;
             return context.Response.WriteAsync(result);
