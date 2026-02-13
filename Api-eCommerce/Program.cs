@@ -75,6 +75,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<TenantProvisioning
 // ==================== ADMIN SERVICES ====================
 builder.Services.AddScoped<CC.Aplication.Admin.IAdminAuthService, CC.Aplication.Admin.AdminAuthService>();
 builder.Services.AddScoped<CC.Aplication.Admin.IAdminTenantService, CC.Aplication.Admin.AdminTenantService>();
+builder.Services.AddScoped<CC.Aplication.Roles.IRoleService, CC.Aplication.Roles.RoleService>();
+builder.Services.AddScoped<CC.Aplication.Users.IUserManagementService, CC.Aplication.Users.UserManagementService>();
 
 // ==================== BUSINESS SERVICES (TENANT) ====================
 builder.Services.AddScoped<ICatalogService, CatalogService>();
@@ -224,6 +226,7 @@ app.UseAuthorization();
 
 // ==================== ROUTES ====================
 app.MapAdminEndpoints();
+app.MapRoleAdminEndpoints();
 app.MapProvisioningEndpoints();
 app.MapSuperAdminTenants();
 app.MapSuperAdminPlans();  // ? Endpoint de planes (solo lectura)

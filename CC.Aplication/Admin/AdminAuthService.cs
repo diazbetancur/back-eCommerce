@@ -45,7 +45,7 @@ namespace CC.Aplication.Admin
                 throw new UnauthorizedAccessException("Invalid credentials or inactive account");
             }
 
-            // Verificar contrase�a
+            // Verificar contrase�a
             if (!VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
             {
                 _logger.LogWarning("Failed login attempt for admin user: {Email}", request.Email);
@@ -111,6 +111,10 @@ namespace CC.Aplication.Admin
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+            // Obtener issuer y audience de configuración (mismo formato que UnifiedAuthService)
+            var issuer = _configuration["Jwt:Issuer"] ?? "ecommerce-api";
+            var audience = _configuration["Jwt:Audience"] ?? "ecommerce-clients";
+
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
@@ -127,7 +131,9 @@ namespace CC.Aplication.Admin
             {
                 Subject = new ClaimsIdentity(claims),
                 Expires = DateTime.UtcNow.AddHours(24),
-                SigningCredentials = credentials
+                SigningCredentials = credentials,
+                Issuer = issuer,        // ✅ FIX: Agregar issuer para validación
+                Audience = audience     // ✅ FIX: Agregar audience para validación
             };
 
             var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();

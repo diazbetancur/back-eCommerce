@@ -1,4 +1,5 @@
 using Api_eCommerce.Authorization;
+using CC.Domain.Dto;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
@@ -92,6 +93,35 @@ namespace Api_eCommerce.Endpoints
                 .WithSummary("Assign role to user (Admin)")
                 .WithMetadata(new RequireModuleAttribute("customers", "update"))
                 .Produces<TenantUserDetailDto>(StatusCodes.Status200OK);
+
+            group.MapGet("/users/{id:guid}", GetUserById)
+                .WithName("AdminGetUserById")
+                .WithSummary("Get user details by ID")
+                .WithMetadata(new RequireModuleAttribute("customers", "view"))
+                .Produces<TenantUserDetailDto>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
+
+            group.MapPut("/users/{id:guid}/roles", UpdateUserRoles)
+                .WithName("AdminUpdateUserRoles")
+                .WithSummary("Update user roles (with lockout protection)")
+                .WithMetadata(new RequireModuleAttribute("customers", "update"))
+                .Produces<TenantUserDetailDto>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+                .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
+
+            group.MapPatch("/users/{id:guid}/status", UpdateUserStatus)
+                .WithName("AdminUpdateUserStatus")
+                .WithSummary("Activate or deactivate user")
+                .WithMetadata(new RequireModuleAttribute("customers", "update"))
+                .Produces<TenantUserDetailDto>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
+
+            group.MapDelete("/users/{id:guid}", DeleteUser)
+                .WithName("AdminDeleteUser")
+                .WithSummary("Delete user (soft delete)")
+                .WithMetadata(new RequireModuleAttribute("customers", "delete"))
+                .Produces(StatusCodes.Status204NoContent)
+                .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
 
             // ==================== STORE SETTINGS (Módulo: settings) ====================
             group.MapGet("/settings", GetStoreSettings)
@@ -688,6 +718,116 @@ namespace Api_eCommerce.Endpoints
             {
                 return InternalServerError("assigning role");
             }
+        }
+
+        private static async Task<IResult> GetUserById(
+            Guid id,
+            CC.Aplication.Users.IUserManagementService userService,
+            CancellationToken cancellationToken)
+        {
+            var user = await userService.GetUserByIdAsync(id, cancellationToken);
+
+            if (user == null)
+            {
+                return Results.Problem(
+                    title: "User not found",
+                    detail: $"No user found with ID {id}",
+                    statusCode: StatusCodes.Status404NotFound
+                );
+            }
+
+            return Results.Ok(user);
+        }
+
+        private static async Task<IResult> UpdateUserRoles(
+            Guid id,
+            [FromBody] UpdateUserRolesRequest request,
+            HttpContext context,
+            CC.Aplication.Users.IUserManagementService userService,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Obtener el ID del usuario actual desde el JWT
+                var userIdClaim = context.User.FindFirst("userId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var currentUserId))
+                {
+                    return Results.Problem(
+                        title: "Invalid authentication",
+                        detail: "Unable to identify current user",
+                        statusCode: StatusCodes.Status401Unauthorized
+                    );
+                }
+
+                if (request.RoleNames == null || !request.RoleNames.Any())
+                {
+                    return Results.Problem(
+                        title: "Validation failed",
+                        detail: "At least one role must be assigned",
+                        statusCode: StatusCodes.Status400BadRequest
+                    );
+                }
+
+                var user = await userService.UpdateUserRolesAsync(id, request, currentUserId, cancellationToken);
+
+                if (user == null)
+                {
+                    return Results.Problem(
+                        title: "User not found",
+                        detail: $"No user found with ID {id}",
+                        statusCode: StatusCodes.Status404NotFound
+                    );
+                }
+
+                return Results.Ok(user);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(
+                    title: "Operation not allowed",
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status400BadRequest
+                );
+            }
+        }
+
+        private static async Task<IResult> UpdateUserStatus(
+            Guid id,
+            [FromBody] UpdateUserActiveStatusRequest request,
+            CC.Aplication.Users.IUserManagementService userService,
+            CancellationToken cancellationToken)
+        {
+            var user = await userService.UpdateUserActiveStatusAsync(id, request, cancellationToken);
+
+            if (user == null)
+            {
+                return Results.Problem(
+                    title: "User not found",
+                    detail: $"No user found with ID {id}",
+                    statusCode: StatusCodes.Status404NotFound
+                );
+            }
+
+            return Results.Ok(user);
+        }
+
+        private static async Task<IResult> DeleteUser(
+            Guid id,
+            CC.Aplication.Users.IUserManagementService userService,
+            CancellationToken cancellationToken)
+        {
+            var deleted = await userService.DeleteUserAsync(id, cancellationToken);
+
+            if (!deleted)
+            {
+                return Results.Problem(
+                    title: "User not found",
+                    detail: $"No user found with ID {id}",
+                    statusCode: StatusCodes.Status404NotFound
+                );
+            }
+
+            return Results.NoContent();
         }
 
         // ==================== STORE SETTINGS HANDLERS ====================
