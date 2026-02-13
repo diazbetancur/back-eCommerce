@@ -21,13 +21,6 @@ namespace Api_eCommerce.Handlers
 
         public async Task InvokeAsync(HttpContext context /* other scoped dependencies */)
         {
-            // Ignorar peticiones OPTIONS (CORS preflight) - dejar que UseCors las maneje
-            if (context.Request.Method == "OPTIONS")
-            {
-                await next(context);
-                return;
-            }
-
             try
             {
                 await next(context);

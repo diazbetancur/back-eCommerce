@@ -28,16 +28,20 @@ builder.Services.AddControllers();
 builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
 // ==================== CORS ====================
-// NOTA: Configuración temporal - Permite cualquier dominio para testing
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.AllowAnyOrigin()      // ⚠️ TEMPORAL: Permite cualquier dominio
+        policy.WithOrigins(
+                "https://pwaecommercee.netlify.app",   // Producci�n
+                "http://localhost:4200",                // Desarrollo local - Angular
+                "http://localhost:3000",                // Desarrollo local - React/Next
+                "http://localhost:5173"                 // Desarrollo local - Vite
+            )
             .AllowAnyMethod()
             .AllowAnyHeader()
+            .AllowCredentials()
             .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
-        // NOTA: AllowCredentials() no se puede usar con AllowAnyOrigin()
     });
 });
 
@@ -198,9 +202,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ==================== HTTP PIPELINE ====================
-// ⚠️ IMPORTANTE: CORS debe ir PRIMERO para manejar preflight requests
-app.UseCors("AllowFrontend");
-
 if (app.Environment.IsDevelopment())
 {
     app.UseMultiTenantSwaggerUI();
@@ -212,8 +213,11 @@ else
 
 app.UseHttpsRedirection();
 
-// ? Routing después de CORS
+// ? Routing debe estar ANTES de CORS para endpoint matching
 app.UseRouting();
+
+// ? CORS debe ir lo más arriba posible para manejar preflight requests
+app.UseCors("AllowFrontend");
 
 // ? Autenticación antes de cualquier lógica de negocio
 app.UseAuthentication();
