@@ -23,7 +23,7 @@ namespace Api_eCommerce.Endpoints
           .WithTags("Role Management");
 
       // ==================== ROLES ====================
-      roles.MapGet("", GetRoles)
+      roles.MapGet("/", GetRoles)
           .WithName("GetRoles")
           .WithSummary("Get all roles in the tenant")
           .WithDescription("Returns a list of all roles with their assigned user count")
@@ -39,7 +39,7 @@ namespace Api_eCommerce.Endpoints
           .Produces<RoleDetailDto>(StatusCodes.Status200OK)
           .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
 
-      roles.MapPost("", CreateRole)
+      roles.MapPost("/", CreateRole)
           .WithName("CreateRole")
           .WithSummary("Create a new role")
           .WithDescription("Creates a new role with the specified name and description")

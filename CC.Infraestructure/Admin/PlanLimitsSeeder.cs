@@ -121,8 +121,8 @@ namespace CC.Infraestructure.Admin
                 {
                     PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxAdminUsers,
-                    LimitValue = 3,
-                    Description = "M�ximo 3 usuarios admin/staff"
+                    LimitValue = 10,
+                    Description = "M�ximo 10 usuarios admin/staff"
                 },
                 new PlanLimit
                 {
@@ -212,8 +212,8 @@ namespace CC.Infraestructure.Admin
                 {
                     PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxAdminUsers,
-                    LimitValue = 15,
-                    Description = "M�ximo 15 usuarios admin/staff"
+                    LimitValue = 20,
+                    Description = "M�ximo 20 usuarios admin/staff"
                 },
                 new PlanLimit
                 {

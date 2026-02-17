@@ -22,7 +22,8 @@ namespace Api_eCommerce.Middleware
         {
             "/swagger",
             "/health",
-            "/admin",                    // ? SuperAdmin endpoints (usa AdminDb) - Los tenant admin usan /api/admin/*
+            "/admin/auth",               // ? Admin login (usa AdminDb, NO requiere tenant)
+            "/admin/tenants",            // ? Gestión de tenants por SuperAdmin (usa AdminDb)
             "/provision",                // ? Provisioning (usa AdminDb)
             "/superadmin",               // ? SuperAdmin endpoints (usa AdminDb)
             "/_framework",               // ? Blazor/framework routes

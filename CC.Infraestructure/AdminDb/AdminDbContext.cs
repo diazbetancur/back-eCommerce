@@ -5,8 +5,8 @@ using TenantEntity = CC.Infraestructure.Admin.Entities.Tenant;
 namespace CC.Infraestructure.AdminDb
 {
     /// <summary>
-    /// DbContext para la base de datos de administración (Admin DB)
-    /// Contiene información de todos los tenants y su aprovisionamiento
+    /// DbContext para la base de datos de administraciï¿½n (Admin DB)
+    /// Contiene informaciï¿½n de todos los tenants y su aprovisionamiento
     /// </summary>
     public class AdminDbContext : DbContext
     {
@@ -24,11 +24,13 @@ namespace CC.Infraestructure.AdminDb
         public DbSet<TenantFeatureOverride> TenantFeatureOverrides => Set<TenantFeatureOverride>();
         public DbSet<TenantUsageDaily> TenantUsageDaily => Set<TenantUsageDaily>();
 
-        // Entidades de administración
+        // Entidades de administraciï¿½n
         public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
         public DbSet<AdminRole> AdminRoles => Set<AdminRole>();
         public DbSet<AdminUserRole> AdminUserRoles => Set<AdminUserRole>();
-
+        public DbSet<AdminPermission> AdminPermissions => Set<AdminPermission>();
+        public DbSet<AdminRolePermission> AdminRolePermissions => Set<AdminRolePermission>();
+        public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -49,12 +51,12 @@ namespace CC.Infraestructure.AdminDb
             {
                 entity.ToTable("PlanLimits", "admin");
                 entity.HasKey(e => e.Id);
-                
-                // Índice único: un plan no puede tener múltiples límites con el mismo código
+
+                // ï¿½ndice ï¿½nico: un plan no puede tener mï¿½ltiples lï¿½mites con el mismo cï¿½digo
                 entity.HasIndex(e => new { e.PlanId, e.LimitCode })
                     .IsUnique()
                     .HasDatabaseName("UQ_PlanLimits_PlanId_LimitCode");
-                
+
                 entity.Property(e => e.PlanId).IsRequired();
                 entity.Property(e => e.LimitCode).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.LimitValue).IsRequired();
@@ -67,7 +69,7 @@ namespace CC.Infraestructure.AdminDb
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // Configurar relación TenantProvisioning -> Tenant
+            // Configurar relaciï¿½n TenantProvisioning -> Tenant
             modelBuilder.Entity<TenantProvisioning>()
                 .HasOne(tp => tp.Tenant)
                 .WithMany()
@@ -97,6 +99,7 @@ namespace CC.Infraestructure.AdminDb
                 entity.HasIndex(e => e.Name).IsUnique();
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.Description).HasMaxLength(500);
+                entity.Property(e => e.IsSystemRole).IsRequired();
                 entity.Property(e => e.CreatedAt).IsRequired();
             });
 
@@ -117,6 +120,69 @@ namespace CC.Infraestructure.AdminDb
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.Property(e => e.AssignedAt).IsRequired();
+            });
+
+            // AdminPermission
+            modelBuilder.Entity<AdminPermission>(entity =>
+            {
+                entity.ToTable("AdminPermissions", "admin");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Resource).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Action).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Description).HasMaxLength(500);
+                entity.Property(e => e.IsSystemPermission).IsRequired();
+                entity.Property(e => e.CreatedAt).IsRequired();
+            });
+
+            // AdminRolePermission (Many-to-Many)
+            modelBuilder.Entity<AdminRolePermission>(entity =>
+            {
+                entity.ToTable("AdminRolePermissions", "admin");
+                entity.HasKey(e => new { e.AdminRoleId, e.AdminPermissionId });
+
+                entity.HasOne(e => e.AdminRole)
+                    .WithMany(r => r.RolePermissions)
+                    .HasForeignKey(e => e.AdminRoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.AdminPermission)
+                    .WithMany(p => p.RolePermissions)
+                    .HasForeignKey(e => e.AdminPermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(e => e.AssignedAt).IsRequired();
+            });
+
+            // AdminAuditLog
+            modelBuilder.Entity<AdminAuditLog>(entity =>
+            {
+                entity.ToTable("AdminAuditLogs", "admin");
+                entity.HasKey(e => e.Id);
+
+                // Ãndices para consultas frecuentes
+                entity.HasIndex(e => e.AdminUserId);
+                entity.HasIndex(e => e.Action);
+                entity.HasIndex(e => e.ResourceType);
+                entity.HasIndex(e => e.CreatedAt);
+                entity.HasIndex(e => new { e.AdminUserId, e.CreatedAt });
+                entity.HasIndex(e => new { e.ResourceType, e.ResourceId });
+
+                entity.Property(e => e.AdminUserId).IsRequired();
+                entity.Property(e => e.AdminUserEmail).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.ResourceType).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.ResourceId).HasMaxLength(100);
+                entity.Property(e => e.IpAddress).HasMaxLength(45);
+                entity.Property(e => e.UserAgent).HasMaxLength(500);
+                entity.Property(e => e.CreatedAt).IsRequired();
+
+                // RelaciÃ³n con AdminUser (opcional - puede ser null si el usuario fue eliminado)
+                entity.HasOne(e => e.AdminUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.AdminUserId)
+                    .OnDelete(DeleteBehavior.Restrict); // No eliminar logs si se elimina usuario
             });
         }
     }

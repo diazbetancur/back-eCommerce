@@ -21,8 +21,14 @@ namespace CC.Infraestructure.Admin.Entities
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Indica si es un rol del sistema que no puede ser eliminado
+        /// </summary>
+        public bool IsSystemRole { get; set; }
+
         // Navigation properties
         public ICollection<AdminUserRole> UserRoles { get; set; } = new List<AdminUserRole>();
+        public ICollection<AdminRolePermission> RolePermissions { get; set; } = new List<AdminRolePermission>();
     }
 
     /// <summary>

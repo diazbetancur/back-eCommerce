@@ -35,6 +35,9 @@ namespace CC.Aplication.Permissions
             await using var db = _dbFactory.Create();
 
             var hasAccess = await db.UserRoles
+                .Include(ur => ur.Role)
+                    .ThenInclude(r => r.ModulePermissions)
+                        .ThenInclude(rmp => rmp.Module)
                 .Where(ur => ur.UserId == userId)
                 .SelectMany(ur => ur.Role.ModulePermissions)
                 .AnyAsync(rmp => rmp.Module.Code == moduleCode && rmp.Module.IsActive && rmp.CanView);
@@ -51,12 +54,32 @@ namespace CC.Aplication.Permissions
 
             await using var db = _dbFactory.Create();
 
-            // Obtener el permiso m�s permisivo si el usuario tiene m�ltiples roles
+            // Obtener el permiso más permisivo si el usuario tiene múltiples roles
             var permissions = await db.UserRoles
+                .Include(ur => ur.Role)
+                    .ThenInclude(r => r.ModulePermissions)
+                        .ThenInclude(rmp => rmp.Module)
                 .Where(ur => ur.UserId == userId)
                 .SelectMany(ur => ur.Role.ModulePermissions)
                 .Where(rmp => rmp.Module.Code == moduleCode && rmp.Module.IsActive)
                 .ToListAsync();
+
+            if (!permissions.Any())
+            {
+                return new ModulePermissions { ModuleCode = moduleCode };
+            }
+
+            var result = new ModulePermissions
+            {
+                ModuleCode = moduleCode,
+                CanView = permissions.Any(p => p.CanView),
+                CanCreate = permissions.Any(p => p.CanCreate),
+                CanUpdate = permissions.Any(p => p.CanUpdate),
+                CanDelete = permissions.Any(p => p.CanDelete)
+            };
+
+            // Si tiene múltiples roles, usar OR lógico (el más permisivo gana)
+            return result;
 
             if (!permissions.Any())
             {

@@ -15,6 +15,18 @@ namespace CC.Aplication.Auth
         string Password
     );
 
+    public record UpdateProfileRequest(
+        string FirstName,
+        string LastName,
+        string? PhoneNumber = null,
+        string? DocumentType = null,
+        string? DocumentNumber = null,
+        DateTime? BirthDate = null,
+        string? Address = null,
+        string? City = null,
+        string? Country = null
+    );
+
     // ==================== RESPONSE DTOs ====================
 
     public record AuthResponse(

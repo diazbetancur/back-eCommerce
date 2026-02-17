@@ -133,7 +133,8 @@ namespace CC.Aplication.Admin
         int Page = 1,
         int PageSize = 20,
         string? Search = null,
-        bool? IsActive = null
+        bool? IsActive = null,
+        string? RoleName = null
     );
 
     public record PagedAdminUsersResponse(
@@ -144,17 +145,130 @@ namespace CC.Aplication.Admin
         int TotalPages
     );
 
+    public record AdminUserDetailDto(
+        Guid Id,
+        string Email,
+        string FullName,
+        bool IsActive,
+        List<AdminRoleDto> Roles,
+        DateTime CreatedAt,
+        DateTime? UpdatedAt,
+        DateTime? LastLoginAt
+    );
+
+    public record AdminRoleDto(
+        Guid Id,
+        string Name,
+        string? Description = null
+    );
+
     public record CreateAdminUserRequest(
         string Email,
         string Password,
         string FullName,
-        List<string> Roles
+        List<string> RoleNames
     );
 
     public record UpdateAdminUserRequest(
-        string? FullName,
-        string? Password,
-        bool? IsActive,
-        List<string>? Roles
+        string? FullName = null,
+        bool? IsActive = null
+    );
+
+    public record UpdateAdminUserRolesRequest(
+        List<string> RoleNames
+    );
+
+    public record UpdateAdminPasswordRequest(
+        string NewPassword
+    );
+
+    // ==================== AUDIT LOGS ====================
+
+    public record AuditLogQuery(
+        int Page = 1,
+        int PageSize = 50,
+        Guid? AdminUserId = null,
+        string? Action = null,
+        string? ResourceType = null,
+        string? ResourceId = null,
+        DateTime? StartDate = null,
+        DateTime? EndDate = null
+    );
+
+    public record AuditLogDto(
+        Guid Id,
+        Guid AdminUserId,
+        string AdminUserEmail,
+        string Action,
+        string ResourceType,
+        string? ResourceId,
+        string? Details,
+        string? IpAddress,
+        DateTime CreatedAt
+    );
+
+    public record PagedAuditLogsResponse(
+        List<AuditLogDto> Items,
+        int TotalCount,
+        int Page,
+        int PageSize,
+        int TotalPages
+    );
+
+    public record CreateAuditLogRequest(
+        string Action,
+        string ResourceType,
+        string? ResourceId = null,
+        object? Details = null
+    );
+
+    // ==================== ADMIN ROLE MANAGEMENT ====================
+
+    public record AdminRoleDetailDto(
+        Guid Id,
+        string Name,
+        string? Description,
+        bool IsSystemRole,
+        int UserCount,
+        List<AdminPermissionDto> Permissions,
+        DateTime CreatedAt
+    );
+
+    public record AdminPermissionDto(
+        Guid Id,
+        string Name,
+        string Resource,
+        string Action,
+        string? Description
+    );
+
+    public record CreateAdminRoleRequest(
+        string Name,
+        string? Description = null,
+        List<Guid>? PermissionIds = null
+    );
+
+    public record UpdateAdminRoleRequest(
+        string? Name = null,
+        string? Description = null
+    );
+
+    public record UpdateAdminRolePermissionsRequest(
+        List<Guid> PermissionIds
+    );
+
+    public record AdminRolePermissionsResponse(
+        Guid RoleId,
+        string RoleName,
+        List<AdminPermissionDto> Permissions
+    );
+
+    public record AvailableAdminPermissionsResponse(
+        List<PermissionGroupDto> Groups
+    );
+
+    public record PermissionGroupDto(
+        string Resource,
+        List<AdminPermissionDto> Permissions
     );
 }

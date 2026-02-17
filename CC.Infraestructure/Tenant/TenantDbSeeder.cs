@@ -209,6 +209,16 @@ namespace CC.Infraestructure.Tenant
                 new Module
                 {
                     Id = Guid.NewGuid(),
+                    Code = "users",
+                    Name = "Usuarios",
+                    Description = "Gestión de usuarios y roles (RBAC)",
+                    IconName = "user-shield",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Module
+                {
+                    Id = Guid.NewGuid(),
                     Code = "loyalty",
                     Name = "Programa de Lealtad",
                     Description = "Gestión de puntos y recompensas",

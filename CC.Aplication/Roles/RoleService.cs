@@ -38,7 +38,12 @@ public class RoleService : IRoleService
     await using var db = _dbFactory.Create();
 
     var roles = await db.Roles
-        .Select(r => new RoleListItemDto(
+        .Include(r => r.UserRoles)
+        .Include(r => r.ModulePermissions)
+        .OrderBy(r => r.Name)
+        .ToListAsync(ct);
+
+    var result = roles.Select(r => new RoleListItemDto(
             r.Id,
             r.Name,
             r.Description,
@@ -46,10 +51,9 @@ public class RoleService : IRoleService
             r.ModulePermissions.Count(mp => mp.CanView || mp.CanCreate || mp.CanUpdate || mp.CanDelete),
             r.CreatedAt
         ))
-        .OrderBy(r => r.Name)
-        .ToListAsync(ct);
+        .ToList();
 
-    return new RolesResponse(roles);
+    return new RolesResponse(result);
   }
 
   public async Task<RoleDetailDto> GetRoleByIdAsync(Guid roleId, CancellationToken ct = default)

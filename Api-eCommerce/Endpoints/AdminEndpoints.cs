@@ -1,4 +1,6 @@
+using Api_eCommerce.Authorization;
 using CC.Aplication.Admin;
+using CC.Infraestructure.Admin.Entities;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -10,13 +12,15 @@ namespace Api_eCommerce.Endpoints
     /// <summary>
     /// Endpoints administrativos - NO requieren X-Tenant-Slug
     /// Solo usan AdminDbContext
+    /// Requieren roles administrativos específicos (SuperAdmin, TenantManager, Support, Viewer)
     /// </summary>
     public static class AdminEndpoints
     {
         public static IEndpointRouteBuilder MapAdminEndpoints(this IEndpointRouteBuilder app)
         {
             var admin = app.MapGroup("/admin")
-                .WithTags("Admin Panel");
+                .WithTags("Admin Panel")
+                .AddEndpointFilter<AdminRoleAuthorizationFilter>();
 
             // ==================== AUTH ====================
             var auth = admin.MapGroup("/auth");
@@ -42,7 +46,7 @@ namespace Api_eCommerce.Endpoints
             var tenants = admin.MapGroup("/tenants")
                 .RequireAuthorization();
 
-            tenants.MapGet("", GetTenants)
+            tenants.MapGet("/", GetTenants)
                 .WithName("GetTenants")
                 .WithSummary("List all tenants (paginated)")
                 .Produces<PagedTenantsResponse>(StatusCodes.Status200OK);
@@ -56,17 +60,20 @@ namespace Api_eCommerce.Endpoints
             tenants.MapPatch("/{tenantId:guid}", UpdateTenant)
                 .WithName("UpdateTenant")
                 .WithSummary("Update tenant configuration")
+                .WithMetadata(new RequireAdminRoleAttribute(AdminRoleNames.SuperAdmin, AdminRoleNames.TenantManager))
                 .Produces<TenantDetailDto>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
 
             tenants.MapPatch("/{tenantId:guid}/status", UpdateTenantStatus)
                 .WithName("UpdateTenantStatus")
                 .WithSummary("Update tenant status")
+                .WithMetadata(new RequireAdminRoleAttribute(AdminRoleNames.SuperAdmin, AdminRoleNames.TenantManager))
                 .Produces<TenantDetailDto>(StatusCodes.Status200OK);
 
             tenants.MapDelete("/{tenantId:guid}", DeleteTenant)
                 .WithName("Admin_DeleteTenant")
-                .WithSummary("Delete tenant (dangerous operation)")
+                .WithSummary("Delete tenant (dangerous operation) - SuperAdmin only")
+                .WithMetadata(new RequireAdminRoleAttribute(AdminRoleNames.SuperAdmin))
                 .Produces(StatusCodes.Status204NoContent);
 
             return app;
@@ -76,15 +83,45 @@ namespace Api_eCommerce.Endpoints
 
         private static async Task<IResult> AdminLogin(
             [FromBody] AdminLoginRequest request,
-            IAdminAuthService authService)
+            IAdminAuthService authService,
+            IAdminAuditService auditService,
+            HttpContext httpContext)
         {
             try
             {
                 var result = await authService.LoginAsync(request);
+
+                // Registrar auditoría (login exitoso)
+                await auditService.LogActionAsync(
+                    result.User.Id,
+                    result.User.Email,
+                    AuditActions.LoginSuccess,
+                    AuditResourceTypes.Authentication,
+                    result.User.Id.ToString(),
+                    null,
+                    AdminAuditEndpoints.GetIpAddress(httpContext),
+                    AdminAuditEndpoints.GetUserAgent(httpContext)
+                );
+
                 return Results.Ok(result);
             }
             catch (UnauthorizedAccessException ex)
             {
+                // Registrar auditoría (login fallido) - solo si tenemos el email
+                if (!string.IsNullOrEmpty(request.Email))
+                {
+                    await auditService.LogActionAsync(
+                        Guid.Empty, // No hay usuario válido
+                        request.Email,
+                        AuditActions.LoginFailed,
+                        AuditResourceTypes.Authentication,
+                        null,
+                        new { Reason = ex.Message },
+                        AdminAuditEndpoints.GetIpAddress(httpContext),
+                        AdminAuditEndpoints.GetUserAgent(httpContext)
+                    );
+                }
+
                 return Results.Problem(
                     statusCode: StatusCodes.Status401Unauthorized,
                     title: "Unauthorized",

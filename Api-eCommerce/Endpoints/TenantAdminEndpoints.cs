@@ -82,6 +82,18 @@ namespace Api_eCommerce.Endpoints
                 .WithMetadata(new RequireModuleAttribute("customers", "view"))
                 .Produces<AdminUsersResponse>(StatusCodes.Status200OK);
 
+            group.MapGet("/users/customers", GetCustomers)
+                .WithName("AdminGetCustomers")
+                .WithSummary("Get only customers (users with Customer role)")
+                .WithMetadata(new RequireModuleAttribute("customers", "view"))
+                .Produces<AdminUsersResponse>(StatusCodes.Status200OK);
+
+            group.MapGet("/users/staff", GetStaff)
+                .WithName("AdminGetStaff")
+                .WithSummary("Get staff users (users without Customer role)")
+                .WithMetadata(new RequireModuleAttribute("customers", "view"))
+                .Produces<AdminUsersResponse>(StatusCodes.Status200OK);
+
             group.MapPost("/users", CreateUser)
                 .WithName("AdminCreateUser")
                 .WithSummary("Create tenant user (Admin)")
@@ -585,6 +597,78 @@ namespace Api_eCommerce.Endpoints
             }
         }
 
+        private static async Task<IResult> GetCustomers(
+            HttpContext context,
+            TenantDbContextFactory dbFactory,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null) return TenantNotResolvedError();
+
+                await using var db = dbFactory.Create();
+
+                // Filtrar solo usuarios con rol "Customer"
+                var users = await db.Users
+                    .Include(u => u.UserRoles)
+                        .ThenInclude(ur => ur.Role)
+                    .Where(u => u.UserRoles.Any(ur => ur.Role.Name == "Customer"))
+                    .ToListAsync();
+
+                var userDtos = users.Select(u => new TenantUserListItemDto
+                {
+                    Id = u.Id,
+                    Email = u.Email,
+                    Roles = u.UserRoles.Select(ur => ur.Role.Name).ToList(),
+                    IsActive = u.IsActive,
+                    CreatedAt = u.CreatedAt
+                }).ToList();
+
+                return Results.Ok(new AdminUsersResponse { Users = userDtos });
+            }
+            catch (Exception)
+            {
+                return InternalServerError("retrieving customers");
+            }
+        }
+
+        private static async Task<IResult> GetStaff(
+            HttpContext context,
+            TenantDbContextFactory dbFactory,
+            ITenantResolver tenantResolver)
+        {
+            try
+            {
+                var tenantContext = await tenantResolver.ResolveAsync(context);
+                if (tenantContext == null) return TenantNotResolvedError();
+
+                await using var db = dbFactory.Create();
+
+                // Filtrar usuarios SIN rol "Customer" (staff administrativo)
+                var users = await db.Users
+                    .Include(u => u.UserRoles)
+                        .ThenInclude(ur => ur.Role)
+                    .Where(u => !u.UserRoles.Any(ur => ur.Role.Name == "Customer"))
+                    .ToListAsync();
+
+                var userDtos = users.Select(u => new TenantUserListItemDto
+                {
+                    Id = u.Id,
+                    Email = u.Email,
+                    Roles = u.UserRoles.Select(ur => ur.Role.Name).ToList(),
+                    IsActive = u.IsActive,
+                    CreatedAt = u.CreatedAt
+                }).ToList();
+
+                return Results.Ok(new AdminUsersResponse { Users = userDtos });
+            }
+            catch (Exception)
+            {
+                return InternalServerError("retrieving staff users");
+            }
+        }
+
         private static async Task<IResult> CreateUser(
             HttpContext context,
             [FromBody] CreateTenantUserRequest request,
@@ -605,12 +689,18 @@ namespace Api_eCommerce.Endpoints
                     return Results.Conflict(new { error = "Email already exists" });
                 }
 
-                // ? VALIDAR L�MITE DE USUARIOS
-                var currentUserCount = await db.Users.CountAsync();
+                // ? VALIDAR L�MITE DE USUARIOS ADMINISTRATIVOS (STAFF)
+                // Solo contar usuarios sin rol "Customer" (los clientes son ilimitados)
+                var currentStaffCount = await db.Users
+                    .Include(u => u.UserRoles)
+                        .ThenInclude(ur => ur.Role)
+                    .Where(u => !u.UserRoles.Any(ur => ur.Role.Name == "Customer"))
+                    .CountAsync();
+
                 await planLimitService.ThrowIfExceedsLimitAsync(
-                    CC.Infraestructure.Admin.Entities.PlanLimitCodes.MaxUsers,
-                    currentUserCount,
-                    "Has alcanzado el l�mite de usuarios de tu plan. Actualiza tu plan para agregar m�s usuarios."
+                    CC.Infraestructure.Admin.Entities.PlanLimitCodes.MaxAdminUsers,
+                    currentStaffCount,
+                    "Has alcanzado el l�mite de usuarios administrativos de tu plan. Actualiza tu plan para agregar m�s usuarios staff."
                 );
 
                 // Hash password

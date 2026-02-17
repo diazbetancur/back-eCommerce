@@ -9,7 +9,6 @@ namespace CC.Domain.Users
     public class UserProfile
     {
         [Key]
-        [ForeignKey(nameof(UserAccount))]
         public Guid Id { get; set; }
 
         [Required]
@@ -39,8 +38,5 @@ namespace CC.Domain.Users
 
         [MaxLength(100)]
         public string? Country { get; set; }
-
-        // Navigation property
-        public UserAccount UserAccount { get; set; } = null!;
     }
 }

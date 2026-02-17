@@ -1,3 +1,4 @@
+using Api_eCommerce.Authorization;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.Tenancy;
@@ -36,25 +37,34 @@ namespace Api_eCommerce.Endpoints
         public static IEndpointRouteBuilder MapSuperAdminTenants(this IEndpointRouteBuilder app)
         {
             var group = app.MapGroup("/superadmin/tenants")
-                .WithTags("SuperAdmin - Tenants");
+                .WithTags("SuperAdmin - Tenants")
+                .RequireAuthorization()
+                .AddEndpointFilter<AdminRoleAuthorizationFilter>();
 
             group.MapPost("/", CreateTenant)
                 .WithName("CreateTenant")
-                .WithSummary("Crear nuevo tenant con base de datos y usuario admin");
+                .WithSummary("Crear nuevo tenant con base de datos y usuario admin - SuperAdmin only")
+                .WithMetadata(new RequireAdminRoleAttribute(AdminRoleNames.SuperAdmin));
 
             group.MapGet("/", ListTenants)
                 .WithName("ListTenants")
-                .WithSummary("Listar todos los tenants");
+                .WithSummary("Listar todos los tenants - SuperAdmin y TenantManager")
+                .WithMetadata(new RequireAdminRoleAttribute(AdminRoleNames.SuperAdmin, AdminRoleNames.TenantManager));
 
             group.MapDelete("/{slug}", DeleteTenant)
                 .WithName("SuperAdmin_DisableTenant")
-                .WithSummary("Deshabilitar tenant (soft delete)");
+                .WithSummary("Deshabilitar tenant (soft delete) - SuperAdmin only")
+                .WithMetadata(new RequireAdminRoleAttribute(AdminRoleNames.SuperAdmin));
 
             group.MapPatch("/{slug}/plan", ChangeTenantPlan)
                 .WithName("ChangeTenantPlan")
-                .WithSummary("Cambiar plan de un tenant");
+                .WithSummary("Cambiar plan de un tenant - SuperAdmin y TenantManager")
+                .WithMetadata(new RequireAdminRoleAttribute(AdminRoleNames.SuperAdmin, AdminRoleNames.TenantManager));
 
-            group.MapPost("/repair", RepairTenant);
+            group.MapPost("/repair", RepairTenant)
+                .WithName("RepairTenant")
+                .WithSummary("Reparar tenant - SuperAdmin only")
+                .WithMetadata(new RequireAdminRoleAttribute(AdminRoleNames.SuperAdmin));
 
             return app;
         }
@@ -63,7 +73,9 @@ namespace Api_eCommerce.Endpoints
         public static IEndpointRouteBuilder MapSuperAdminPlans(this IEndpointRouteBuilder app)
         {
             var group = app.MapGroup("/superadmin/plans")
-                .WithTags("Plans");
+                .WithTags("Plans")
+                .RequireAuthorization()
+                .AddEndpointFilter<AdminRoleAuthorizationFilter>();
 
             group.MapGet("/", GetPlans)
                 .WithName("GetPlans")

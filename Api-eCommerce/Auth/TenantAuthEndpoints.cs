@@ -38,6 +38,15 @@ namespace Api_eCommerce.Auth
                 .Produces<UserProfileDto>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
 
+            group.MapPut("/profile", UpdateProfile)
+                .RequireAuthorization()
+                .WithName("UpdateProfile")
+                .WithSummary("Update current user profile")
+                .WithDescription("Updates the authenticated user's profile information (name, phone, address, etc.). Email cannot be changed.")
+                .Produces<UserProfileDto>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+                .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
+
             group.MapPost("/change-password", ChangePassword)
                 .RequireAuthorization()
                 .WithName("ChangePassword")
@@ -54,7 +63,8 @@ namespace Api_eCommerce.Auth
             HttpContext context,
             [FromBody] RegisterRequest request,
             CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService,  // ? CAMBIO
-            ITenantResolver tenantResolver)
+            ITenantResolver tenantResolver,
+            ILogger<RegisterRequest> logger)
         {
             try
             {
@@ -111,18 +121,20 @@ namespace Api_eCommerce.Auth
             }
             catch (InvalidOperationException ex)
             {
+                logger.LogWarning(ex, "Registration failed for email {Email}: {Message}", request.Email, ex.Message);
                 return Results.Problem(
                     statusCode: StatusCodes.Status400BadRequest,
                     title: "Registration Failed",
                     detail: ex.Message
                 );
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                logger.LogError(ex, "Unexpected error during registration for email {Email}", request.Email);
                 return Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
                     title: "Internal Server Error",
-                    detail: "An error occurred during registration"
+                    detail: $"An error occurred during registration: {ex.Message}"
                 );
             }
         }
@@ -252,6 +264,87 @@ namespace Api_eCommerce.Auth
                     statusCode: StatusCodes.Status500InternalServerError,
                     title: "Internal Server Error",
                     detail: "An error occurred while retrieving profile"
+                );
+            }
+        }
+
+        private static async Task<IResult> UpdateProfile(
+            HttpContext context,
+            [FromBody] UpdateProfileRequest request,
+            CC.Aplication.Auth.IUnifiedAuthService unifiedAuthService)
+        {
+            try
+            {
+                // Obtener user ID del token JWT
+                var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)
+                    ?? context.User.FindFirst("sub")
+                    ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        title: "Invalid Token",
+                        detail: "User ID not found in token"
+                    );
+                }
+
+                // Validaciones básicas
+                if (string.IsNullOrWhiteSpace(request.FirstName))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "First name is required"
+                    );
+                }
+
+                if (string.IsNullOrWhiteSpace(request.LastName))
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation Error",
+                        detail: "Last name is required"
+                    );
+                }
+
+                // Actualizar perfil
+                var updatedProfile = await unifiedAuthService.UpdateUserProfileAsync(userId, request);
+                return Results.Ok(updatedProfile);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Validation Error",
+                    detail: ex.Message
+                );
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("User not found"))
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "User Not Found",
+                    detail: ex.Message
+                );
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Profile Update Failed",
+                    detail: ex.Message
+                );
+            }
+            catch (Exception ex)
+            {
+                var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogError(ex, "Unexpected error during profile update for user {UserId}",
+                    context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Internal Server Error",
+                    detail: "An error occurred while updating profile"
                 );
             }
         }

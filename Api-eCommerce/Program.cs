@@ -5,7 +5,11 @@ using Api_eCommerce.Handlers;
 using Api_eCommerce.Metering;
 using Api_eCommerce.Middleware;
 using Api_eCommerce.Workers;
+using CC.Aplication.Admin;
 using CC.Aplication.Services;
+using CC.Domain.Interfaces;
+using CC.Domain.Tenancy;
+using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin;
 using CC.Infraestructure.EF;
@@ -14,10 +18,17 @@ using CC.Infraestructure.Sql;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using System.Text.Json.Serialization;
+using System.IdentityModel.Tokens.Jwt;
+
+// ==================== IMPORTANTE: Limpiar mapeo automático de claims JWT ====================
+// Por defecto, .NET mapea "role" a "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
+// Esto evita ese mapeo para que los claims mantengan sus nombres originales
+JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,6 +86,9 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<TenantProvisioning
 // ==================== ADMIN SERVICES ====================
 builder.Services.AddScoped<CC.Aplication.Admin.IAdminAuthService, CC.Aplication.Admin.AdminAuthService>();
 builder.Services.AddScoped<CC.Aplication.Admin.IAdminTenantService, CC.Aplication.Admin.AdminTenantService>();
+builder.Services.AddScoped<CC.Aplication.Admin.IAdminUserManagementService, CC.Aplication.Admin.AdminUserManagementService>();
+builder.Services.AddScoped<CC.Aplication.Admin.IAdminRoleManagementService, CC.Aplication.Admin.AdminRoleManagementService>();
+builder.Services.AddScoped<CC.Aplication.Admin.IAdminAuditService, CC.Aplication.Admin.AdminAuditService>();
 builder.Services.AddScoped<CC.Aplication.Roles.IRoleService, CC.Aplication.Roles.RoleService>();
 builder.Services.AddScoped<CC.Aplication.Users.IUserManagementService, CC.Aplication.Users.UserManagementService>();
 
@@ -123,16 +137,22 @@ var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "ecommerce-api";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "ecommerce-clients";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(x => x.TokenValidationParameters = new TokenValidationParameters
+    .AddJwtBearer(x =>
     {
-        ValidateIssuer = jwtStrictValidation,
-        ValidIssuer = jwtIssuer,
-        ValidateAudience = jwtStrictValidation,
-        ValidAudience = jwtAudience,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtSigningKey)),
-        ClockSkew = TimeSpan.Zero
+        x.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = jwtStrictValidation,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = jwtStrictValidation,
+            ValidAudience = jwtAudience,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtSigningKey)),
+            ClockSkew = TimeSpan.Zero,
+            // Configurar los nombres de claims para que coincidan con el JWT
+            NameClaimType = "email",    // Usar "email" en lugar de ClaimTypes.Name
+            RoleClaimType = "role"      // Usar "role" en lugar de ClaimTypes.Role
+        };
     });
 
 // Log JWT configuration for debugging (only in Development)
@@ -238,6 +258,8 @@ app.UseMiddleware<ActivityLoggingMiddleware>();
 
 // ==================== ROUTES ====================
 app.MapAdminEndpoints();
+app.MapAdminUserManagementEndpoints();
+app.MapAdminAuditEndpoints();
 app.MapRoleAdminEndpoints();
 app.MapProvisioningEndpoints();
 app.MapSuperAdminTenants();
@@ -275,6 +297,14 @@ tenantGroup.MapGroup("").MapTenantAdminEndpoints(); // Ya incluye /admin/product
 // ==================== CONTROLLERS ====================
 // Los controllers ahora pasan por TenantResolutionMiddleware (agregado globalmente)
 app.MapControllers();
+
+// ==================== SEED SYSTEM PERMISSIONS ====================
+using (var scope = app.Services.CreateScope())
+{
+    var roleService = scope.ServiceProvider.GetRequiredService<IAdminRoleManagementService>();
+    await roleService.EnsureSystemPermissionsAsync();
+    app.Logger.LogInformation("✅ System permissions initialized successfully");
+}
 
 app.Run();
 

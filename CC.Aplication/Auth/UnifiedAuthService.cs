@@ -19,6 +19,7 @@ namespace CC.Aplication.Auth
         Task<UnifiedAuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default);
         Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken ct = default);
         Task<UserProfileDto> GetUserProfileAsync(Guid userId, CancellationToken ct = default);
+        Task<UserProfileDto> UpdateUserProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken ct = default);
         Task<ChangePasswordResponse> ChangePasswordAsync(ChangePasswordRequest request, Guid userId, CancellationToken ct = default);
     }
 
@@ -236,17 +237,10 @@ namespace CC.Aplication.Auth
 
             db.UserRoles.Add(userRole);
 
-            // Crear perfil extendido (opcional, para datos adicionales)
-            var userProfile = new UserProfile
-            {
-                Id = user.Id,
-                FirstName = request.FirstName,
-                LastName = request.LastName,
-                PhoneNumber = request.PhoneNumber
-            };
-
-            db.UserProfiles.Add(userProfile);
+            // ✅ Save user and role
             await db.SaveChangesAsync(ct);
+
+            // Note: UserProfile is optional and can be created later via profile update endpoint
 
             // Generar JWT
             var token = GenerateJwtToken(user.Id, user.Email, new List<string> { "Customer" }, new List<string>());
@@ -304,6 +298,107 @@ namespace CC.Aplication.Auth
                 user.CreatedAt,
                 user.IsActive
             );
+        }
+
+        public async Task<UserProfileDto> UpdateUserProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken ct = default)
+        {
+            if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
+            {
+                throw new InvalidOperationException("No tenant context available");
+            }
+
+            // Validations
+            if (string.IsNullOrWhiteSpace(request.FirstName))
+            {
+                throw new ArgumentException("First name is required", nameof(request.FirstName));
+            }
+
+            if (string.IsNullOrWhiteSpace(request.LastName))
+            {
+                throw new ArgumentException("Last name is required", nameof(request.LastName));
+            }
+
+            await using var db = _dbFactory.Create();
+
+            // Get user
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+            if (user == null)
+            {
+                throw new InvalidOperationException("User not found");
+            }
+
+            // Update user basic info
+            user.FirstName = request.FirstName.Trim();
+            user.LastName = request.LastName.Trim();
+            user.PhoneNumber = request.PhoneNumber?.Trim();
+
+            await db.SaveChangesAsync(ct);
+
+            // Update or create UserProfile (optional extended data)
+            var profile = await db.UserProfiles.FirstOrDefaultAsync(p => p.Id == userId, ct);
+
+            if (profile == null && HasExtendedProfileData(request))
+            {
+                // Create profile if it doesn't exist and user provides extended data
+                profile = new UserProfile
+                {
+                    Id = userId,
+                    FirstName = request.FirstName.Trim(),
+                    LastName = request.LastName.Trim(),
+                    PhoneNumber = request.PhoneNumber?.Trim(),
+                    DocumentType = request.DocumentType?.Trim(),
+                    DocumentNumber = request.DocumentNumber?.Trim(),
+                    BirthDate = request.BirthDate,
+                    Address = request.Address?.Trim(),
+                    City = request.City?.Trim(),
+                    Country = request.Country?.Trim()
+                };
+                db.UserProfiles.Add(profile);
+            }
+            else if (profile != null)
+            {
+                // Update existing profile
+                profile.FirstName = request.FirstName.Trim();
+                profile.LastName = request.LastName.Trim();
+                profile.PhoneNumber = request.PhoneNumber?.Trim();
+                profile.DocumentType = request.DocumentType?.Trim();
+                profile.DocumentNumber = request.DocumentNumber?.Trim();
+                profile.BirthDate = request.BirthDate;
+                profile.Address = request.Address?.Trim();
+                profile.City = request.City?.Trim();
+                profile.Country = request.Country?.Trim();
+            }
+
+            await db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Profile updated for user {UserId}", userId);
+
+            // Return updated profile
+            return new UserProfileDto(
+                user.Id,
+                user.Email,
+                user.FirstName,
+                user.LastName,
+                user.PhoneNumber,
+                profile?.DocumentType,
+                profile?.DocumentNumber,
+                profile?.BirthDate,
+                profile?.Address,
+                profile?.City,
+                profile?.Country,
+                user.CreatedAt,
+                user.IsActive
+            );
+        }
+
+        private bool HasExtendedProfileData(UpdateProfileRequest request)
+        {
+            return !string.IsNullOrWhiteSpace(request.DocumentType) ||
+                   !string.IsNullOrWhiteSpace(request.DocumentNumber) ||
+                   request.BirthDate.HasValue ||
+                   !string.IsNullOrWhiteSpace(request.Address) ||
+                   !string.IsNullOrWhiteSpace(request.City) ||
+                   !string.IsNullOrWhiteSpace(request.Country);
         }
 
         // ==================== PRIVATE HELPERS ====================

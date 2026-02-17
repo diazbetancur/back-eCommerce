@@ -5,7 +5,7 @@ using System.Security.Claims;
 namespace Api_eCommerce.Authorization
 {
     /// <summary>
-    /// Endpoint filter que verifica permisos de módulos antes de ejecutar el endpoint
+    /// Endpoint filter que verifica permisos de mï¿½dulos antes de ejecutar el endpoint
     /// </summary>
     public class ModuleAuthorizationFilter : IEndpointFilter
     {
@@ -54,7 +54,7 @@ namespace Api_eCommerce.Authorization
                     return Results.Problem(
                         statusCode: 403,
                         title: "Forbidden",
-                        detail: $"No tienes permiso para '{moduleAttr.Permission}' en el módulo '{moduleAttr.ModuleCode}'"
+                        detail: $"No tienes permiso para '{moduleAttr.Permission}' en el mï¿½dulo '{moduleAttr.ModuleCode}'"
                     );
                 }
             }
@@ -66,7 +66,8 @@ namespace Api_eCommerce.Authorization
         private Guid? GetUserIdFromClaims(ClaimsPrincipal user)
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)
-                ?? user.FindFirst("sub");
+                ?? user.FindFirst("sub")
+                ?? user.FindFirst("nameid");
 
             if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
             {

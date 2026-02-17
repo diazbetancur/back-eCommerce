@@ -41,14 +41,14 @@ namespace Api_eCommerce.Endpoints
             var tenantGroup = app.MapGroup("/api/features")
                 .WithTags("Feature Flags");
 
-            tenantGroup.MapGet("", GetCurrentTenantFeatures)
+            tenantGroup.MapGet("/", GetCurrentTenantFeatures)
                 .WithName("GetCurrentTenantFeatures")
                 .WithSummary("Obtiene los feature flags del tenant actual")
                 .Produces<object>(StatusCodes.Status200OK);
 
             tenantGroup.MapGet("/{featureKey}", CheckFeature)
                 .WithName("CheckFeature")
-                .WithSummary("Verifica si una feature específica está habilitada")
+                .WithSummary("Verifica si una feature especï¿½fica estï¿½ habilitada")
                 .Produces<FeatureCheckResponse>(StatusCodes.Status200OK);
 
             return app;
