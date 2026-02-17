@@ -1,0 +1,188 @@
+{
+  "name": "Tenant Configuration API Contract",
+  "version": "1.0.0",
+  "baseUrl": "http://localhost:5093",
+  "summary": {
+    "tenantAdminCanModify": [
+      "Branding (logo, favicon, colors)",
+      "Contact",
+      "Social",
+      "Locale",
+      "SEO"
+    ],
+    "tenantAdminFeatures": "read-only via /api/features and /api/tenant-config",
+    "superAdminCanModify": [
+      "Feature flags by tenant (FeatureFlagsJson)"
+    ]
+  },
+  "auth": {
+    "tenantAdminHeaders": {
+      "Authorization": "Bearer <TOKEN>",
+      "X-Tenant-Slug": "<tenant-slug>",
+      "Content-Type": "application/json"
+    }
+  },
+  "tenantSettingsEndpoints": [
+    {
+      "method": "GET",
+      "path": "/admin/settings",
+      "description": "Obtiene configuración completa de tienda del tenant",
+      "permission": "settings:view"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/settings",
+      "description": "Actualiza configuración completa (parcial por secciones)",
+      "permission": "settings:update",
+      "bodyExample": {
+        "branding": {
+          "logoUrl": "https://cdn.example.com/logo.png",
+          "faviconUrl": "https://cdn.example.com/favicon.ico",
+          "primaryColor": "#3b82f6",
+          "secondaryColor": "#1e40af",
+          "accentColor": "#10b981",
+          "backgroundColor": "#ffffff"
+        },
+        "contact": {
+          "email": "soporte@mitienda.com",
+          "phone": "+57 3001234567",
+          "address": "Calle 123 #45-67",
+          "whatsApp": "+57 3001234567"
+        },
+        "social": {
+          "facebook": "https://facebook.com/mitienda",
+          "instagram": "https://instagram.com/mitienda",
+          "twitter": "https://x.com/mitienda",
+          "tikTok": "https://tiktok.com/@mitienda"
+        },
+        "locale": {
+          "locale": "es-CO",
+          "currency": "COP",
+          "currencySymbol": "$",
+          "taxRate": 19
+        },
+        "seo": {
+          "title": "Mi Tienda",
+          "description": "Catálogo oficial",
+          "keywords": "ropa,zapatos,accesorios"
+        }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/settings/branding",
+      "description": "Actualiza solo branding (logo/colores)",
+      "permission": "settings:update",
+      "bodyExample": {
+        "logoUrl": "https://cdn.example.com/logo-v2.png",
+        "faviconUrl": "https://cdn.example.com/favicon-v2.ico",
+        "primaryColor": "#111827",
+        "secondaryColor": "#1f2937",
+        "accentColor": "#22c55e",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/settings/contact",
+      "description": "Actualiza solo contacto",
+      "permission": "settings:update"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/settings/social",
+      "description": "Actualiza solo redes",
+      "permission": "settings:update"
+    }
+  ],
+  "featuresEndpoints": {
+    "tenantReadOnly": [
+      {
+        "method": "GET",
+        "path": "/api/features/",
+        "description": "Obtiene feature flags del tenant actual"
+      },
+      {
+        "method": "GET",
+        "path": "/api/features/{featureKey}",
+        "description": "Consulta una feature puntual"
+      },
+      {
+        "method": "GET",
+        "path": "/api/tenant-config",
+        "description": "Configuración de frontend del tenant autenticado"
+      }
+    ],
+    "superAdminWrite": [
+      {
+        "method": "PATCH",
+        "path": "/superadmin/tenants/{tenantId}/features",
+        "description": "Actualiza features del tenant (FeatureFlagsJson)",
+        "bodyExample": {
+          "features": {
+            "allowGuestCheckout": true,
+            "enableExpressCheckout": false,
+            "showStock": true,
+            "hasVariants": true,
+            "enableMultiStore": true,
+            "enableWishlist": true,
+            "enableReviews": true,
+            "payments": {
+              "wompiEnabled": true,
+              "stripeEnabled": false,
+              "payPalEnabled": false,
+              "cashOnDelivery": true
+            },
+            "enableCartSave": false,
+            "maxCartItems": 100,
+            "enableAdvancedSearch": true,
+            "enableFilters": true,
+            "enableAnalytics": false,
+            "enableNewsletterSignup": false
+          }
+        }
+      }
+    ]
+  },
+  "publicTenantConfig": {
+    "method": "GET",
+    "path": "/api/public/tenant/{slug}",
+    "description": "Retorna branding/theme/features públicas por slug (sin autenticación)",
+    "returns": [
+      "tenant.branding.logoUrl",
+      "tenant.branding.primaryColor",
+      "theme.primary",
+      "theme.logoUrl",
+      "features",
+      "contact",
+      "social",
+      "seo"
+    ]
+  },
+  "storageModel": {
+    "tenantDbSettingsKeys": [
+      "LogoUrl",
+      "FaviconUrl",
+      "PrimaryColor",
+      "SecondaryColor",
+      "AccentColor",
+      "BackgroundColor",
+      "ContactEmail",
+      "ContactPhone",
+      "ContactAddress",
+      "WhatsAppNumber",
+      "FacebookUrl",
+      "InstagramUrl",
+      "TwitterUrl",
+      "TikTokUrl",
+      "Locale",
+      "Currency",
+      "CurrencySymbol",
+      "TaxRate",
+      "SeoTitle",
+      "SeoDescription",
+      "SeoKeywords"
+    ],
+    "featureFlagsSource": "admin.Tenants.FeatureFlagsJson (si null => defaults por plan)"
+  }
+}

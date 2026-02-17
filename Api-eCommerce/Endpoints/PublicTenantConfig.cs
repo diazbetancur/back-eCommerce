@@ -60,7 +60,10 @@ namespace Api_eCommerce.Endpoints
           var template = configuration["Tenancy:TenantDbTemplate"];
           if (!string.IsNullOrEmpty(template))
           {
-            var connectionString = template.Replace("{dbname}", tenant.DbName);
+            var connectionString = template
+                .Replace("{DbName}", tenant.DbName, StringComparison.OrdinalIgnoreCase)
+                .Replace("{dbname}", tenant.DbName, StringComparison.OrdinalIgnoreCase);
+
             await using var tenantDb = dbFactory.Create(connectionString);
 
             settings = await tenantDb.Settings
