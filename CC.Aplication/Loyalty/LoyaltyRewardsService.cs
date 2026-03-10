@@ -50,6 +50,21 @@ namespace CC.Aplication.Loyalty
       if (!LoyaltyRewardType.IsValid(request.RewardType))
         throw new ArgumentException($"Invalid reward type: {request.RewardType}");
 
+      ValidateAvailabilityWindow(request.AvailableFrom, request.AvailableUntil);
+
+      var stockToPersist = ResolveStock(request.Stock, request.CouponQuantity);
+      var normalizedProductIds = NormalizeProductIds(request.ProductIds);
+      var resolvedProductId = ResolveProductIdForProductReward(
+        request.RewardType,
+        normalizedProductIds);
+      ValidateRewardTargeting(
+        request.RewardType,
+        resolvedProductId,
+        normalizedProductIds,
+        request.DiscountValue,
+        request.AppliesToAllEligibleProducts,
+        request.SingleProductSelectionRule);
+
       await using var db = _dbFactory.Create();
 
       var reward = new LoyaltyReward
@@ -59,18 +74,36 @@ namespace CC.Aplication.Loyalty
         Description = request.Description,
         PointsCost = request.PointsCost,
         RewardType = request.RewardType.ToUpper(),
-        ProductId = request.ProductId,
+        ProductId = resolvedProductId,
+        AppliesToAllEligibleProducts = request.AppliesToAllEligibleProducts,
+        SingleProductSelectionRule = request.SingleProductSelectionRule?.ToUpper(),
         DiscountValue = request.DiscountValue,
         ImageUrl = request.ImageUrl,
         IsActive = request.IsActive,
-        Stock = request.Stock,
+        Stock = stockToPersist,
         ValidityDays = request.ValidityDays,
+        AvailableFrom = request.AvailableFrom,
+        AvailableUntil = request.AvailableUntil,
         DisplayOrder = request.DisplayOrder,
         DateCreated = DateTime.UtcNow,
         UpdatedAt = DateTime.UtcNow
       };
 
       db.LoyaltyRewards.Add(reward);
+
+      if (normalizedProductIds.Count > 0)
+      {
+        var rewardProducts = normalizedProductIds
+          .Select(productId => new LoyaltyRewardProduct
+          {
+            RewardId = reward.Id,
+            ProductId = productId,
+            DateCreated = DateTime.UtcNow
+          });
+
+        db.LoyaltyRewardProducts.AddRange(rewardProducts);
+      }
+
       await db.SaveChangesAsync(ct);
 
       _logger.LogInformation("Created loyalty reward {RewardId}: {Name}", reward.Id, reward.Name);
@@ -86,6 +119,21 @@ namespace CC.Aplication.Loyalty
       if (!LoyaltyRewardType.IsValid(request.RewardType))
         throw new ArgumentException($"Invalid reward type: {request.RewardType}");
 
+      ValidateAvailabilityWindow(request.AvailableFrom, request.AvailableUntil);
+
+      var stockToPersist = ResolveStock(request.Stock, request.CouponQuantity);
+      var normalizedProductIds = NormalizeProductIds(request.ProductIds);
+      var resolvedProductId = ResolveProductIdForProductReward(
+        request.RewardType,
+        normalizedProductIds);
+      ValidateRewardTargeting(
+        request.RewardType,
+        resolvedProductId,
+        normalizedProductIds,
+        request.DiscountValue,
+        request.AppliesToAllEligibleProducts,
+        request.SingleProductSelectionRule);
+
       await using var db = _dbFactory.Create();
 
       var reward = await db.LoyaltyRewards.FindAsync(new object[] { id }, ct);
@@ -96,14 +144,40 @@ namespace CC.Aplication.Loyalty
       reward.Description = request.Description;
       reward.PointsCost = request.PointsCost;
       reward.RewardType = request.RewardType.ToUpper();
-      reward.ProductId = request.ProductId;
+      reward.ProductId = resolvedProductId;
+      reward.AppliesToAllEligibleProducts = request.AppliesToAllEligibleProducts;
+      reward.SingleProductSelectionRule = request.SingleProductSelectionRule?.ToUpper();
       reward.DiscountValue = request.DiscountValue;
       reward.ImageUrl = request.ImageUrl;
       reward.IsActive = request.IsActive;
-      reward.Stock = request.Stock;
+      reward.Stock = stockToPersist;
       reward.ValidityDays = request.ValidityDays;
+      reward.AvailableFrom = request.AvailableFrom;
+      reward.AvailableUntil = request.AvailableUntil;
       reward.DisplayOrder = request.DisplayOrder;
       reward.UpdatedAt = DateTime.UtcNow;
+
+      var existingRewardProducts = await db.LoyaltyRewardProducts
+        .Where(p => p.RewardId == reward.Id)
+        .ToListAsync(ct);
+
+      if (existingRewardProducts.Count > 0)
+      {
+        db.LoyaltyRewardProducts.RemoveRange(existingRewardProducts);
+      }
+
+      if (normalizedProductIds.Count > 0)
+      {
+        var rewardProducts = normalizedProductIds
+          .Select(productId => new LoyaltyRewardProduct
+          {
+            RewardId = reward.Id,
+            ProductId = productId,
+            DateCreated = DateTime.UtcNow
+          });
+
+        db.LoyaltyRewardProducts.AddRange(rewardProducts);
+      }
 
       await db.SaveChangesAsync(ct);
 
@@ -122,6 +196,15 @@ namespace CC.Aplication.Loyalty
       var reward = await db.LoyaltyRewards.FindAsync(new object[] { id }, ct);
       if (reward == null)
         throw new KeyNotFoundException($"Reward {id} not found");
+
+      var rewardProducts = await db.LoyaltyRewardProducts
+        .Where(p => p.RewardId == id)
+        .ToListAsync(ct);
+
+      if (rewardProducts.Count > 0)
+      {
+        db.LoyaltyRewardProducts.RemoveRange(rewardProducts);
+      }
 
       // Verificar si tiene canjes asociados
       var hasRedemptions = await db.LoyaltyRedemptions.AnyAsync(r => r.RewardId == id, ct);
@@ -172,6 +255,45 @@ namespace CC.Aplication.Loyalty
       if (!string.IsNullOrWhiteSpace(query.RewardType))
         rewardsQuery = rewardsQuery.Where(r => r.RewardType == query.RewardType.ToUpper());
 
+      if (!string.IsNullOrWhiteSpace(query.Search))
+      {
+        var search = query.Search.Trim();
+        rewardsQuery = rewardsQuery.Where(r =>
+            r.Name.Contains(search) ||
+            (r.Description != null && r.Description.Contains(search)));
+      }
+
+      if (query.AvailableFrom.HasValue)
+        rewardsQuery = rewardsQuery.Where(r => r.AvailableFrom.HasValue && r.AvailableFrom.Value >= query.AvailableFrom.Value);
+
+      if (query.AvailableUntil.HasValue)
+        rewardsQuery = rewardsQuery.Where(r => r.AvailableUntil.HasValue && r.AvailableUntil.Value <= query.AvailableUntil.Value);
+
+      if (query.CreatedFrom.HasValue)
+        rewardsQuery = rewardsQuery.Where(r => r.DateCreated >= query.CreatedFrom.Value);
+
+      if (query.CreatedTo.HasValue)
+        rewardsQuery = rewardsQuery.Where(r => r.DateCreated <= query.CreatedTo.Value);
+
+      if (query.IsCurrentlyAvailable.HasValue)
+      {
+        var now = DateTime.UtcNow;
+        if (query.IsCurrentlyAvailable.Value)
+        {
+          rewardsQuery = rewardsQuery.Where(r =>
+              r.IsActive &&
+              (!r.AvailableFrom.HasValue || r.AvailableFrom.Value <= now) &&
+              (!r.AvailableUntil.HasValue || r.AvailableUntil.Value >= now));
+        }
+        else
+        {
+          rewardsQuery = rewardsQuery.Where(r =>
+              !r.IsActive ||
+              (r.AvailableFrom.HasValue && r.AvailableFrom.Value > now) ||
+              (r.AvailableUntil.HasValue && r.AvailableUntil.Value < now));
+        }
+      }
+
       // Contar total
       var totalCount = await rewardsQuery.CountAsync(ct);
 
@@ -206,12 +328,28 @@ namespace CC.Aplication.Loyalty
 
       await using var db = _dbFactory.Create();
 
+      var currentConfig = await db.LoyaltyConfigurations
+          .AsNoTracking()
+          .FirstOrDefaultAsync(ct);
+
+      if (currentConfig != null && !currentConfig.IsEnabled)
+      {
+        throw new InvalidOperationException("Loyalty program is disabled for tenant");
+      }
+
       // Obtener premio
       var reward = await db.LoyaltyRewards.FindAsync(new object[] { rewardId }, ct);
       if (reward == null)
         throw new KeyNotFoundException($"Reward {rewardId} not found");
 
       if (!reward.IsActive)
+        throw new InvalidOperationException("This reward is no longer available");
+
+      var now = DateTime.UtcNow;
+      if (reward.AvailableFrom.HasValue && now < reward.AvailableFrom.Value)
+        throw new InvalidOperationException("This reward is not available yet");
+
+      if (reward.AvailableUntil.HasValue && now > reward.AvailableUntil.Value)
         throw new InvalidOperationException("This reward is no longer available");
 
       // Verificar stock
@@ -228,6 +366,7 @@ namespace CC.Aplication.Loyalty
         throw new InvalidOperationException($"Insufficient points. You need {reward.PointsCost} points but have {account.PointsBalance}");
 
       // Crear canje
+      var redeemedAt = DateTime.UtcNow;
       var redemption = new LoyaltyRedemption
       {
         Id = Guid.NewGuid(),
@@ -235,10 +374,12 @@ namespace CC.Aplication.Loyalty
         RewardId = rewardId,
         PointsSpent = reward.PointsCost,
         Status = LoyaltyRedemptionStatus.Pending,
-        RedeemedAt = DateTime.UtcNow,
-        DateCreated = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow
+        RedeemedAt = redeemedAt,
+        DateCreated = redeemedAt,
+        UpdatedAt = redeemedAt
       };
+
+      redemption.ExpiresAt = ResolveCouponExpirationDate(redeemedAt, reward.ValidityDays);
 
       // Generar cupón si es descuento
       if (reward.RewardType == LoyaltyRewardType.DiscountPercentage ||
@@ -246,10 +387,6 @@ namespace CC.Aplication.Loyalty
           reward.RewardType == LoyaltyRewardType.FreeShipping)
       {
         redemption.CouponCode = GenerateCouponCode();
-        if (reward.ValidityDays.HasValue)
-        {
-          redemption.ExpiresAt = DateTime.UtcNow.AddDays(reward.ValidityDays.Value);
-        }
       }
 
       db.LoyaltyRedemptions.Add(redemption);
@@ -315,6 +452,8 @@ namespace CC.Aplication.Loyalty
         throw new InvalidOperationException("No tenant context available");
 
       await using var db = _dbFactory.Create();
+
+      await ExpireRedemptionsByDateAsync(db, ct);
 
       var redemptionsQuery = db.LoyaltyRedemptions.AsNoTracking();
 
@@ -403,6 +542,28 @@ namespace CC.Aplication.Loyalty
             .FirstOrDefaultAsync(ct);
       }
 
+      var productIds = await db.LoyaltyRewardProducts
+        .AsNoTracking()
+        .Where(p => p.RewardId == reward.Id)
+        .Select(p => p.ProductId)
+        .ToListAsync(ct);
+
+      var couponsIssued = await db.LoyaltyRedemptions
+        .AsNoTracking()
+        .CountAsync(r => r.RewardId == reward.Id, ct);
+
+      int? couponsAvailable = null;
+      if (reward.Stock.HasValue)
+      {
+        couponsAvailable = Math.Max(0, reward.Stock.Value);
+      }
+
+      var now = DateTime.UtcNow;
+      var isCurrentlyAvailable =
+        reward.IsActive &&
+        (!reward.AvailableFrom.HasValue || reward.AvailableFrom.Value <= now) &&
+        (!reward.AvailableUntil.HasValue || reward.AvailableUntil.Value >= now);
+
       return new LoyaltyRewardDto(
           reward.Id,
           reward.Name,
@@ -410,16 +571,118 @@ namespace CC.Aplication.Loyalty
           reward.PointsCost,
           reward.RewardType,
           reward.ProductId,
+          productIds,
           productName,
+          reward.AppliesToAllEligibleProducts,
+          reward.SingleProductSelectionRule,
           reward.DiscountValue,
           reward.ImageUrl,
           reward.IsActive,
           reward.Stock,
+          reward.Stock,
+          couponsIssued,
+          couponsAvailable,
           reward.ValidityDays,
+          reward.AvailableFrom,
+          reward.AvailableUntil,
+          isCurrentlyAvailable,
           reward.DisplayOrder,
           reward.DateCreated,
           reward.UpdatedAt
       );
+    }
+
+    private static int? ResolveStock(int? stock, int? couponQuantity)
+    {
+      if (stock.HasValue && couponQuantity.HasValue && stock.Value != couponQuantity.Value)
+        throw new ArgumentException("Stock and CouponQuantity must match when both are provided");
+
+      return couponQuantity ?? stock;
+    }
+
+    private static List<Guid> NormalizeProductIds(List<Guid>? productIds)
+    {
+      if (productIds == null || productIds.Count == 0)
+      {
+        return new List<Guid>();
+      }
+
+      return productIds
+        .Where(id => id != Guid.Empty)
+        .Distinct()
+        .ToList();
+    }
+
+    private static Guid? ResolveProductIdForProductReward(string rewardType, List<Guid> productIds)
+    {
+      var normalizedType = rewardType.ToUpperInvariant();
+
+      if (normalizedType != LoyaltyRewardType.Product)
+      {
+        return null;
+      }
+
+      if (productIds.Count > 1)
+      {
+        throw new ArgumentException("ProductIds must contain exactly one ProductId when RewardType is PRODUCT");
+      }
+
+      return productIds.Count == 1 ? productIds[0] : null;
+    }
+
+    private static void ValidateRewardTargeting(
+      string rewardType,
+      Guid? productId,
+      List<Guid> productIds,
+      decimal? discountValue,
+      bool appliesToAllEligibleProducts,
+      string? singleProductSelectionRule)
+    {
+      var normalizedType = rewardType.ToUpperInvariant();
+
+      if (normalizedType == LoyaltyRewardType.Product)
+      {
+        if (!productId.HasValue || productId.Value == Guid.Empty)
+          throw new ArgumentException("ProductIds must contain exactly one ProductId when RewardType is PRODUCT");
+
+        if (productIds.Count > 1)
+          throw new ArgumentException("ProductIds must contain exactly one ProductId when RewardType is PRODUCT");
+
+        return;
+      }
+
+      if (normalizedType == LoyaltyRewardType.DiscountPercentage || normalizedType == LoyaltyRewardType.DiscountFixed)
+      {
+        if (!discountValue.HasValue || discountValue.Value <= 0)
+          throw new ArgumentException("DiscountValue must be greater than 0 for discount rewards");
+
+        if (!appliesToAllEligibleProducts)
+        {
+          var rule = singleProductSelectionRule?.ToUpperInvariant();
+          if (!LoyaltySingleProductSelectionRule.IsValid(rule))
+            throw new ArgumentException("SingleProductSelectionRule must be MOST_EXPENSIVE or CHEAPEST when AppliesToAllEligibleProducts is false");
+        }
+
+        return;
+      }
+
+      if (normalizedType == LoyaltyRewardType.FreeShipping)
+      {
+        if (!appliesToAllEligibleProducts)
+        {
+          var rule = singleProductSelectionRule?.ToUpperInvariant();
+          if (!LoyaltySingleProductSelectionRule.IsValid(rule))
+            throw new ArgumentException("SingleProductSelectionRule must be MOST_EXPENSIVE or CHEAPEST when AppliesToAllEligibleProducts is false");
+        }
+
+        return;
+      }
+    }
+
+    private static void ValidateAvailabilityWindow(DateTime? availableFrom, DateTime? availableUntil)
+    {
+      if (availableFrom.HasValue && availableUntil.HasValue && availableFrom.Value > availableUntil.Value)
+        throw new ArgumentException("AvailableFrom cannot be greater than AvailableUntil");
     }
 
     private async Task<LoyaltyRedemptionDto> MapRedemptionToDto(TenantDbContext db, LoyaltyRedemption redemption, CancellationToken ct)
@@ -461,6 +724,57 @@ namespace CC.Aplication.Loyalty
       var random = new Random();
       return "LOYALTY-" + new string(Enumerable.Repeat(chars, 8)
           .Select(s => s[random.Next(s.Length)]).ToArray());
+    }
+
+    private static DateTime? ResolveCouponExpirationDate(DateTime redeemedAtUtc, int? validityDays)
+    {
+      if (!validityDays.HasValue)
+      {
+        return null;
+      }
+
+      if (validityDays.Value <= 0)
+      {
+        return null;
+      }
+
+      return redeemedAtUtc.Date.AddDays(validityDays.Value);
+    }
+
+    private static readonly string[] ExpirableRedemptionStatuses =
+    {
+      LoyaltyRedemptionStatus.Pending,
+      LoyaltyRedemptionStatus.Approved
+    };
+
+    private async Task ExpireRedemptionsByDateAsync(TenantDbContext db, CancellationToken ct)
+    {
+      var todayUtcDate = DateTime.UtcNow.Date;
+
+      var redemptionsToExpire = await db.LoyaltyRedemptions
+        .Where(r =>
+          r.ExpiresAt.HasValue &&
+          r.ExpiresAt.Value.Date < todayUtcDate &&
+          ExpirableRedemptionStatuses.Contains(r.Status))
+        .ToListAsync(ct);
+
+      if (redemptionsToExpire.Count == 0)
+      {
+        return;
+      }
+
+      foreach (var redemption in redemptionsToExpire)
+      {
+        redemption.Status = LoyaltyRedemptionStatus.Expired;
+        redemption.UpdatedAt = DateTime.UtcNow;
+      }
+
+      await db.SaveChangesAsync(ct);
+
+      _logger.LogInformation(
+        "Auto-expired {Count} loyalty redemptions by date for tenant {TenantSlug}",
+        redemptionsToExpire.Count,
+        _tenantAccessor.TenantInfo?.Slug);
     }
   }
 }

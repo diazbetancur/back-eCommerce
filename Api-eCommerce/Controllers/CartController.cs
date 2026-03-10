@@ -1,4 +1,5 @@
 using CC.Aplication.Services;
+using CC.Infraestructure.Tenancy;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api_eCommerce.Controllers
@@ -12,10 +13,12 @@ namespace Api_eCommerce.Controllers
   public class CartController : ControllerBase
   {
     private readonly ICartService _cartService;
+    private readonly ITenantResolver _tenantResolver;
 
-    public CartController(ICartService cartService)
+    public CartController(ICartService cartService, ITenantResolver tenantResolver)
     {
       _cartService = cartService;
+      _tenantResolver = tenantResolver;
     }
 
     /// <summary>
@@ -25,6 +28,12 @@ namespace Api_eCommerce.Controllers
     [ProducesResponseType<CC.Aplication.Catalog.CartDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetCart()
     {
+      var tenantError = await ValidateTenantAsync();
+      if (tenantError != null)
+      {
+        return tenantError;
+      }
+
       var sessionId = GetSessionId();
       var cart = await _cartService.GetOrCreateCartAsync(sessionId);
       return Ok(cart);
@@ -40,13 +49,19 @@ namespace Api_eCommerce.Controllers
     {
       try
       {
+        var tenantError = await ValidateTenantAsync();
+        if (tenantError != null)
+        {
+          return tenantError;
+        }
+
         var sessionId = GetSessionId();
         var cart = await _cartService.AddToCartAsync(sessionId, request);
         return Ok(cart);
       }
       catch (InvalidOperationException ex)
       {
-        return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        return MapBusinessError(ex.Message);
       }
     }
 
@@ -55,18 +70,25 @@ namespace Api_eCommerce.Controllers
     /// </summary>
     [HttpPut("items/{itemId:guid}")]
     [ProducesResponseType<CC.Aplication.Catalog.CartDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateCartItem(Guid itemId, [FromBody] CC.Aplication.Catalog.UpdateCartItemRequest request)
     {
       try
       {
+        var tenantError = await ValidateTenantAsync();
+        if (tenantError != null)
+        {
+          return tenantError;
+        }
+
         var sessionId = GetSessionId();
         var cart = await _cartService.UpdateCartItemAsync(sessionId, itemId, request);
         return Ok(cart);
       }
       catch (InvalidOperationException ex)
       {
-        return Problem(detail: ex.Message, statusCode: StatusCodes.Status404NotFound);
+        return MapBusinessError(ex.Message);
       }
     }
 
@@ -78,6 +100,12 @@ namespace Api_eCommerce.Controllers
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveCartItem(Guid itemId)
     {
+      var tenantError = await ValidateTenantAsync();
+      if (tenantError != null)
+      {
+        return tenantError;
+      }
+
       var sessionId = GetSessionId();
       var removed = await _cartService.RemoveCartItemAsync(sessionId, itemId);
       return removed ? NoContent() : NotFound();
@@ -90,9 +118,45 @@ namespace Api_eCommerce.Controllers
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> ClearCart()
     {
+      var tenantError = await ValidateTenantAsync();
+      if (tenantError != null)
+      {
+        return tenantError;
+      }
+
       var sessionId = GetSessionId();
       await _cartService.ClearCartAsync(sessionId);
       return NoContent();
+    }
+
+    private async Task<IActionResult?> ValidateTenantAsync()
+    {
+      var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenantContext != null)
+      {
+        return null;
+      }
+
+      return Problem(
+          statusCode: StatusCodes.Status409Conflict,
+          title: "Tenant Not Resolved",
+          detail: "Unable to resolve tenant from request"
+      );
+    }
+
+    private ObjectResult MapBusinessError(string message)
+    {
+      var normalizedMessage = message.ToLowerInvariant();
+
+      var statusCode = normalizedMessage.Contains("not found")
+        ? StatusCodes.Status404NotFound
+        : StatusCodes.Status400BadRequest;
+
+      var title = statusCode == StatusCodes.Status404NotFound
+        ? "Resource Not Found"
+        : "Invalid Operation";
+
+      return Problem(statusCode: statusCode, title: title, detail: message);
     }
 
     private string GetSessionId()

@@ -31,6 +31,7 @@ namespace CC.Infraestructure.Tenant
     public DbSet<DomainEntities.LoyaltyAccount> LoyaltyAccounts => Set<DomainEntities.LoyaltyAccount>();
     public DbSet<DomainEntities.LoyaltyTransaction> LoyaltyTransactions => Set<DomainEntities.LoyaltyTransaction>();
     public DbSet<DomainEntities.LoyaltyReward> LoyaltyRewards => Set<DomainEntities.LoyaltyReward>();
+    public DbSet<DomainEntities.LoyaltyRewardProduct> LoyaltyRewardProducts => Set<DomainEntities.LoyaltyRewardProduct>();
     public DbSet<DomainEntities.LoyaltyRedemption> LoyaltyRedemptions => Set<DomainEntities.LoyaltyRedemption>();
     public DbSet<DomainEntities.LoyaltyConfiguration> LoyaltyConfigurations => Set<DomainEntities.LoyaltyConfiguration>();
     #endregion
@@ -187,6 +188,8 @@ namespace CC.Infraestructure.Tenant
         entity.HasIndex(e => e.LoyaltyAccountId).HasDatabaseName("IX_LoyaltyTransactions_AccountId");
         entity.HasIndex(e => e.OrderId).HasDatabaseName("IX_LoyaltyTransactions_OrderId");
         entity.HasIndex(e => e.DateCreated).HasDatabaseName("IX_LoyaltyTransactions_CreatedAt");
+        entity.HasIndex(e => e.AdjustedByUserId).HasDatabaseName("IX_LoyaltyTransactions_AdjustedByUserId");
+        entity.HasIndex(e => e.AdjustmentTicketNumber).HasDatabaseName("IX_LoyaltyTransactions_AdjustmentTicketNumber");
 
         // �ndice �nico: una orden solo puede generar puntos una vez
         entity.HasIndex(e => e.OrderId)
@@ -198,6 +201,7 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.Type).IsRequired().HasMaxLength(20);
         entity.Property(e => e.Points).IsRequired();
         entity.Property(e => e.Description).HasMaxLength(500);
+        entity.Property(e => e.AdjustmentTicketNumber).HasMaxLength(100);
         entity.Property(e => e.DateCreated).IsRequired();
       });
 
@@ -210,13 +214,19 @@ namespace CC.Infraestructure.Tenant
         entity.HasIndex(e => e.IsActive).HasDatabaseName("IX_LoyaltyRewards_IsActive");
         entity.HasIndex(e => e.RewardType).HasDatabaseName("IX_LoyaltyRewards_RewardType");
         entity.HasIndex(e => e.DisplayOrder).HasDatabaseName("IX_LoyaltyRewards_DisplayOrder");
+        entity.HasIndex(e => e.AvailableFrom).HasDatabaseName("IX_LoyaltyRewards_AvailableFrom");
+        entity.HasIndex(e => e.AvailableUntil).HasDatabaseName("IX_LoyaltyRewards_AvailableUntil");
+        entity.HasIndex(e => e.AppliesToAllEligibleProducts).HasDatabaseName("IX_LoyaltyRewards_AppliesToAllEligibleProducts");
 
         entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
         entity.Property(e => e.Description).HasMaxLength(1000);
         entity.Property(e => e.PointsCost).IsRequired();
         entity.Property(e => e.RewardType).IsRequired().HasMaxLength(30);
+        entity.Property(e => e.SingleProductSelectionRule).HasMaxLength(30);
         entity.Property(e => e.ImageUrl).HasMaxLength(500);
         entity.Property(e => e.IsActive).IsRequired();
+        entity.Property(e => e.AvailableFrom);
+        entity.Property(e => e.AvailableUntil);
         entity.Property(e => e.DateCreated).IsRequired();
         entity.Property(e => e.UpdatedAt).IsRequired();
 
@@ -225,6 +235,22 @@ namespace CC.Infraestructure.Tenant
               .WithOne(rd => rd.Reward)
               .HasForeignKey(rd => rd.RewardId)
               .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasMany(r => r.EligibleProducts)
+              .WithOne(p => p.Reward)
+              .HasForeignKey(p => p.RewardId)
+              .OnDelete(DeleteBehavior.Cascade);
+      });
+
+      modelBuilder.Entity<DomainEntities.LoyaltyRewardProduct>(entity =>
+      {
+        entity.ToTable("LoyaltyRewardProducts");
+        entity.HasKey(e => new { e.RewardId, e.ProductId });
+
+        entity.HasIndex(e => e.RewardId).HasDatabaseName("IX_LoyaltyRewardProducts_RewardId");
+        entity.HasIndex(e => e.ProductId).HasDatabaseName("IX_LoyaltyRewardProducts_ProductId");
+
+        entity.Property(e => e.DateCreated).IsRequired();
       });
 
       modelBuilder.Entity<DomainEntities.LoyaltyRedemption>(entity =>
@@ -407,6 +433,12 @@ namespace CC.Infraestructure.Tenant
         entity.ToTable("Carts");
         entity.HasKey(e => e.Id);
         entity.HasIndex(e => e.UserId);
+        entity.HasIndex(e => e.SessionId);
+
+        entity.HasMany(e => e.Items)
+              .WithOne()
+              .HasForeignKey(e => e.CartId)
+              .OnDelete(DeleteBehavior.Cascade);
       });
 
       modelBuilder.Entity<TenantEntities.CartItem>(entity =>
@@ -414,6 +446,7 @@ namespace CC.Infraestructure.Tenant
         entity.ToTable("CartItems");
         entity.HasKey(e => e.Id);
         entity.HasIndex(e => e.CartId);
+        entity.HasIndex(e => new { e.CartId, e.ProductId }).IsUnique();
       });
       #endregion
 

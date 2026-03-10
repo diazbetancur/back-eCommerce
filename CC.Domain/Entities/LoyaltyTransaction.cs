@@ -47,6 +47,17 @@ namespace CC.Domain.Entities
     public decimal? ConversionRateUsed { get; set; }
 
     /// <summary>
+    /// Usuario administrador que realizó el ajuste manual (si aplica)
+    /// </summary>
+    public Guid? AdjustedByUserId { get; set; }
+
+    /// <summary>
+    /// Número de ticket asociado al ajuste manual (si aplica)
+    /// </summary>
+    [MaxLength(100)]
+    public string? AdjustmentTicketNumber { get; set; }
+
+    /// <summary>
     /// Fecha de expiración de los puntos ganados
     /// Se calcula como DateCreated + PointsExpirationDays de la configuración
     /// null = sin vencimiento
@@ -65,5 +76,6 @@ namespace CC.Domain.Entities
     public const string Earn = "EARN";
     public const string Redeem = "REDEEM";
     public const string Adjust = "ADJUST";
+    public const string Expire = "EXPIRE";
   }
 }

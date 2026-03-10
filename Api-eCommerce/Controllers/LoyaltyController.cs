@@ -53,6 +53,12 @@ namespace Api_eCommerce.Controllers
           );
         }
 
+        var loyaltyDisabledResult = await EnsureLoyaltyEnabledAsync();
+        if (loyaltyDisabledResult != null)
+        {
+          return loyaltyDisabledResult;
+        }
+
         // Obtener user ID del token JWT
         var userId = GetUserIdFromJwt();
         if (!userId.HasValue)
@@ -97,7 +103,7 @@ namespace Api_eCommerce.Controllers
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetTransactions(
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+      [FromQuery] int pageSize = 50,
         [FromQuery] string? type = null,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null)
@@ -113,6 +119,12 @@ namespace Api_eCommerce.Controllers
               title: "Tenant Not Resolved",
               detail: "Unable to resolve tenant from request"
           );
+        }
+
+        var loyaltyDisabledResult = await EnsureLoyaltyEnabledAsync();
+        if (loyaltyDisabledResult != null)
+        {
+          return loyaltyDisabledResult;
         }
 
         // Obtener user ID del token JWT
@@ -170,16 +182,35 @@ namespace Api_eCommerce.Controllers
       return null;
     }
 
+    private async Task<IActionResult?> EnsureLoyaltyEnabledAsync()
+    {
+      var config = await _loyaltyService.GetLoyaltyConfigurationAsync();
+      if (config.IsEnabled)
+      {
+        return null;
+      }
+
+      var problemDetails = new ProblemDetails
+      {
+        Status = StatusCodes.Status403Forbidden,
+        Title = "Loyalty Program Disabled",
+        Detail = "The loyalty program is currently disabled for this tenant"
+      };
+
+      problemDetails.Extensions["code"] = "LOYALTY_DISABLED";
+      problemDetails.Extensions["isLoyaltyEnabled"] = false;
+
+      return StatusCode(StatusCodes.Status403Forbidden, problemDetails);
+    }
+
     // ==================== REWARDS (USER) ====================
 
     /// <summary>
-    /// Ver premios disponibles para canjear
+    /// Ver premios activos y vigentes para mostrar en tienda (público)
     /// </summary>
     [HttpGet("rewards")]
-    [Api_eCommerce.Authorization.RequireModule("loyalty", "view")]
-    [ServiceFilter(typeof(Api_eCommerce.Authorization.ModuleAuthorizationActionFilter))]
+    [AllowAnonymous]
     [ProducesResponseType<PagedLoyaltyRewardsResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetAvailableRewards(
         [FromQuery] int page = 1,
@@ -197,8 +228,18 @@ namespace Api_eCommerce.Controllers
           );
         }
 
+        var loyaltyDisabledResult = await EnsureLoyaltyEnabledAsync();
+        if (loyaltyDisabledResult != null)
+        {
+          return loyaltyDisabledResult;
+        }
+
         // Solo mostrar premios activos
-        var query = new GetLoyaltyRewardsQuery(page, pageSize, IsActive: true);
+        var query = new GetLoyaltyRewardsQuery(
+          Page: page,
+          PageSize: pageSize,
+          IsActive: true,
+          IsCurrentlyAvailable: true);
         var rewards = await _rewardsService.GetRewardsAsync(query);
         return Ok(rewards);
       }
@@ -235,6 +276,12 @@ namespace Api_eCommerce.Controllers
               title: "Tenant Not Resolved",
               detail: "Unable to resolve tenant from request"
           );
+        }
+
+        var loyaltyDisabledResult = await EnsureLoyaltyEnabledAsync();
+        if (loyaltyDisabledResult != null)
+        {
+          return loyaltyDisabledResult;
         }
 
         var userId = GetUserIdFromJwt();
@@ -301,6 +348,12 @@ namespace Api_eCommerce.Controllers
               title: "Tenant Not Resolved",
               detail: "Unable to resolve tenant from request"
           );
+        }
+
+        var loyaltyDisabledResult = await EnsureLoyaltyEnabledAsync();
+        if (loyaltyDisabledResult != null)
+        {
+          return loyaltyDisabledResult;
         }
 
         var userId = GetUserIdFromJwt();

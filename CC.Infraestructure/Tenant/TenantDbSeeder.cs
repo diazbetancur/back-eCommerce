@@ -323,7 +323,7 @@ namespace CC.Infraestructure.Tenant
 
             foreach (var module in customerModules)
             {
-                var canCreate = module.Code == "orders"; // Solo puede crear órdenes
+                var canCreate = module.Code == "orders" || module.Code == "loyalty"; // Puede crear órdenes y canjear recompensas
 
                 permissions.Add(new RoleModulePermission
                 {

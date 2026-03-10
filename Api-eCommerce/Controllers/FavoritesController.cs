@@ -12,6 +12,7 @@ namespace Api_eCommerce.Controllers
   /// </summary>
   [ApiController]
   [Route("me/favorites")]
+  [Route("api/me/favorites")]
   [Authorize]
   [Tags("User Favorites")]
   public class FavoritesController : ControllerBase

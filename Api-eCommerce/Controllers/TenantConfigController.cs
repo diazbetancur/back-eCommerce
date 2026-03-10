@@ -1,4 +1,5 @@
 using CC.Aplication.Services;
+using CC.Aplication.Loyalty;
 using CC.Domain.Dto;
 using CC.Infraestructure.Tenancy;
 using Microsoft.AspNetCore.Authorization;
@@ -15,15 +16,18 @@ namespace Api_eCommerce.Controllers
   public class TenantConfigController : ControllerBase
   {
     private readonly IFeatureService _featureService;
+    private readonly ILoyaltyService _loyaltyService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<TenantConfigController> _logger;
 
     public TenantConfigController(
         IFeatureService featureService,
+        ILoyaltyService loyaltyService,
         ITenantAccessor tenantAccessor,
         ILogger<TenantConfigController> logger)
     {
       _featureService = featureService;
+      _loyaltyService = loyaltyService;
       _tenantAccessor = tenantAccessor;
       _logger = logger;
     }
@@ -77,6 +81,7 @@ namespace Api_eCommerce.Controllers
 
         // Obtener feature flags desde el servicio (usa cache automático)
         var features = await _featureService.GetFeaturesAsync();
+        var loyaltyConfig = await _loyaltyService.GetLoyaltyConfigurationAsync();
 
         var response = new TenantConfigResponse
         {
@@ -85,8 +90,8 @@ namespace Api_eCommerce.Controllers
           TenantName = tenantInfo.Slug, // Usar slug como nombre por ahora
           Features = new TenantFeaturesDto
           {
-            // Loyalty = wishlist/favorites
-            Loyalty = features.EnableWishlist,
+            // Loyalty = estado real del programa de lealtad del tenant
+            Loyalty = loyaltyConfig.IsEnabled,
 
             // Multistore = soporte de múltiples tiendas físicas
             Multistore = features.EnableMultiStore,

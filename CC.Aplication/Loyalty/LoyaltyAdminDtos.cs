@@ -22,6 +22,9 @@ namespace CC.Aplication.Loyalty
     [Required(ErrorMessage = "La razón es requerida")]
     [StringLength(500, MinimumLength = 5, ErrorMessage = "La razón debe tener entre 5 y 500 caracteres")]
     public string Reason { get; init; } = string.Empty;
+
+    [StringLength(100, ErrorMessage = "El número de ticket no puede exceder 100 caracteres")]
+    public string? TicketNumber { get; init; }
   }
 
   /// <summary>
@@ -32,5 +35,38 @@ namespace CC.Aplication.Loyalty
       int PointsAdjusted,
       int NewBalance,
       string Message
+  );
+
+  public record GetManualPointAdjustmentsQuery(
+    int Page = 1,
+    int PageSize = 20,
+    Guid? UserId = null,
+    Guid? AdjustedByUserId = null,
+    string? TicketNumber = null,
+    DateTime? FromDate = null,
+    DateTime? ToDate = null,
+    string? Search = null
+  );
+
+  public record ManualPointAdjustmentItemDto(
+    Guid TransactionId,
+    Guid UserId,
+    string UserEmail,
+    Guid? AdjustedByUserId,
+    string? AdjustedByEmail,
+    int Points,
+    string TransactionType,
+    string? Observations,
+    string? TicketNumber,
+    DateTime? ExpiresAt,
+    DateTime CreatedAt
+  );
+
+  public record PagedManualPointAdjustmentsResponse(
+    List<ManualPointAdjustmentItemDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize,
+    int TotalPages
   );
 }

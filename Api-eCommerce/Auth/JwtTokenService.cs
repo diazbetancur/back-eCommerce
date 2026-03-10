@@ -13,9 +13,9 @@ namespace Api_eCommerce.Auth
  private readonly string? _audience;
  public JwtTokenService(IConfiguration cfg)
  {
- _key = cfg["JWT:Key"] ?? throw new InvalidOperationException("JWT:Key not configured");
- _issuer = cfg["JWT:Issuer"];
- _audience = cfg["JWT:Audience"];
+ _key = cfg["JWT:Key"] ?? cfg["Jwt:SigningKey"] ?? cfg["jwtKey"] ?? throw new InvalidOperationException("JWT signing key not configured");
+ _issuer = cfg["JWT:Issuer"] ?? cfg["Jwt:Issuer"];
+ _audience = cfg["JWT:Audience"] ?? cfg["Jwt:Audience"];
  }
 
  public string CreateToken(IEnumerable<Claim> claims, DateTime expiresAt)

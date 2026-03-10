@@ -14,13 +14,17 @@ namespace CC.Aplication.Loyalty
         int Balance,
         int TotalEarned,
         int TotalRedeemed,
+        int PointsExpiringIn60Days,
         List<LoyaltyTransactionDto> LastTransactions
     );
 
     public record LoyaltyTransactionDto(
         Guid Id,
         string Type,              // EARN, REDEEM, ADJUST
+        string Detail,            // Acumulación, Redención, Vencimiento, Ajuste
         int Points,               // Positivo para earn, negativo para redeem
+        DateTime TransactionDate, // Fecha de compra/redención. En vencimiento: fecha de compra
+        DateTime? ExpirationDate, // En redención: mismo día de redención
         string? Description,
         string? OrderNumber,      // Si est� asociado a una orden
         DateTime CreatedAt
@@ -38,7 +42,7 @@ namespace CC.Aplication.Loyalty
 
     public record GetLoyaltyTransactionsQuery(
         int Page = 1,
-        int PageSize = 20,
+        int PageSize = 50,
         string? Type = null,       // Filtrar por tipo
         DateTime? FromDate = null,
         DateTime? ToDate = null

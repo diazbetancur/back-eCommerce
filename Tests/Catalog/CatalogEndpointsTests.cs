@@ -21,7 +21,7 @@ namespace Api_eCommerce.Tests.Catalog
         public async Task GetProducts_WithValidTenant_ReturnsOk()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/products");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
             // Act
@@ -37,7 +37,7 @@ namespace Api_eCommerce.Tests.Catalog
         public async Task GetProducts_WithoutTenant_Returns400BadRequest()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/products");
 
             // Act
             var response = await _client.SendAsync(request);
@@ -52,7 +52,7 @@ namespace Api_eCommerce.Tests.Catalog
             // Arrange
             var request = new HttpRequestMessage(
                 HttpMethod.Get, 
-                "/api/catalog/products?page=1&pageSize=10");
+                "/api/products?page=1&pageSize=10");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
             // Act
@@ -72,10 +72,10 @@ namespace Api_eCommerce.Tests.Catalog
         public async Task GetProducts_DifferentTenants_ReturnsDifferentData()
         {
             // Arrange
-            var request1 = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request1 = new HttpRequestMessage(HttpMethod.Get, "/api/products");
             request1.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
-            var request2 = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request2 = new HttpRequestMessage(HttpMethod.Get, "/api/products");
             request2.Headers.Add("X-Tenant-Slug", ValidTenantSlug2);
 
             // Act
@@ -86,7 +86,7 @@ namespace Api_eCommerce.Tests.Catalog
             response1.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
             response2.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
             
-            // Los datos deberían ser independientes por tenant
+            // Los datos deberï¿½an ser independientes por tenant
             // (aunque en este test no tenemos productos seed, verificamos que no hay error)
         }
 
@@ -97,7 +97,7 @@ namespace Api_eCommerce.Tests.Catalog
             var productId = Guid.NewGuid();
             var request = new HttpRequestMessage(
                 HttpMethod.Get, 
-                $"/api/catalog/products/{productId}");
+                $"/api/products/{productId}");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
             // Act
@@ -117,7 +117,7 @@ namespace Api_eCommerce.Tests.Catalog
             var productId = Guid.NewGuid();
             var request = new HttpRequestMessage(
                 HttpMethod.Get, 
-                $"/api/catalog/products/{productId}");
+                $"/api/products/{productId}");
 
             // Act
             var response = await _client.SendAsync(request);
@@ -130,7 +130,7 @@ namespace Api_eCommerce.Tests.Catalog
         public async Task GetCategories_WithValidTenant_ReturnsOk()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/categories");
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/categories");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
             // Act
@@ -147,7 +147,7 @@ namespace Api_eCommerce.Tests.Catalog
             // Arrange
             var request = new HttpRequestMessage(
                 HttpMethod.Get, 
-                "/api/catalog/products/search?q=test");
+                "/api/products?search=test");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
             // Act
@@ -166,7 +166,7 @@ namespace Api_eCommerce.Tests.Catalog
             // Arrange
             var request = new HttpRequestMessage(
                 HttpMethod.Get, 
-                $"/api/catalog/products{queryString}");
+                $"/api/products{queryString}");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
             // Act
@@ -180,7 +180,7 @@ namespace Api_eCommerce.Tests.Catalog
         public async Task GetProducts_WithInvalidTenant_Returns404NotFound()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/products");
             request.Headers.Add("X-Tenant-Slug", "nonexistent-tenant-xyz");
 
             // Act
@@ -216,7 +216,7 @@ namespace Api_eCommerce.Tests.Catalog
 
         private HttpRequestMessage CreateRequestWithTenant(string tenantSlug)
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/products");
             request.Headers.Add("X-Tenant-Slug", tenantSlug);
             return request;
         }

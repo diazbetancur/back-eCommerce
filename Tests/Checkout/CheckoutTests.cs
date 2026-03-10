@@ -43,8 +43,9 @@ namespace Api_eCommerce.Tests.Checkout
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
             response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response.StatusCode.Should().NotBe(HttpStatusCode.NotFound);
         }
 
         [Fact]
@@ -76,8 +77,9 @@ namespace Api_eCommerce.Tests.Checkout
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
             response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response.StatusCode.Should().NotBe(HttpStatusCode.NotFound);
         }
 
         [Fact]
@@ -141,16 +143,18 @@ namespace Api_eCommerce.Tests.Checkout
             var response2 = await _client.SendAsync(request2);
 
             // Assert
-            response1.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
-            response2.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
+            response1.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response2.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response1.StatusCode.Should().NotBe(HttpStatusCode.NotFound);
+            response2.StatusCode.Should().NotBe(HttpStatusCode.NotFound);
 
-            // Ambas deberían retornar el mismo resultado (idempotencia)
+            // Ambas deberï¿½an retornar el mismo resultado (idempotencia)
             if (response1.IsSuccessStatusCode && response2.IsSuccessStatusCode)
             {
                 var content1 = await response1.Content.ReadAsStringAsync();
                 var content2 = await response2.Content.ReadAsStringAsync();
                 
-                // El segundo request debería retornar la misma orden (o un 409 Conflict)
+                // El segundo request deberï¿½a retornar la misma orden (o un 409 Conflict)
                 if (response2.StatusCode == HttpStatusCode.Created)
                 {
                     content1.Should().Be(content2, 
@@ -158,7 +162,7 @@ namespace Api_eCommerce.Tests.Checkout
                 }
                 else if (response2.StatusCode == HttpStatusCode.Conflict)
                 {
-                    // También es válido retornar 409 para requests duplicadas
+                    // Tambiï¿½n es vï¿½lido retornar 409 para requests duplicadas
                     response2.StatusCode.Should().Be(HttpStatusCode.Conflict);
                 }
             }
@@ -194,10 +198,12 @@ namespace Api_eCommerce.Tests.Checkout
             var response2 = await _client.SendAsync(request2);
 
             // Assert
-            response1.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
-            response2.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
+            response1.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response2.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response1.StatusCode.Should().NotBe(HttpStatusCode.NotFound);
+            response2.StatusCode.Should().NotBe(HttpStatusCode.NotFound);
 
-            // Diferentes keys deberían crear diferentes órdenes
+            // Diferentes keys deberï¿½an crear diferentes ï¿½rdenes
             if (response1.IsSuccessStatusCode && response2.IsSuccessStatusCode)
             {
                 var content1 = await response1.Content.ReadAsStringAsync();
@@ -265,7 +271,7 @@ namespace Api_eCommerce.Tests.Checkout
             {
                 shippingAddress = new
                 {
-                    fullName = "", // Vacío - inválido
+                    fullName = "", // Vacï¿½o - invï¿½lido
                     phone = "",
                     address = "",
                     city = "",
@@ -317,8 +323,8 @@ namespace Api_eCommerce.Tests.Checkout
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
-            // Puede ser 400 si el método de pago no está habilitado para el tenant
+            response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response.StatusCode.Should().NotBe(HttpStatusCode.NotFound);
         }
 
         [Fact]

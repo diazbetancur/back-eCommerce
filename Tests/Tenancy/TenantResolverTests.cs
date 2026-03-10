@@ -7,12 +7,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Api_eCommerce.Tests.Tenancy
 {
     /// <summary>
-    /// Tests para el TenantResolutionMiddleware y resolución de tenants
+    /// Tests para el TenantResolutionMiddleware y resoluciï¿½n de tenants
     /// </summary>
     public class TenantResolverTests : IClassFixture<CustomWebApplicationFactory>
     {
         private readonly CustomWebApplicationFactory _factory;
         private readonly HttpClient _client;
+        private const string TenantScopedPath = "/api/products";
 
         public TenantResolverTests(CustomWebApplicationFactory factory)
         {
@@ -24,14 +25,14 @@ namespace Api_eCommerce.Tests.Tenancy
         public async Task ResolveAsync_WithValidHeaderSlug_ReturnsTenantContext()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, TenantScopedPath);
             request.Headers.Add("X-Tenant-Slug", "test-tenant-1");
 
             // Act
             var response = await _client.SendAsync(request);
 
             // Assert
-            // Si el tenant se resolvió, no debería ser 400 (Bad Request) ni 404 (Not Found)
+            // Si el tenant se resolviï¿½, no deberï¿½a ser 400 (Bad Request) ni 404 (Not Found)
             response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.BadRequest);
             response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.NotFound);
         }
@@ -40,7 +41,7 @@ namespace Api_eCommerce.Tests.Tenancy
         public async Task ResolveAsync_WithValidQueryParameter_ReturnsTenantContext()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products?tenant=test-tenant-1");
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{TenantScopedPath}?tenant=test-tenant-1");
 
             // Act
             var response = await _client.SendAsync(request);
@@ -54,7 +55,7 @@ namespace Api_eCommerce.Tests.Tenancy
         public async Task ResolveAsync_WithoutTenantSlug_Returns400BadRequest()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, TenantScopedPath);
 
             // Act
             var response = await _client.SendAsync(request);
@@ -63,14 +64,14 @@ namespace Api_eCommerce.Tests.Tenancy
             response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
             
             var content = await response.Content.ReadAsStringAsync();
-            content.Should().Contain("Tenant slug");
+            content.Should().Contain("Tenant Required");
         }
 
         [Fact]
         public async Task ResolveAsync_WithInvalidSlug_Returns404NotFound()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, TenantScopedPath);
             request.Headers.Add("X-Tenant-Slug", "nonexistent-tenant");
 
             // Act
@@ -80,24 +81,24 @@ namespace Api_eCommerce.Tests.Tenancy
             response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
             
             var content = await response.Content.ReadAsStringAsync();
-            content.Should().Contain("Tenant not found");
+            content.Should().Contain("Tenant Not Found");
         }
 
         [Fact]
-        public async Task ResolveAsync_WithPendingTenant_Returns403Forbidden()
+        public async Task ResolveAsync_WithPendingTenant_Returns503ServiceUnavailable()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, TenantScopedPath);
             request.Headers.Add("X-Tenant-Slug", "test-tenant-pending");
 
             // Act
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().Be(System.Net.HttpStatusCode.Forbidden);
+            response.StatusCode.Should().Be(System.Net.HttpStatusCode.ServiceUnavailable);
             
             var content = await response.Content.ReadAsStringAsync();
-            content.Should().Contain("not available");
+            content.Should().Contain("Tenant Not Available");
         }
 
         [Fact]
@@ -106,14 +107,14 @@ namespace Api_eCommerce.Tests.Tenancy
             // Arrange
             var request = new HttpRequestMessage(
                 HttpMethod.Get, 
-                "/api/catalog/products?tenant=test-tenant-2");
+                $"{TenantScopedPath}?tenant=test-tenant-2");
             request.Headers.Add("X-Tenant-Slug", "test-tenant-1");
 
             // Act
             var response = await _client.SendAsync(request);
 
             // Assert
-            // Debería usar el tenant del header (test-tenant-1)
+            // Deberï¿½a usar el tenant del header (test-tenant-1)
             response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.BadRequest);
             response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.NotFound);
         }
@@ -133,7 +134,7 @@ namespace Api_eCommerce.Tests.Tenancy
             var response = await _client.SendAsync(request);
 
             // Assert
-            // No debería ser 400 por falta de tenant
+            // No deberï¿½a ser 400 por falta de tenant
             response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.BadRequest, 
                 $"Path {path} should not require tenant header");
         }
@@ -142,8 +143,8 @@ namespace Api_eCommerce.Tests.Tenancy
         public async Task ResolveAsync_CaseInsensitiveSlug_ResolvesCorrectly()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
-            request.Headers.Add("X-Tenant-Slug", "TEST-TENANT-1"); // Mayúsculas
+            var request = new HttpRequestMessage(HttpMethod.Get, TenantScopedPath);
+            request.Headers.Add("X-Tenant-Slug", "TEST-TENANT-1"); // Mayï¿½sculas
 
             // Act
             var response = await _client.SendAsync(request);
@@ -157,7 +158,7 @@ namespace Api_eCommerce.Tests.Tenancy
         public async Task ResolveAsync_WithWhitespaceSlug_TrimsAndResolves()
         {
             // Arrange
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, TenantScopedPath);
             request.Headers.Add("X-Tenant-Slug", "  test-tenant-1  "); // Con espacios
 
             // Act
@@ -176,14 +177,14 @@ namespace Api_eCommerce.Tests.Tenancy
             var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
             var adminDb = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
 
-            // Simular resolución de tenant
-            var tenant = await adminDb.Tenants.FirstAsync(t => t.Slug == "test-tenant-1");
+            // Simular resoluciï¿½n de tenant
+            var tenant = await adminDb.Tenants.Include(t => t.Plan).FirstAsync(t => t.Slug == "test-tenant-1");
             var tenantInfo = new TenantInfo
             {
                 Id = tenant.Id,
                 Slug = tenant.Slug,
                 DbName = tenant.DbName,
-                Plan = tenant.Plan,
+                Plan = tenant.Plan?.Name,
                 ConnectionString = $"Host=localhost;Database={tenant.DbName}"
             };
 

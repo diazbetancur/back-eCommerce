@@ -42,6 +42,18 @@ namespace CC.Domain.Entities
     public Guid? ProductId { get; set; }
 
     /// <summary>
+    /// Si true, aplica a todos los productos elegibles.
+    /// Si false, aplica a uno solo según SingleProductSelectionRule.
+    /// </summary>
+    public bool AppliesToAllEligibleProducts { get; set; } = true;
+
+    /// <summary>
+    /// Regla cuando aplica a un solo producto elegible: MOST_EXPENSIVE | CHEAPEST
+    /// </summary>
+    [MaxLength(30)]
+    public string? SingleProductSelectionRule { get; set; }
+
+    /// <summary>
     /// Valor del descuento (% o monto fijo según RewardType)
     /// </summary>
     [Column(TypeName = "decimal(18,2)")]
@@ -69,6 +81,16 @@ namespace CC.Domain.Entities
     public int? ValidityDays { get; set; }
 
     /// <summary>
+    /// Fecha/hora desde la cual el premio está disponible para canje
+    /// </summary>
+    public DateTime? AvailableFrom { get; set; }
+
+    /// <summary>
+    /// Fecha/hora hasta la cual el premio está disponible para canje
+    /// </summary>
+    public DateTime? AvailableUntil { get; set; }
+
+    /// <summary>
     /// Orden de visualización
     /// </summary>
     public int DisplayOrder { get; set; } = 0;
@@ -80,5 +102,8 @@ namespace CC.Domain.Entities
 
     // Navigation property
     public ICollection<LoyaltyRedemption> Redemptions { get; set; } = new List<LoyaltyRedemption>();
+
+    // Productos elegibles para descuentos por producto
+    public ICollection<LoyaltyRewardProduct> EligibleProducts { get; set; } = new List<LoyaltyRewardProduct>();
   }
 }

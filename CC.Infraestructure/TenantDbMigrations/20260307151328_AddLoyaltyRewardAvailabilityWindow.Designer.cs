@@ -3,6 +3,7 @@ using System;
 using CC.Infraestructure.Tenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CC.Infraestructure.TenantDbMigrations
 {
     [DbContext(typeof(TenantDbContext))]
-    partial class TenantDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260307151328_AddLoyaltyRewardAvailabilityWindow")]
+    partial class AddLoyaltyRewardAvailabilityWindow
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -151,9 +154,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("AppliesToAllEligibleProducts")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTime?>("AvailableFrom")
                         .HasColumnType("timestamp with time zone");
 
@@ -196,10 +196,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("SingleProductSelectionRule")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
                     b.Property<int?>("Stock")
                         .HasColumnType("integer");
 
@@ -210,9 +206,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AppliesToAllEligibleProducts")
-                        .HasDatabaseName("IX_LoyaltyRewards_AppliesToAllEligibleProducts");
 
                     b.HasIndex("AvailableFrom")
                         .HasDatabaseName("IX_LoyaltyRewards_AvailableFrom");
@@ -230,28 +223,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasDatabaseName("IX_LoyaltyRewards_RewardType");
 
                     b.ToTable("LoyaltyRewards", "public");
-                });
-
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyRewardProduct", b =>
-                {
-                    b.Property<Guid>("RewardId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("DateCreated")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("RewardId", "ProductId");
-
-                    b.HasIndex("ProductId")
-                        .HasDatabaseName("IX_LoyaltyRewardProducts_ProductId");
-
-                    b.HasIndex("RewardId")
-                        .HasDatabaseName("IX_LoyaltyRewardProducts_RewardId");
-
-                    b.ToTable("LoyaltyRewardProducts", "public");
                 });
 
             modelBuilder.Entity("CC.Domain.Entities.LoyaltyTransaction", b =>
@@ -1164,17 +1135,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Navigation("Reward");
                 });
 
-            modelBuilder.Entity("CC.Domain.Entities.LoyaltyRewardProduct", b =>
-                {
-                    b.HasOne("CC.Domain.Entities.LoyaltyReward", "Reward")
-                        .WithMany("EligibleProducts")
-                        .HasForeignKey("RewardId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Reward");
-                });
-
             modelBuilder.Entity("CC.Domain.Entities.LoyaltyTransaction", b =>
                 {
                     b.HasOne("CC.Domain.Entities.LoyaltyAccount", "LoyaltyAccount")
@@ -1302,8 +1262,6 @@ namespace CC.Infraestructure.TenantDbMigrations
 
             modelBuilder.Entity("CC.Domain.Entities.LoyaltyReward", b =>
                 {
-                    b.Navigation("EligibleProducts");
-
                     b.Navigation("Redemptions");
                 });
 

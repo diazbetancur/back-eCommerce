@@ -600,7 +600,10 @@ namespace Api_eCommerce.Endpoints
         private static async Task<IResult> GetCustomers(
             HttpContext context,
             TenantDbContextFactory dbFactory,
-            ITenantResolver tenantResolver)
+            ITenantResolver tenantResolver,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? search = null)
         {
             try
             {
@@ -610,10 +613,24 @@ namespace Api_eCommerce.Endpoints
                 await using var db = dbFactory.Create();
 
                 // Filtrar solo usuarios con rol "Customer"
-                var users = await db.Users
+                var query = db.Users
                     .Include(u => u.UserRoles)
                         .ThenInclude(ur => ur.Role)
-                    .Where(u => u.UserRoles.Any(ur => ur.Role.Name == "Customer"))
+                    .Where(u => u.UserRoles.Any(ur => ur.Role.Name == "Customer"));
+
+                if (!string.IsNullOrWhiteSpace(search))
+                {
+                    var normalizedSearch = search.Trim();
+                    query = query.Where(u => EF.Functions.ILike(u.Email, $"%{normalizedSearch}%"));
+                }
+
+                var normalizedPage = Math.Max(page, 1);
+                var normalizedPageSize = Math.Clamp(pageSize, 1, 100);
+
+                var users = await query
+                    .OrderByDescending(u => u.CreatedAt)
+                    .Skip((normalizedPage - 1) * normalizedPageSize)
+                    .Take(normalizedPageSize)
                     .ToListAsync();
 
                 var userDtos = users.Select(u => new TenantUserListItemDto

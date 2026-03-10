@@ -1,4 +1,5 @@
 using CC.Domain.Users;
+using CC.Aplication.Loyalty;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
@@ -30,19 +31,22 @@ namespace CC.Aplication.Auth
         private readonly IConfiguration _configuration;
         private readonly ILogger<UnifiedAuthService> _logger;
         private readonly CC.Aplication.Services.IFeatureService _featureService;
+        private readonly ILoyaltyService _loyaltyService;
 
         public UnifiedAuthService(
             TenantDbContextFactory dbFactory,
             ITenantAccessor tenantAccessor,
             IConfiguration configuration,
             ILogger<UnifiedAuthService> logger,
-            CC.Aplication.Services.IFeatureService featureService)
+            CC.Aplication.Services.IFeatureService featureService,
+            ILoyaltyService loyaltyService)
         {
             _dbFactory = dbFactory;
             _tenantAccessor = tenantAccessor;
             _configuration = configuration;
             _logger = logger;
             _featureService = featureService;
+            _loyaltyService = loyaltyService;
         }
 
         /// <summary>
@@ -133,6 +137,7 @@ namespace CC.Aplication.Auth
             // Cargar features del plan para incluirlas en la respuesta de login
             _logger.LogInformation("🎯 Loading tenant features...");
             var tenantFeatures = await _featureService.GetFeaturesAsync(ct);
+            var loyaltyConfig = await _loyaltyService.GetLoyaltyConfigurationAsync(ct);
             var featuresDto = new TenantFeaturesDto
             {
                 AllowGuestCheckout = tenantFeatures.AllowGuestCheckout,
@@ -147,6 +152,7 @@ namespace CC.Aplication.Auth
                 EnableAdvancedSearch = tenantFeatures.EnableAdvancedSearch,
                 EnableAnalytics = tenantFeatures.EnableAnalytics,
                 EnableNewsletterSignup = tenantFeatures.EnableNewsletterSignup,
+                LoyaltyEnabled = loyaltyConfig.IsEnabled,
                 Payments = new PaymentFeaturesDto
                 {
                     WompiEnabled = tenantFeatures.Payments.WompiEnabled,
@@ -594,6 +600,7 @@ namespace CC.Aplication.Auth
         // Marketing
         public bool EnableAnalytics { get; set; }
         public bool EnableNewsletterSignup { get; set; }
+        public bool LoyaltyEnabled { get; set; }
 
         // Payment Methods
         public PaymentFeaturesDto Payments { get; set; } = new();

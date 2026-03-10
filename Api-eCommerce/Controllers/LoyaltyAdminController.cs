@@ -4,6 +4,9 @@ using CC.Infraestructure.Tenancy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 using System.Security.Claims;
 
 namespace Api_eCommerce.Controllers
@@ -20,15 +23,18 @@ namespace Api_eCommerce.Controllers
     private readonly ILoyaltyRewardsService _rewardsService;
     private readonly ILoyaltyService _loyaltyService;
     private readonly ITenantResolver _tenantResolver;
+    private readonly ILogger<LoyaltyAdminController> _logger;
 
     public LoyaltyAdminController(
         ILoyaltyRewardsService rewardsService,
         ILoyaltyService loyaltyService,
-        ITenantResolver tenantResolver)
+        ITenantResolver tenantResolver,
+        ILogger<LoyaltyAdminController> logger)
     {
       _rewardsService = rewardsService;
       _loyaltyService = loyaltyService;
       _tenantResolver = tenantResolver;
+      _logger = logger;
     }
 
     // ==================== REWARDS MANAGEMENT ====================
@@ -91,7 +97,13 @@ namespace Api_eCommerce.Controllers
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] bool? isActive = null,
-        [FromQuery] string? rewardType = null)
+      [FromQuery] string? rewardType = null,
+      [FromQuery] string? search = null,
+      [FromQuery] DateTime? availableFrom = null,
+      [FromQuery] DateTime? availableUntil = null,
+      [FromQuery] DateTime? createdFrom = null,
+      [FromQuery] DateTime? createdTo = null,
+      [FromQuery] bool? isCurrentlyAvailable = null)
     {
       try
       {
@@ -105,7 +117,17 @@ namespace Api_eCommerce.Controllers
           );
         }
 
-        var query = new GetLoyaltyRewardsQuery(page, pageSize, isActive, rewardType);
+        var query = new GetLoyaltyRewardsQuery(
+          Page: page,
+          PageSize: pageSize,
+          IsActive: isActive,
+          RewardType: rewardType,
+          Search: search,
+          AvailableFrom: availableFrom,
+          AvailableUntil: availableUntil,
+          CreatedFrom: createdFrom,
+          CreatedTo: createdTo,
+          IsCurrentlyAvailable: isCurrentlyAvailable);
         var rewards = await _rewardsService.GetRewardsAsync(query);
         return Ok(rewards);
       }
@@ -469,7 +491,17 @@ namespace Api_eCommerce.Controllers
           );
         }
 
-        var result = await _loyaltyService.AdjustPointsManuallyAsync(request);
+        var adminUserId = GetUserIdFromClaims(User);
+        if (!adminUserId.HasValue)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status401Unauthorized,
+              title: "Unauthorized",
+              detail: "User ID not found in token"
+          );
+        }
+
+        var result = await _loyaltyService.AdjustPointsManuallyAsync(request, adminUserId.Value);
         return Ok(result);
       }
       catch (ArgumentException ex)
@@ -488,14 +520,110 @@ namespace Api_eCommerce.Controllers
             detail: ex.Message
         );
       }
-      catch (Exception)
+      catch (PostgresException ex) when (ex.SqlState == "42703")
       {
+        _logger.LogError(ex, "Schema mismatch while adjusting manual points");
+        return Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: "Database Schema Outdated",
+            detail: "Tenant DB schema is outdated for manual adjustments. Please apply pending tenant migrations."
+        );
+      }
+      catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.SqlState == "42703")
+      {
+        _logger.LogError(ex, "Schema mismatch while adjusting manual points (wrapped DbUpdateException)");
+        return Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: "Database Schema Outdated",
+            detail: "Tenant DB schema is outdated for manual adjustments. Please apply pending tenant migrations."
+        );
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "Unexpected error while adjusting points");
         return Problem(
             statusCode: StatusCodes.Status500InternalServerError,
             title: "Internal Server Error",
             detail: "An error occurred while adjusting points"
         );
       }
+    }
+
+    /// <summary>
+    /// Listar historial de ajustes manuales de puntos
+    /// </summary>
+    [HttpGet("points/adjustments")]
+    [RequireModule("loyalty", "view")]
+    [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [ProducesResponseType<PagedManualPointAdjustmentsResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetManualPointAdjustments(
+      [FromQuery] int page = 1,
+      [FromQuery] int pageSize = 20,
+      [FromQuery] Guid? userId = null,
+      [FromQuery] Guid? adjustedByUserId = null,
+      [FromQuery] string? ticketNumber = null,
+      [FromQuery] DateTime? fromDate = null,
+      [FromQuery] DateTime? toDate = null,
+      [FromQuery] string? search = null)
+    {
+      try
+      {
+        var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+        if (tenantContext == null)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status409Conflict,
+              title: "Tenant Not Resolved",
+              detail: "Unable to resolve tenant from request"
+          );
+        }
+
+        var query = new GetManualPointAdjustmentsQuery(
+          Page: page,
+          PageSize: pageSize,
+          UserId: userId,
+          AdjustedByUserId: adjustedByUserId,
+          TicketNumber: ticketNumber,
+          FromDate: fromDate,
+          ToDate: toDate,
+          Search: search);
+
+        var result = await _loyaltyService.GetManualPointAdjustmentsAsync(query);
+        return Ok(result);
+      }
+      catch (PostgresException ex) when (ex.SqlState == "42703")
+      {
+        _logger.LogError(ex, "Schema mismatch while retrieving manual point adjustments");
+        return Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: "Database Schema Outdated",
+            detail: "Tenant DB schema is outdated for manual adjustments. Please apply pending tenant migrations."
+        );
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "Unexpected error while retrieving manual point adjustments");
+        return Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Internal Server Error",
+            detail: "An error occurred while retrieving manual point adjustments"
+        );
+      }
+    }
+
+    private static Guid? GetUserIdFromClaims(ClaimsPrincipal user)
+    {
+      var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)
+          ?? user.FindFirst("sub");
+
+      if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
+      {
+        return userId;
+      }
+
+      return null;
     }
   }
 }

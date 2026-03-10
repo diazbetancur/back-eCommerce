@@ -23,7 +23,11 @@ namespace CC.Aplication.Loyalty
     [Required(ErrorMessage = "El tipo de premio es requerido")]
     public string RewardType { get; init; } = string.Empty; // PRODUCT, DISCOUNT_PERCENTAGE, DISCOUNT_FIXED, FREE_SHIPPING
 
-    public Guid? ProductId { get; init; }
+    public List<Guid>? ProductIds { get; init; }
+
+    public bool AppliesToAllEligibleProducts { get; init; } = true;
+
+    public string? SingleProductSelectionRule { get; init; }
 
     [Range(0, double.MaxValue, ErrorMessage = "El valor del descuento debe ser positivo")]
     public decimal? DiscountValue { get; init; }
@@ -38,6 +42,13 @@ namespace CC.Aplication.Loyalty
 
     [Range(1, 365, ErrorMessage = "Los días de validez deben estar entre 1 y 365")]
     public int? ValidityDays { get; init; }
+
+    [Range(0, int.MaxValue, ErrorMessage = "La cantidad de cupones debe ser positiva")]
+    public int? CouponQuantity { get; init; }
+
+    public DateTime? AvailableFrom { get; init; }
+
+    public DateTime? AvailableUntil { get; init; }
 
     public int DisplayOrder { get; init; } = 0;
   }
@@ -61,7 +72,11 @@ namespace CC.Aplication.Loyalty
     [Required(ErrorMessage = "El tipo de premio es requerido")]
     public string RewardType { get; init; } = string.Empty;
 
-    public Guid? ProductId { get; init; }
+    public List<Guid>? ProductIds { get; init; }
+
+    public bool AppliesToAllEligibleProducts { get; init; } = true;
+
+    public string? SingleProductSelectionRule { get; init; }
 
     [Range(0, double.MaxValue, ErrorMessage = "El valor del descuento debe ser positivo")]
     public decimal? DiscountValue { get; init; }
@@ -76,6 +91,13 @@ namespace CC.Aplication.Loyalty
 
     [Range(1, 365, ErrorMessage = "Los días de validez deben estar entre 1 y 365")]
     public int? ValidityDays { get; init; }
+
+    [Range(0, int.MaxValue, ErrorMessage = "La cantidad de cupones debe ser positiva")]
+    public int? CouponQuantity { get; init; }
+
+    public DateTime? AvailableFrom { get; init; }
+
+    public DateTime? AvailableUntil { get; init; }
 
     public int DisplayOrder { get; init; }
   }
@@ -92,12 +114,21 @@ namespace CC.Aplication.Loyalty
       int PointsCost,
       string RewardType,
       Guid? ProductId,
+      List<Guid> ProductIds,
       string? ProductName,
+      bool AppliesToAllEligibleProducts,
+      string? SingleProductSelectionRule,
       decimal? DiscountValue,
       string? ImageUrl,
       bool IsActive,
       int? Stock,
+        int? CouponQuantity,
+        int CouponsIssued,
+        int? CouponsAvailable,
       int? ValidityDays,
+        DateTime? AvailableFrom,
+        DateTime? AvailableUntil,
+        bool IsCurrentlyAvailable,
       int DisplayOrder,
       DateTime CreatedAt,
       DateTime UpdatedAt
@@ -121,6 +152,12 @@ namespace CC.Aplication.Loyalty
       int Page = 1,
       int PageSize = 20,
       bool? IsActive = null,
-      string? RewardType = null
+      string? RewardType = null,
+      string? Search = null,
+      DateTime? AvailableFrom = null,
+      DateTime? AvailableUntil = null,
+      DateTime? CreatedFrom = null,
+      DateTime? CreatedTo = null,
+      bool? IsCurrentlyAvailable = null
   );
 }

@@ -7,7 +7,7 @@ using System.Text;
 namespace Api_eCommerce.Auth
 {
     /// <summary>
-    /// Servicio para emitir y validar tokens de confirmación con duración corta (15 min)
+    /// Servicio para emitir y validar tokens de confirmaciï¿½n con duraciï¿½n corta (15 min)
     /// </summary>
     public interface IConfirmTokenService
     {
@@ -23,9 +23,12 @@ namespace Api_eCommerce.Auth
 
         public ConfirmTokenService(IConfiguration configuration)
         {
-            _secretKey = configuration["JWT:Key"] ?? throw new InvalidOperationException("JWT:Key not configured");
-            _issuer = configuration["JWT:Issuer"] ?? "ecommerce-api";
-            _audience = configuration["JWT:Audience"] ?? "ecommerce-provisioning";
+            _secretKey = configuration["JWT:Key"]
+                ?? configuration["Jwt:SigningKey"]
+                ?? configuration["jwtKey"]
+                ?? throw new InvalidOperationException("JWT signing key not configured");
+            _issuer = configuration["JWT:Issuer"] ?? configuration["Jwt:Issuer"] ?? "ecommerce-api";
+            _audience = configuration["JWT:Audience"] ?? configuration["Jwt:Audience"] ?? "ecommerce-provisioning";
         }
 
         public string GenerateConfirmToken(Guid provisioningId, string slug)
@@ -45,7 +48,7 @@ namespace Api_eCommerce.Auth
                 issuer: _issuer,
                 audience: _audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(15), // Token válido por 15 minutos
+                expires: DateTime.UtcNow.AddMinutes(15), // Token vï¿½lido por 15 minutos
                 signingCredentials: credentials
             );
 
@@ -73,7 +76,7 @@ namespace Api_eCommerce.Auth
 
                 var principal = tokenHandler.ValidateToken(token, validationParameters, out _);
 
-                // Verificar que sea un token de confirmación
+                // Verificar que sea un token de confirmaciï¿½n
                 var typeClaim = principal.FindFirst("type");
                 if (typeClaim?.Value != "confirm_provisioning")
                 {

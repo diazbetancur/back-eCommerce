@@ -39,41 +39,70 @@ namespace CC.Aplication.Favorites
 
             await using var db = _dbFactory.Create();
 
-            // Obtener favoritos del usuario con información del producto
             var favorites = await db.FavoriteProducts
                 .Where(f => f.UserId == userId)
                 .OrderByDescending(f => f.CreatedAt)
                 .Select(f => new
                 {
                     f.ProductId,
-                    f.CreatedAt,
-                    Product = db.Products
-                        .Where(p => p.Id == f.ProductId)
-                        .Select(p => new
-                        {
-                            p.Name,
-                            p.Price,
-                            p.IsActive,
-                            MainImage = db.ProductImages
-                                .Where(i => i.ProductId == p.Id && i.IsPrimary)
-                                .Select(i => i.ImageUrl)
-                                .FirstOrDefault()
-                        })
-                        .FirstOrDefault()
+                    f.CreatedAt
                 })
                 .AsNoTracking()
                 .ToListAsync(ct);
 
+            var productIds = favorites
+                .Select(f => f.ProductId)
+                .Distinct()
+                .ToList();
+
+            var products = await db.Products
+                .Where(p => productIds.Contains(p.Id))
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Name,
+                    p.Price,
+                    p.IsActive
+                })
+                .AsNoTracking()
+                .ToListAsync(ct);
+
+            var images = await db.ProductImages
+                .Where(i => productIds.Contains(i.ProductId) && i.IsPrimary)
+                .Select(i => new
+                {
+                    i.ProductId,
+                    i.ImageUrl
+                })
+                .AsNoTracking()
+                .ToListAsync(ct);
+
+            var productMap = products.ToDictionary(p => p.Id);
+            var imageMap = images
+                .GroupBy(i => i.ProductId)
+                .ToDictionary(g => g.Key, g => g.First().ImageUrl);
+
             var favoriteDtos = favorites
-                .Where(f => f.Product != null) // Filtrar productos que ya no existen
-                .Select(f => new FavoriteProductDto(
-                    f.ProductId,
-                    f.Product!.Name,
-                    f.Product.Price,
-                    f.Product.MainImage,
-                    f.CreatedAt,
-                    f.Product.IsActive
-                ))
+                .Select(f =>
+                {
+                    if (!productMap.TryGetValue(f.ProductId, out var product))
+                    {
+                        return null;
+                    }
+
+                    imageMap.TryGetValue(f.ProductId, out var mainImageUrl);
+
+                    return new FavoriteProductDto(
+                        f.ProductId,
+                        product.Name,
+                        product.Price,
+                        mainImageUrl,
+                        f.CreatedAt,
+                        product.IsActive
+                    );
+                })
+                .Where(f => f != null)
+                .Select(f => f!)
                 .ToList();
 
             return new FavoriteListResponse(
@@ -91,7 +120,7 @@ namespace CC.Aplication.Favorites
 
             await using var db = _dbFactory.Create();
 
-            // Verificar que el producto existe y está activo
+            // Verificar que el producto existe y estï¿½ activo
             var product = await db.Products
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == productId, ct);

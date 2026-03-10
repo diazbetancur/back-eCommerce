@@ -4,6 +4,7 @@ using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace CC.Aplication.Loyalty
 {
@@ -13,7 +14,8 @@ namespace CC.Aplication.Loyalty
         Task<PagedLoyaltyTransactionsResponse> GetUserTransactionsAsync(Guid userId, GetLoyaltyTransactionsQuery query, CancellationToken ct = default);
         Task<int> AddPointsForOrderAsync(Guid userId, Guid orderId, decimal orderTotal, CancellationToken ct = default);
         Task<LoyaltyConfig> GetLoyaltyConfigAsync(CancellationToken ct = default);
-        Task<AdjustPointsResponse> AdjustPointsManuallyAsync(AdjustPointsRequest request, CancellationToken ct = default);
+        Task<AdjustPointsResponse> AdjustPointsManuallyAsync(AdjustPointsRequest request, Guid adjustedByUserId, CancellationToken ct = default);
+        Task<PagedManualPointAdjustmentsResponse> GetManualPointAdjustmentsAsync(GetManualPointAdjustmentsQuery query, CancellationToken ct = default);
         Task<LoyaltyConfigDto> GetLoyaltyConfigurationAsync(CancellationToken ct = default);
         Task<LoyaltyConfigDto> UpdateLoyaltyConfigurationAsync(UpdateLoyaltyConfigRequest request, CancellationToken ct = default);
     }
@@ -46,6 +48,9 @@ namespace CC.Aplication.Loyalty
             // Obtener o crear cuenta de loyalty
             var account = await GetOrCreateAccountAsync(db, userId, ct);
 
+            // Procesar vencimientos pendientes antes de calcular dashboard
+            await ExpireEligiblePointsAsync(db, account, ct);
+
             // Calcular totales
             var transactions = await db.LoyaltyTransactions
                 .Where(t => t.LoyaltyAccountId == account.Id)
@@ -60,6 +65,8 @@ namespace CC.Aplication.Loyalty
                 .Where(t => t.Type == LoyaltyTransactionType.Redeem)
                 .Sum(t => t.Points));
 
+            var pointsExpiringIn60Days = CalculatePointsExpiringInDays(transactions, DateTime.UtcNow, 60);
+
             // �ltimas 5 transacciones
             var lastTransactions = await db.LoyaltyTransactions
                 .Where(t => t.LoyaltyAccountId == account.Id)
@@ -72,6 +79,7 @@ namespace CC.Aplication.Loyalty
                     t.Points,
                     t.Description,
                     t.OrderId,
+                    t.ExpiresAt,
                     t.DateCreated
                 })
                 .AsNoTracking()
@@ -93,7 +101,10 @@ namespace CC.Aplication.Loyalty
                 lastTransactionDtos.Add(new LoyaltyTransactionDto(
                     tx.Id,
                     tx.Type,
+                    BuildMovementDetail(tx.Type, tx.Points),
                     tx.Points,
+                    tx.DateCreated,
+                    ResolveExpirationDate(tx.Type, tx.DateCreated, tx.ExpiresAt),
                     tx.Description,
                     orderNumber,
                     tx.DateCreated
@@ -104,6 +115,7 @@ namespace CC.Aplication.Loyalty
                 account.PointsBalance,
                 totalEarned,
                 totalRedeemed,
+                pointsExpiringIn60Days,
                 lastTransactionDtos
             );
         }
@@ -122,7 +134,6 @@ namespace CC.Aplication.Loyalty
 
             // Obtener cuenta
             var account = await db.LoyaltyAccounts
-                .AsNoTracking()
                 .FirstOrDefaultAsync(a => a.UserId == userId, ct);
 
             if (account == null)
@@ -132,6 +143,9 @@ namespace CC.Aplication.Loyalty
                     0, 1, query.PageSize, 0
                 );
             }
+
+            // Procesar vencimientos pendientes antes del extracto
+            await ExpireEligiblePointsAsync(db, account, ct);
 
             // Query base
             var transactionsQuery = db.LoyaltyTransactions
@@ -174,6 +188,7 @@ namespace CC.Aplication.Loyalty
                     t.Points,
                     t.Description,
                     t.OrderId,
+                    t.ExpiresAt,
                     t.DateCreated
                 })
                 .ToListAsync(ct);
@@ -194,7 +209,10 @@ namespace CC.Aplication.Loyalty
                 transactionDtos.Add(new LoyaltyTransactionDto(
                     tx.Id,
                     tx.Type,
+                    BuildMovementDetail(tx.Type, tx.Points),
                     tx.Points,
+                    tx.DateCreated,
+                    ResolveExpirationDate(tx.Type, tx.DateCreated, tx.ExpiresAt),
                     tx.Description,
                     orderNumber,
                     tx.DateCreated
@@ -329,7 +347,7 @@ namespace CC.Aplication.Loyalty
             return new LoyaltyConfig(enabled, pointsPerUnit, currencyUnit);
         }
 
-        public async Task<AdjustPointsResponse> AdjustPointsManuallyAsync(AdjustPointsRequest request, CancellationToken ct = default)
+        public async Task<AdjustPointsResponse> AdjustPointsManuallyAsync(AdjustPointsRequest request, Guid adjustedByUserId, CancellationToken ct = default)
         {
             if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
             {
@@ -346,6 +364,14 @@ namespace CC.Aplication.Loyalty
 
             await using var db = _dbFactory.Create();
 
+            var currentConfig = await GetOrCreateConfigurationAsync(db, ct);
+            if (!currentConfig.IsEnabled)
+            {
+                throw new InvalidOperationException("Loyalty program is disabled for tenant");
+            }
+
+            ValidateManualAdjustmentPoints(request.Points);
+
             // Obtener o crear cuenta
             var account = await GetOrCreateAccountAsync(db, request.UserId, ct);
 
@@ -356,6 +382,12 @@ namespace CC.Aplication.Loyalty
                 pointsToAdd = -request.Points; // Redeem siempre resta
             }
 
+            var now = DateTime.UtcNow;
+            var expiresAt = ResolveManualAdjustmentExpiration(
+                pointsToAdd,
+                currentConfig.PointsExpirationDays,
+                now);
+
             // Validar que no quede en negativo
             var newBalance = account.PointsBalance + pointsToAdd;
             if (newBalance < 0)
@@ -364,37 +396,399 @@ namespace CC.Aplication.Loyalty
             }
 
             // Crear transacción
+            var transactionId = Guid.NewGuid();
+            var description = $"Manual adjustment: {request.Reason}";
             var transaction = new LoyaltyTransaction
             {
-                Id = Guid.NewGuid(),
+                Id = transactionId,
                 LoyaltyAccountId = account.Id,
                 Type = request.TransactionType,
                 Points = pointsToAdd,
-                Description = $"Manual adjustment: {request.Reason}",
-                DateCreated = DateTime.UtcNow
+                Description = description,
+                AdjustedByUserId = adjustedByUserId,
+                AdjustmentTicketNumber = NormalizeTicketNumber(request.TicketNumber),
+                ExpiresAt = expiresAt,
+                DateCreated = now
             };
 
-            db.LoyaltyTransactions.Add(transaction);
+            try
+            {
+                db.LoyaltyTransactions.Add(transaction);
 
-            // Actualizar balance
-            account.PointsBalance = newBalance;
-            account.UpdatedAt = DateTime.UtcNow;
+                // Actualizar balance
+                account.PointsBalance = newBalance;
+                account.UpdatedAt = now;
 
-            await db.SaveChangesAsync(ct);
+                await db.SaveChangesAsync(ct);
+            }
+            catch (PostgresException ex) when (ex.SqlState == "42703")
+            {
+                _logger.LogWarning(ex,
+                    "Tenant DB schema is missing manual adjustment metadata columns. Falling back to legacy insert for tenant {TenantSlug}",
+                    _tenantAccessor.TenantInfo?.Slug);
+
+                db.ChangeTracker.Clear();
+
+                var fallback = await ExecuteLegacyManualAdjustmentWithoutMetadataAsync(
+                    db,
+                    request.UserId,
+                    request.TransactionType,
+                    pointsToAdd,
+                    description,
+                    expiresAt,
+                    now,
+                    ct);
+
+                transactionId = fallback.TransactionId;
+                newBalance = fallback.NewBalance;
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.SqlState == "42703")
+            {
+                _logger.LogWarning(ex,
+                    "Tenant DB schema is missing manual adjustment metadata columns (wrapped DbUpdateException). Falling back to legacy insert for tenant {TenantSlug}",
+                    _tenantAccessor.TenantInfo?.Slug);
+
+                db.ChangeTracker.Clear();
+
+                var fallback = await ExecuteLegacyManualAdjustmentWithoutMetadataAsync(
+                    db,
+                    request.UserId,
+                    request.TransactionType,
+                    pointsToAdd,
+                    description,
+                    expiresAt,
+                    now,
+                    ct);
+
+                transactionId = fallback.TransactionId;
+                newBalance = fallback.NewBalance;
+            }
 
             _logger.LogInformation(
                 "Manual points adjustment for user {UserId}: {Points} points ({Type}). Reason: {Reason}",
                 request.UserId, pointsToAdd, request.TransactionType, request.Reason);
 
             return new AdjustPointsResponse(
-                transaction.Id,
+                transactionId,
                 pointsToAdd,
                 newBalance,
                 $"Points adjusted successfully. New balance: {newBalance} points"
             );
         }
 
+        private async Task<LegacyAdjustResult> ExecuteLegacyManualAdjustmentWithoutMetadataAsync(
+            TenantDbContext db,
+            Guid userId,
+            string transactionType,
+            int pointsToAdd,
+            string description,
+            DateTime? expiresAt,
+            DateTime now,
+            CancellationToken ct)
+        {
+            var account = await db.LoyaltyAccounts
+                .FirstOrDefaultAsync(a => a.UserId == userId, ct);
+
+            if (account == null)
+            {
+                account = new LoyaltyAccount
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    PointsBalance = 0,
+                    DateCreated = now,
+                    UpdatedAt = now
+                };
+
+                db.LoyaltyAccounts.Add(account);
+                await db.SaveChangesAsync(ct);
+            }
+
+            var newBalance = account.PointsBalance + pointsToAdd;
+            if (newBalance < 0)
+            {
+                throw new InvalidOperationException($"Cannot adjust points. User balance would be negative ({newBalance})");
+            }
+
+            var transactionId = Guid.NewGuid();
+
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                     $@"INSERT INTO ""LoyaltyTransactions""
+                         (""Id"", ""LoyaltyAccountId"", ""Type"", ""Points"", ""Description"", ""ExpiresAt"", ""DateCreated"")
+                   VALUES
+                   ({transactionId}, {account.Id}, {transactionType}, {pointsToAdd}, {description}, {expiresAt}, {now})", ct);
+
+            account.PointsBalance = newBalance;
+            account.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
+
+            return new LegacyAdjustResult(transactionId, newBalance);
+        }
+
+        public async Task<PagedManualPointAdjustmentsResponse> GetManualPointAdjustmentsAsync(
+            GetManualPointAdjustmentsQuery query,
+            CancellationToken ct = default)
+        {
+            if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
+            {
+                throw new InvalidOperationException("No tenant context available");
+            }
+
+            await using var db = _dbFactory.Create();
+
+            try
+            {
+                return await ExecuteManualAdjustmentsQueryWithMetadataAsync(db, query, ct);
+            }
+            catch (PostgresException ex) when (ex.SqlState == "42703")
+            {
+                _logger.LogWarning(ex,
+                    "Tenant DB schema is missing manual adjustment metadata columns. Falling back to legacy query for tenant {TenantSlug}",
+                    _tenantAccessor.TenantInfo?.Slug);
+
+                return await ExecuteManualAdjustmentsLegacyQueryAsync(db, query, ct);
+            }
+        }
+
+        private static IQueryable<ManualAdjustmentProjection> BuildManualAdjustmentsQueryWithMetadata(TenantDbContext db)
+        {
+            return
+                from tx in db.LoyaltyTransactions.AsNoTracking()
+                join account in db.LoyaltyAccounts.AsNoTracking() on tx.LoyaltyAccountId equals account.Id
+                join customer in db.Users.AsNoTracking() on account.UserId equals customer.Id
+                join admin in db.Users.AsNoTracking() on tx.AdjustedByUserId equals admin.Id into adminJoin
+                from admin in adminJoin.DefaultIfEmpty()
+                where tx.Description != null && EF.Functions.ILike(tx.Description!, "Manual adjustment:%")
+                select new ManualAdjustmentProjection
+                {
+                    TransactionId = tx.Id,
+                    UserId = account.UserId,
+                    UserEmail = customer.Email,
+                    AdjustedByUserId = tx.AdjustedByUserId,
+                    AdjustedByEmail = admin != null ? admin.Email : null,
+                    Points = tx.Points,
+                    TransactionType = tx.Type,
+                    ObservationsSource = tx.Description,
+                    TicketNumber = tx.AdjustmentTicketNumber,
+                    ExpiresAt = tx.ExpiresAt,
+                    CreatedAt = tx.DateCreated
+                };
+        }
+
+        private async Task<PagedManualPointAdjustmentsResponse> ExecuteManualAdjustmentsQueryWithMetadataAsync(
+            TenantDbContext db,
+            GetManualPointAdjustmentsQuery query,
+            CancellationToken ct)
+        {
+            var manualAdjustmentsQuery = BuildManualAdjustmentsQueryWithMetadata(db);
+
+            if (query.UserId.HasValue)
+            {
+                manualAdjustmentsQuery = manualAdjustmentsQuery.Where(x => x.UserId == query.UserId.Value);
+            }
+
+            if (query.AdjustedByUserId.HasValue)
+            {
+                manualAdjustmentsQuery = manualAdjustmentsQuery.Where(x => x.AdjustedByUserId == query.AdjustedByUserId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.TicketNumber))
+            {
+                var ticketNumber = query.TicketNumber.Trim();
+                manualAdjustmentsQuery = manualAdjustmentsQuery.Where(x =>
+                    x.TicketNumber != null && EF.Functions.ILike(x.TicketNumber, $"%{ticketNumber}%"));
+            }
+
+            if (query.FromDate.HasValue)
+            {
+                manualAdjustmentsQuery = manualAdjustmentsQuery.Where(x => x.CreatedAt >= query.FromDate.Value);
+            }
+
+            if (query.ToDate.HasValue)
+            {
+                manualAdjustmentsQuery = manualAdjustmentsQuery.Where(x => x.CreatedAt <= query.ToDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.Search))
+            {
+                var search = query.Search.Trim();
+                manualAdjustmentsQuery = manualAdjustmentsQuery.Where(x =>
+                    EF.Functions.ILike(x.UserEmail, $"%{search}%") ||
+                    (x.AdjustedByEmail != null && EF.Functions.ILike(x.AdjustedByEmail, $"%{search}%")) ||
+                    (x.TicketNumber != null && EF.Functions.ILike(x.TicketNumber, $"%{search}%")) ||
+                    (x.ObservationsSource != null && EF.Functions.ILike(x.ObservationsSource, $"%{search}%")));
+            }
+
+            var totalCount = await manualAdjustmentsQuery.CountAsync(ct);
+            var pageSize = Math.Clamp(query.PageSize, 1, 100);
+            var page = Math.Max(query.Page, 1);
+            var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+
+            var items = await manualAdjustmentsQuery
+                .OrderByDescending(x => x.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(ct);
+
+            var mappedItems = items.Select(x => new ManualPointAdjustmentItemDto(
+                x.TransactionId,
+                x.UserId,
+                x.UserEmail,
+                x.AdjustedByUserId,
+                x.AdjustedByEmail,
+                x.Points,
+                x.TransactionType,
+                ExtractManualObservations(x.ObservationsSource),
+                x.TicketNumber,
+                x.ExpiresAt,
+                x.CreatedAt
+            )).ToList();
+
+            return new PagedManualPointAdjustmentsResponse(
+                mappedItems,
+                totalCount,
+                page,
+                pageSize,
+                totalPages
+            );
+        }
+
+        private async Task<PagedManualPointAdjustmentsResponse> ExecuteManualAdjustmentsLegacyQueryAsync(
+            TenantDbContext db,
+            GetManualPointAdjustmentsQuery query,
+            CancellationToken ct)
+        {
+            var legacyQuery =
+                from tx in db.LoyaltyTransactions.AsNoTracking()
+                join account in db.LoyaltyAccounts.AsNoTracking() on tx.LoyaltyAccountId equals account.Id
+                join customer in db.Users.AsNoTracking() on account.UserId equals customer.Id
+                where tx.Description != null && EF.Functions.ILike(tx.Description!, "Manual adjustment:%")
+                select new LegacyManualAdjustmentProjection
+                {
+                    TransactionId = tx.Id,
+                    UserId = account.UserId,
+                    UserEmail = customer.Email,
+                    Points = tx.Points,
+                    TransactionType = tx.Type,
+                    ObservationsSource = tx.Description,
+                    ExpiresAt = tx.ExpiresAt,
+                    CreatedAt = tx.DateCreated
+                };
+
+            if (query.UserId.HasValue)
+            {
+                legacyQuery = legacyQuery.Where(x => x.UserId == query.UserId.Value);
+            }
+
+            if (query.FromDate.HasValue)
+            {
+                legacyQuery = legacyQuery.Where(x => x.CreatedAt >= query.FromDate.Value);
+            }
+
+            if (query.ToDate.HasValue)
+            {
+                legacyQuery = legacyQuery.Where(x => x.CreatedAt <= query.ToDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.Search))
+            {
+                var search = query.Search.Trim();
+                legacyQuery = legacyQuery.Where(x =>
+                    EF.Functions.ILike(x.UserEmail, $"%{search}%") ||
+                    (x.ObservationsSource != null && EF.Functions.ILike(x.ObservationsSource, $"%{search}%")));
+            }
+
+            var totalCount = await legacyQuery.CountAsync(ct);
+            var pageSize = Math.Clamp(query.PageSize, 1, 100);
+            var page = Math.Max(query.Page, 1);
+            var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+
+            var items = await legacyQuery
+                .OrderByDescending(x => x.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(ct);
+
+            var mappedItems = items.Select(x => new ManualPointAdjustmentItemDto(
+                x.TransactionId,
+                x.UserId,
+                x.UserEmail,
+                null,
+                null,
+                x.Points,
+                x.TransactionType,
+                ExtractManualObservations(x.ObservationsSource),
+                null,
+                x.ExpiresAt,
+                x.CreatedAt
+            )).ToList();
+
+            return new PagedManualPointAdjustmentsResponse(
+                mappedItems,
+                totalCount,
+                page,
+                pageSize,
+                totalPages
+            );
+        }
+
         // ==================== PRIVATE HELPERS ====================
+
+        private static void ValidateManualAdjustmentPoints(int points)
+        {
+            if (points == 0)
+            {
+                throw new ArgumentException("Points must be different from 0");
+            }
+        }
+
+        private static string? NormalizeTicketNumber(string? ticketNumber)
+        {
+            if (string.IsNullOrWhiteSpace(ticketNumber))
+            {
+                return null;
+            }
+
+            return ticketNumber.Trim();
+        }
+
+        private static string? ExtractManualObservations(string? description)
+        {
+            const string prefix = "Manual adjustment:";
+            if (string.IsNullOrWhiteSpace(description))
+            {
+                return description;
+            }
+
+            if (!description.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return description;
+            }
+
+            return description.Substring(prefix.Length).Trim();
+        }
+
+        private static DateTime? ResolveManualAdjustmentExpiration(
+            int pointsToAdd,
+            int? pointsExpirationDays,
+            DateTime now)
+        {
+            if (pointsToAdd <= 0)
+            {
+                return null;
+            }
+
+            if (!pointsExpirationDays.HasValue)
+            {
+                return null;
+            }
+
+            return now.AddDays(pointsExpirationDays.Value);
+        }
 
         private async Task<LoyaltyAccount> GetOrCreateAccountAsync(
             TenantDbContext db,
@@ -422,6 +816,194 @@ namespace CC.Aplication.Loyalty
             }
 
             return account;
+        }
+
+        private async Task<int> ExpireEligiblePointsAsync(
+            TenantDbContext db,
+            LoyaltyAccount account,
+            CancellationToken ct)
+        {
+            var now = DateTime.UtcNow;
+
+            var transactions = await db.LoyaltyTransactions
+                .Where(t => t.LoyaltyAccountId == account.Id)
+                .OrderBy(t => t.DateCreated)
+                .ThenBy(t => t.Id)
+                .ToListAsync(ct);
+
+            if (!transactions.Any())
+            {
+                return 0;
+            }
+
+            var buckets = BuildEarnBuckets(transactions);
+
+            var expiredBuckets = buckets
+                .Where(b => b.ExpiresAt.HasValue && b.ExpiresAt.Value <= now && b.RemainingPoints > 0)
+                .ToList();
+
+            if (!expiredBuckets.Any())
+            {
+                return 0;
+            }
+
+            var expiredTotal = 0;
+
+            foreach (var bucket in expiredBuckets)
+            {
+                var pointsToExpire = bucket.RemainingPoints;
+                expiredTotal += pointsToExpire;
+
+                var expirationTransaction = new LoyaltyTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    LoyaltyAccountId = account.Id,
+                    Type = LoyaltyTransactionType.Expire,
+                    Points = -pointsToExpire,
+                    Description = $"Points expired from transaction {bucket.SourceTransactionId}",
+                    ExpiresAt = bucket.ExpiresAt,
+                    DateCreated = bucket.TransactionDate
+                };
+
+                db.LoyaltyTransactions.Add(expirationTransaction);
+            }
+
+            account.PointsBalance = Math.Max(0, account.PointsBalance - expiredTotal);
+            account.UpdatedAt = now;
+
+            await db.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "Expired {ExpiredPoints} loyalty points for account {AccountId}",
+                expiredTotal,
+                account.Id);
+
+            return expiredTotal;
+        }
+
+        private static int CalculatePointsExpiringInDays(
+            List<LoyaltyTransaction> transactions,
+            DateTime now,
+            int days)
+        {
+            var buckets = BuildEarnBuckets(transactions);
+            var threshold = now.AddDays(days);
+
+            return buckets
+                .Where(b =>
+                    b.ExpiresAt.HasValue &&
+                    b.ExpiresAt.Value > now &&
+                    b.ExpiresAt.Value <= threshold &&
+                    b.RemainingPoints > 0)
+                .Sum(b => b.RemainingPoints);
+        }
+
+        private static List<EarnBucket> BuildEarnBuckets(List<LoyaltyTransaction> transactions)
+        {
+            var earnBuckets = transactions
+                .Where(t => t.Type == LoyaltyTransactionType.Earn && t.Points > 0)
+                .OrderBy(t => t.DateCreated)
+                .ThenBy(t => t.Id)
+                .Select(t => new EarnBucket(t.Id, t.DateCreated, t.ExpiresAt, t.Points))
+                .ToList();
+
+            var totalNegativePoints = transactions
+                .Where(t => t.Points < 0)
+                .Sum(t => -t.Points);
+
+            var remainingToConsume = totalNegativePoints;
+
+            foreach (var bucket in earnBuckets)
+            {
+                if (remainingToConsume <= 0)
+                {
+                    break;
+                }
+
+                var consumed = Math.Min(bucket.RemainingPoints, remainingToConsume);
+                bucket.RemainingPoints -= consumed;
+                remainingToConsume -= consumed;
+            }
+
+            return earnBuckets;
+        }
+
+        private static DateTime? ResolveExpirationDate(string type, DateTime transactionDate, DateTime? expiresAt)
+        {
+            if (type == LoyaltyTransactionType.Redeem)
+            {
+                return transactionDate;
+            }
+
+            return expiresAt;
+        }
+
+        private static string BuildMovementDetail(string type, int points)
+        {
+            return type switch
+            {
+                LoyaltyTransactionType.Earn => "Acumulación",
+                LoyaltyTransactionType.Redeem => "Redención",
+                LoyaltyTransactionType.Expire => "Vencimiento",
+                LoyaltyTransactionType.Adjust when points >= 0 => "Ajuste (+)",
+                LoyaltyTransactionType.Adjust => "Ajuste (-)",
+                _ => "Movimiento"
+            };
+        }
+
+        private sealed class EarnBucket
+        {
+            public EarnBucket(Guid sourceTransactionId, DateTime transactionDate, DateTime? expiresAt, int remainingPoints)
+            {
+                SourceTransactionId = sourceTransactionId;
+                TransactionDate = transactionDate;
+                ExpiresAt = expiresAt;
+                RemainingPoints = remainingPoints;
+            }
+
+            public Guid SourceTransactionId { get; }
+            public DateTime TransactionDate { get; }
+            public DateTime? ExpiresAt { get; }
+            public int RemainingPoints { get; set; }
+        }
+
+        private sealed class ManualAdjustmentProjection
+        {
+            public Guid TransactionId { get; set; }
+            public Guid UserId { get; set; }
+            public string UserEmail { get; set; } = string.Empty;
+            public Guid? AdjustedByUserId { get; set; }
+            public string? AdjustedByEmail { get; set; }
+            public int Points { get; set; }
+            public string TransactionType { get; set; } = string.Empty;
+            public string? ObservationsSource { get; set; }
+            public string? TicketNumber { get; set; }
+            public DateTime? ExpiresAt { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
+
+        private sealed class LegacyManualAdjustmentProjection
+        {
+            public Guid TransactionId { get; set; }
+            public Guid UserId { get; set; }
+            public string UserEmail { get; set; } = string.Empty;
+            public int Points { get; set; }
+            public string TransactionType { get; set; } = string.Empty;
+            public string? ObservationsSource { get; set; }
+            public DateTime? ExpiresAt { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
+
+        private sealed class LegacyAdjustResult
+        {
+            public LegacyAdjustResult(Guid transactionId, int newBalance)
+            {
+                TransactionId = transactionId;
+                NewBalance = newBalance;
+            }
+
+            public Guid TransactionId { get; }
+            public int NewBalance { get; }
         }
 
         private int CalculatePoints(decimal orderTotal, LoyaltyConfig config)

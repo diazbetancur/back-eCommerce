@@ -94,7 +94,7 @@ builder.Services.AddScoped<CC.Aplication.Users.IUserManagementService, CC.Aplica
 
 // ==================== BUSINESS SERVICES (TENANT) ====================
 builder.Services.AddScoped<ICatalogService, CatalogService>();
-builder.Services.AddScoped<ICartService, CartService>();
+builder.Services.AddScoped<ICartService, CartServiceV2>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IFeatureService, FeatureService>();
 builder.Services.AddScoped<CC.Aplication.Catalog.ICategoryManagementService, CC.Aplication.Catalog.CategoryManagementService>();
@@ -166,8 +166,9 @@ if (builder.Environment.IsDevelopment())
 var app = builder.Build();
 
 // ==================== AUTO MIGRATE + SEED ====================
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using var scope = app.Services.CreateScope();
     try
     {
         var adminDb = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
@@ -212,6 +213,29 @@ using (var scope = app.Services.CreateScope())
 
         logger.LogInformation("🌱 Seeding AdminDb...");
         await CC.Infraestructure.Admin.AdminDbSeeder.SeedAsync(adminDb, logger);
+
+        logger.LogInformation("🔄 Applying pending migrations for READY tenant databases...");
+        var protector = scope.ServiceProvider.GetRequiredService<ITenantConnectionProtector>();
+        var tenantFactory = scope.ServiceProvider.GetRequiredService<TenantDbContextFactory>();
+
+        var readyTenants = await adminDb.Tenants
+            .Where(t => t.Status == TenantStatus.Ready && !string.IsNullOrWhiteSpace(t.EncryptedConnection))
+            .ToListAsync();
+
+        foreach (var tenant in readyTenants)
+        {
+            try
+            {
+                var tenantConnection = protector.Unprotect(tenant.EncryptedConnection!);
+                await using var tenantDb = tenantFactory.Create(tenantConnection);
+                await tenantDb.Database.MigrateAsync();
+                logger.LogInformation("✅ Tenant DB migrated: {TenantSlug}", tenant.Slug);
+            }
+            catch (Exception tenantEx)
+            {
+                logger.LogError(tenantEx, "❌ Error migrating tenant DB for slug {TenantSlug}", tenant.Slug);
+            }
+        }
     }
     catch (Exception ex)
     {

@@ -1,0 +1,145 @@
+###############################################################################
+# Loyalty QA - Customer Dashboard + Extracto + Canje
+# Requiere extensión REST Client (VS Code)
+###############################################################################
+
+@baseUrl = http://localhost:5000
+@tenantSlug = test-tenant-1
+@customerToken = {{$dotenv CUSTOMER_TOKEN}}
+@adminToken = {{$dotenv ADMIN_TOKEN}}
+@rewardId = {{$guid}}
+
+###############################################################################
+# 0) Admin - Crear premio de prueba (opcional)
+###############################################################################
+
+### Crear reward de prueba para canje
+POST {{baseUrl}}/api/admin/loyalty/rewards
+Authorization: Bearer {{adminToken}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "name": "Cupón QA 10%",
+  "description": "Reward para pruebas QA",
+  "pointsCost": 100,
+  "rewardType": "DISCOUNT_PERCENTAGE",
+  "productIds": [],
+  "appliesToAllEligibleProducts": true,
+  "singleProductSelectionRule": null,
+  "discountValue": 10,
+  "isActive": true,
+  "couponQuantity": 20,
+  "validityDays": 15,
+  "availableFrom": "2026-03-01T00:00:00Z",
+  "availableUntil": "2026-12-31T23:59:59Z",
+  "displayOrder": 1
+}
+
+### Crear reward descuento sobre productos específicos (uno o varios IDs)
+POST {{baseUrl}}/api/admin/loyalty/rewards
+Authorization: Bearer {{adminToken}}
+X-Tenant-Slug: {{tenantSlug}}
+Content-Type: application/json
+
+{
+  "name": "Cupón QA 20% Productos",
+  "description": "Descuento sobre productos seleccionados",
+  "pointsCost": 200,
+  "rewardType": "DISCOUNT_PERCENTAGE",
+  "productIds": [
+    "9fce54e8-2f39-4ee9-a523-41a10d03139d",
+    "4c37e6d2-a524-47a2-a458-65b9307a9e58"
+  ],
+  "appliesToAllEligibleProducts": false,
+  "singleProductSelectionRule": "MOST_EXPENSIVE",
+  "discountValue": 20,
+  "isActive": true,
+  "couponQuantity": 10,
+  "validityDays": 15,
+  "availableFrom": "2026-03-01T00:00:00Z",
+  "availableUntil": "2026-12-31T23:59:59Z",
+  "displayOrder": 2
+}
+
+# Copia el id de la respuesta y reemplaza @rewardId arriba
+
+###############################################################################
+# 1) Customer Dashboard
+# Esperado: balance vigente + pointsExpiringIn60Days + lastTransactions
+###############################################################################
+
+### Dashboard loyalty customer
+GET {{baseUrl}}/me/loyalty
+Authorization: Bearer {{customerToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+###############################################################################
+# 2) Extracto de puntos (paginado)
+# Esperado: pageSize default 50, con detail/transactionDate/expirationDate
+###############################################################################
+
+### Extracto - página 1 (default pageSize=50)
+GET {{baseUrl}}/me/loyalty/transactions?page=1
+Authorization: Bearer {{customerToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Extracto - página 2
+GET {{baseUrl}}/me/loyalty/transactions?page=2
+Authorization: Bearer {{customerToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Extracto filtrado por tipo EARN
+GET {{baseUrl}}/me/loyalty/transactions?page=1&pageSize=50&type=EARN
+Authorization: Bearer {{customerToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Extracto filtrado por tipo EXPIRE
+GET {{baseUrl}}/me/loyalty/transactions?page=1&pageSize=50&type=EXPIRE
+Authorization: Bearer {{customerToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+###############################################################################
+# 3) Premios disponibles y canje
+###############################################################################
+
+### Ver rewards disponibles para customer
+GET {{baseUrl}}/me/loyalty/rewards?page=1&pageSize=20
+Authorization: Bearer {{customerToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Canjear reward
+POST {{baseUrl}}/me/loyalty/rewards/{{rewardId}}/redeem
+Authorization: Bearer {{customerToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+###############################################################################
+# 4) Historial de redenciones del customer
+###############################################################################
+
+### Redenciones del customer
+GET {{baseUrl}}/me/loyalty/redemptions?page=1&pageSize=20
+Authorization: Bearer {{customerToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+###############################################################################
+# 5) Casos de validación rápida
+###############################################################################
+
+### Validar filtro de disponibilidad histórica en admin
+GET {{baseUrl}}/api/admin/loyalty/rewards?page=1&pageSize=20&isCurrentlyAvailable=true
+Authorization: Bearer {{adminToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+### Validar rewards fuera de ventana (admin)
+GET {{baseUrl}}/api/admin/loyalty/rewards?page=1&pageSize=20&isCurrentlyAvailable=false
+Authorization: Bearer {{adminToken}}
+X-Tenant-Slug: {{tenantSlug}}
+
+###############################################################################
+# Notas:
+# - Si quieres usar tokens en .env:
+#   CUSTOMER_TOKEN=eyJ...
+#   ADMIN_TOKEN=eyJ...
+# - Los endpoints customer ejecutan lógica de expiración automática antes de responder.
+###############################################################################
