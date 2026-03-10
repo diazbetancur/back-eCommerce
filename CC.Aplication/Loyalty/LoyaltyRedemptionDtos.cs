@@ -32,6 +32,8 @@ namespace CC.Aplication.Loyalty
   /// </summary>
   public record LoyaltyRedemptionDto(
       Guid Id,
+      Guid UserId,
+      string? UserEmail,
       Guid RewardId,
       string RewardName,
       string RewardType,
@@ -65,6 +67,7 @@ namespace CC.Aplication.Loyalty
       int PageSize = 20,
       string? Status = null,
       Guid? UserId = null,
+      string? UserEmail = null,
       DateTime? FromDate = null,
       DateTime? ToDate = null
   );

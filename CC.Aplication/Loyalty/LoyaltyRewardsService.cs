@@ -472,6 +472,33 @@ namespace CC.Aplication.Loyalty
           redemptionsQuery = redemptionsQuery.Where(r => r.LoyaltyAccountId == accountId);
       }
 
+      if (!string.IsNullOrWhiteSpace(query.UserEmail))
+      {
+        var userEmail = query.UserEmail.Trim();
+
+        var accountIds = await db.LoyaltyAccounts
+            .Join(
+              db.Users,
+              account => account.UserId,
+              user => user.Id,
+              (account, user) => new { account.Id, user.Email })
+            .Where(x => EF.Functions.ILike(x.Email, $"%{userEmail}%"))
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+
+        if (accountIds.Count == 0)
+        {
+          return new PagedLoyaltyRedemptionsResponse(
+            new List<LoyaltyRedemptionDto>(),
+            0,
+            Math.Max(query.Page, 1),
+            Math.Clamp(query.PageSize, 1, 100),
+            0);
+        }
+
+        redemptionsQuery = redemptionsQuery.Where(r => accountIds.Contains(r.LoyaltyAccountId));
+      }
+
       if (query.FromDate.HasValue)
         redemptionsQuery = redemptionsQuery.Where(r => r.RedeemedAt >= query.FromDate.Value);
 
@@ -692,6 +719,15 @@ namespace CC.Aplication.Loyalty
           .Select(r => new { r.Name, r.RewardType })
           .FirstOrDefaultAsync(ct);
 
+      var redeemedBy = await db.LoyaltyAccounts
+          .Where(a => a.Id == redemption.LoyaltyAccountId)
+          .Join(
+            db.Users,
+            account => account.UserId,
+            user => user.Id,
+            (account, user) => new { account.UserId, user.Email })
+          .FirstOrDefaultAsync(ct);
+
       string? orderNumber = null;
       if (redemption.OrderId.HasValue)
       {
@@ -703,6 +739,8 @@ namespace CC.Aplication.Loyalty
 
       return new LoyaltyRedemptionDto(
           redemption.Id,
+          redeemedBy?.UserId ?? Guid.Empty,
+          redeemedBy?.Email,
           redemption.RewardId,
           reward?.Name ?? "Unknown",
           reward?.RewardType ?? "Unknown",

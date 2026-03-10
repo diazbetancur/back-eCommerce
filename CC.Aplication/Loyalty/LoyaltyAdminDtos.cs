@@ -69,4 +69,15 @@ namespace CC.Aplication.Loyalty
     int PageSize,
     int TotalPages
   );
+
+  public record LoyaltyAdminDashboardSummaryDto(
+    DateTime GeneratedAt,
+    DateTime ActiveUsersWindowStart,
+    DateTime CurrentMonthStart,
+    DateTime CurrentMonthEnd,
+    int ActiveUsersLast6Months,
+    int PointsIssuedCurrentMonth,
+    int CompletedRedemptionsCurrentMonth,
+    int PendingRedemptionsCurrent
+  );
 }

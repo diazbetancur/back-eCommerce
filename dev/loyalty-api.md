@@ -399,8 +399,15 @@ Ejemplo:
 
 ## Endpoints Admin (redemptions/config)
 
+- `GET /api/admin/loyalty/dashboard/summary` (`loyalty:view`)
+  - resumen para dashboard:
+    - ` `: usuarios con actividad loyalty en últimos 6 meses (al menos una transacción o canje registrado).
+    - `pointsIssuedCurrentMonth`: suma de puntos positivos emitidos en el mes actual (`EARN` + `ADJUST` positivo).
+    - `completedRedemptionsCurrentMonth`: canjes en `DELIVERED` dentro del mes actual.
+    - `pendingRedemptionsCurrent`: canjes actualmente en `PENDING`.
 - `GET /api/admin/loyalty/redemptions` (`loyalty:view`)
-  - filtros: `status`, `userId`, `fromDate`, `toDate`, paginación.
+  - filtros: `status`, `userEmail`, `fromDate`, `toDate`, paginación.
+  - respuesta por item incluye: `id`, `userId`, `userEmail`, `rewardId`, `rewardName`, `rewardType`, `pointsSpent`, `status`, `couponCode`, `redeemedAt`, `expiresAt`, `deliveredAt`, `adminNotes`, `orderId`, `orderNumber`.
 - `PATCH /api/admin/loyalty/redemptions/{id}/status` (`loyalty:update`)
   - body: `{ "status": "APPROVED|DELIVERED|CANCELLED|EXPIRED", "adminNotes": "..." }`.
 - `GET /api/admin/loyalty/config` (`loyalty:view`)
@@ -409,6 +416,27 @@ Ejemplo:
 - `GET /api/admin/loyalty/points/adjustments` (`loyalty:view`)
   - filtros: `page`, `pageSize`, `userId`, `adjustedByUserId`, `ticketNumber`, `fromDate`, `toDate`, `search`.
   - devuelve historial de ajustes manuales con: usuario afectado, admin que ajustó, puntos, fecha, observaciones, ticket y expiración.
+
+### Resumen dashboard loyalty
+
+**GET** `/api/admin/loyalty/dashboard/summary`
+
+Permiso: `loyalty:view`
+
+Response 200 (ejemplo):
+
+```json
+{
+  "generatedAt": "2026-03-10T16:00:00Z",
+  "activeUsersWindowStart": "2025-09-10T16:00:00Z",
+  "currentMonthStart": "2026-03-01T00:00:00Z",
+  "currentMonthEnd": "2026-04-01T00:00:00Z",
+  "activeUsersLast6Months": 148,
+  "pointsIssuedCurrentMonth": 5230,
+  "completedRedemptionsCurrentMonth": 37,
+  "pendingRedemptionsCurrent": 12
+}
+```
 
 ### Historial de ajustes manuales (paginado)
 

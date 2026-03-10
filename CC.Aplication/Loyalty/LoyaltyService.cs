@@ -16,6 +16,7 @@ namespace CC.Aplication.Loyalty
         Task<LoyaltyConfig> GetLoyaltyConfigAsync(CancellationToken ct = default);
         Task<AdjustPointsResponse> AdjustPointsManuallyAsync(AdjustPointsRequest request, Guid adjustedByUserId, CancellationToken ct = default);
         Task<PagedManualPointAdjustmentsResponse> GetManualPointAdjustmentsAsync(GetManualPointAdjustmentsQuery query, CancellationToken ct = default);
+        Task<LoyaltyAdminDashboardSummaryDto> GetAdminDashboardSummaryAsync(CancellationToken ct = default);
         Task<LoyaltyConfigDto> GetLoyaltyConfigurationAsync(CancellationToken ct = default);
         Task<LoyaltyConfigDto> UpdateLoyaltyConfigurationAsync(UpdateLoyaltyConfigRequest request, CancellationToken ct = default);
     }
@@ -552,6 +553,67 @@ namespace CC.Aplication.Loyalty
 
                 return await ExecuteManualAdjustmentsLegacyQueryAsync(db, query, ct);
             }
+        }
+
+        public async Task<LoyaltyAdminDashboardSummaryDto> GetAdminDashboardSummaryAsync(CancellationToken ct = default)
+        {
+            if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
+            {
+                throw new InvalidOperationException("No tenant context available");
+            }
+
+            await using var db = _dbFactory.Create();
+
+            var generatedAt = DateTime.UtcNow;
+            var activeUsersWindowStart = generatedAt.AddMonths(-6);
+            var currentMonthStart = new DateTime(generatedAt.Year, generatedAt.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var currentMonthEnd = currentMonthStart.AddMonths(1);
+
+            var activeUsersFromTransactionsQuery =
+                from tx in db.LoyaltyTransactions.AsNoTracking()
+                join account in db.LoyaltyAccounts.AsNoTracking() on tx.LoyaltyAccountId equals account.Id
+                where tx.DateCreated >= activeUsersWindowStart
+                select account.UserId;
+
+            var activeUsersFromRedemptionsQuery =
+                from redemption in db.LoyaltyRedemptions.AsNoTracking()
+                join account in db.LoyaltyAccounts.AsNoTracking() on redemption.LoyaltyAccountId equals account.Id
+                where redemption.RedeemedAt >= activeUsersWindowStart
+                select account.UserId;
+
+            var activeUsersLast6Months = await activeUsersFromTransactionsQuery
+                .Concat(activeUsersFromRedemptionsQuery)
+                .Distinct()
+                .CountAsync(ct);
+
+            var pointsIssuedCurrentMonth = await db.LoyaltyTransactions
+                .AsNoTracking()
+                .Where(t => t.DateCreated >= currentMonthStart && t.DateCreated < currentMonthEnd)
+                .Where(t => t.Points > 0)
+                .Where(t => t.Type == LoyaltyTransactionType.Earn || t.Type == LoyaltyTransactionType.Adjust)
+                .SumAsync(t => (int?)t.Points, ct) ?? 0;
+
+            var completedRedemptionsCurrentMonth = await db.LoyaltyRedemptions
+                .AsNoTracking()
+                .Where(r => r.Status == LoyaltyRedemptionStatus.Delivered)
+                .Where(r => (r.DeliveredAt ?? r.RedeemedAt) >= currentMonthStart && (r.DeliveredAt ?? r.RedeemedAt) < currentMonthEnd)
+                .CountAsync(ct);
+
+            var pendingRedemptionsCurrent = await db.LoyaltyRedemptions
+                .AsNoTracking()
+                .Where(r => r.Status == LoyaltyRedemptionStatus.Pending)
+                .CountAsync(ct);
+
+            return new LoyaltyAdminDashboardSummaryDto(
+                GeneratedAt: generatedAt,
+                ActiveUsersWindowStart: activeUsersWindowStart,
+                CurrentMonthStart: currentMonthStart,
+                CurrentMonthEnd: currentMonthEnd,
+                ActiveUsersLast6Months: activeUsersLast6Months,
+                PointsIssuedCurrentMonth: pointsIssuedCurrentMonth,
+                CompletedRedemptionsCurrentMonth: completedRedemptionsCurrentMonth,
+                PendingRedemptionsCurrent: pendingRedemptionsCurrent
+            );
         }
 
         private static IQueryable<ManualAdjustmentProjection> BuildManualAdjustmentsQueryWithMetadata(TenantDbContext db)

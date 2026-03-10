@@ -304,7 +304,7 @@ namespace Api_eCommerce.Controllers
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? status = null,
-        [FromQuery] Guid? userId = null,
+      [FromQuery] string? userEmail = null,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null)
     {
@@ -320,7 +320,13 @@ namespace Api_eCommerce.Controllers
           );
         }
 
-        var query = new GetLoyaltyRedemptionsQuery(page, pageSize, status, userId, fromDate, toDate);
+        var query = new GetLoyaltyRedemptionsQuery(
+          Page: page,
+          PageSize: pageSize,
+          Status: status,
+          UserEmail: userEmail,
+          FromDate: fromDate,
+          ToDate: toDate);
         var redemptions = await _rewardsService.GetRedemptionsAsync(query);
         return Ok(redemptions);
       }
@@ -383,6 +389,42 @@ namespace Api_eCommerce.Controllers
     }
 
     // ==================== LOYALTY CONFIGURATION ====================
+
+    /// <summary>
+    /// Obtener resumen de métricas para dashboard administrativo de loyalty
+    /// </summary>
+    [HttpGet("dashboard/summary")]
+    [RequireModule("loyalty", "view")]
+    [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [ProducesResponseType<LoyaltyAdminDashboardSummaryDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetDashboardSummary()
+    {
+      try
+      {
+        var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+        if (tenantContext == null)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status409Conflict,
+              title: "Tenant Not Resolved",
+              detail: "Unable to resolve tenant from request"
+          );
+        }
+
+        var summary = await _loyaltyService.GetAdminDashboardSummaryAsync();
+        return Ok(summary);
+      }
+      catch (Exception)
+      {
+        return Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Internal Server Error",
+            detail: "An error occurred while retrieving loyalty dashboard summary"
+        );
+      }
+    }
 
     /// <summary>
     /// Obtener configuración del programa de lealtad
