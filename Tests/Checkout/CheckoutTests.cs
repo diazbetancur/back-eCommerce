@@ -24,7 +24,7 @@ namespace Api_eCommerce.Tests.Checkout
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/checkout/quote");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
-            
+
             var payload = new
             {
                 shippingAddress = new
@@ -57,7 +57,7 @@ namespace Api_eCommerce.Tests.Checkout
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
             request.Headers.Add("Idempotency-Key", idempotencyKey);
-            
+
             var payload = new
             {
                 shippingAddress = new
@@ -90,7 +90,7 @@ namespace Api_eCommerce.Tests.Checkout
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
             // NO agregamos Idempotency-Key
-            
+
             var payload = new
             {
                 shippingAddress = new
@@ -109,7 +109,7 @@ namespace Api_eCommerce.Tests.Checkout
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().Be(HttpStatusCode.BadRequest, 
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
                 "Should require Idempotency-Key header");
         }
 
@@ -119,7 +119,7 @@ namespace Api_eCommerce.Tests.Checkout
             // Arrange
             var idempotencyKey = Guid.NewGuid().ToString();
             var sessionId = $"idempotent-session-{Guid.NewGuid()}";
-            
+
             var payload = new
             {
                 shippingAddress = new
@@ -153,11 +153,11 @@ namespace Api_eCommerce.Tests.Checkout
             {
                 var content1 = await response1.Content.ReadAsStringAsync();
                 var content2 = await response2.Content.ReadAsStringAsync();
-                
+
                 // El segundo request deber�a retornar la misma orden (o un 409 Conflict)
                 if (response2.StatusCode == HttpStatusCode.Created)
                 {
-                    content1.Should().Be(content2, 
+                    content1.Should().Be(content2,
                         "Idempotent requests should return the same result");
                 }
                 else if (response2.StatusCode == HttpStatusCode.Conflict)
@@ -175,7 +175,7 @@ namespace Api_eCommerce.Tests.Checkout
             var sessionId = $"multi-order-session-{Guid.NewGuid()}";
             var idempotencyKey1 = Guid.NewGuid().ToString();
             var idempotencyKey2 = Guid.NewGuid().ToString();
-            
+
             var payload = new
             {
                 shippingAddress = new
@@ -208,8 +208,8 @@ namespace Api_eCommerce.Tests.Checkout
             {
                 var content1 = await response1.Content.ReadAsStringAsync();
                 var content2 = await response2.Content.ReadAsStringAsync();
-                
-                content1.Should().NotBe(content2, 
+
+                content1.Should().NotBe(content2,
                     "Different idempotency keys should create different orders");
             }
         }
@@ -221,7 +221,7 @@ namespace Api_eCommerce.Tests.Checkout
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/checkout/place-order");
             request.Headers.Add("X-Session-Id", SessionId);
             request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-            
+
             var payload = new
             {
                 shippingAddress = new { fullName = "Test", phone = "+123", address = "Test", city = "Test", country = "US" },
@@ -243,7 +243,7 @@ namespace Api_eCommerce.Tests.Checkout
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/checkout/place-order");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-            
+
             var payload = new
             {
                 shippingAddress = new { fullName = "Test", phone = "+123", address = "Test", city = "Test", country = "US" },
@@ -266,7 +266,7 @@ namespace Api_eCommerce.Tests.Checkout
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
             request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-            
+
             var payload = new
             {
                 shippingAddress = new
@@ -303,7 +303,7 @@ namespace Api_eCommerce.Tests.Checkout
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", $"{SessionId}-{paymentMethod}");
             request.Headers.Add("Idempotency-Key", idempotencyKey);
-            
+
             var payload = new
             {
                 shippingAddress = new
@@ -334,7 +334,7 @@ namespace Api_eCommerce.Tests.Checkout
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/checkout/quote");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
-            
+
             var payload = new { }; // Sin shippingAddress
             request.Content = JsonContent.Create(payload);
 
@@ -349,8 +349,8 @@ namespace Api_eCommerce.Tests.Checkout
         }
 
         private HttpRequestMessage CreatePlaceOrderRequest(
-            string sessionId, 
-            string idempotencyKey, 
+            string sessionId,
+            string idempotencyKey,
             object payload)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/checkout/place-order");

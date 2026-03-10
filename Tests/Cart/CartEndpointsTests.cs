@@ -25,7 +25,7 @@ namespace Api_eCommerce.Tests.Cart
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/cart/items");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
-            
+
             var payload = new
             {
                 productId = Guid.NewGuid().ToString(),
@@ -48,7 +48,7 @@ namespace Api_eCommerce.Tests.Cart
             // Arrange
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/cart/items");
             request.Headers.Add("X-Session-Id", SessionId);
-            
+
             var payload = new { productId = Guid.NewGuid().ToString(), quantity = 2 };
             request.Content = JsonContent.Create(payload);
 
@@ -66,7 +66,7 @@ namespace Api_eCommerce.Tests.Cart
             // Arrange
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/cart/items");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
-            
+
             var payload = new { productId = Guid.NewGuid().ToString(), quantity = 2 };
             request.Content = JsonContent.Create(payload);
 
@@ -100,11 +100,11 @@ namespace Api_eCommerce.Tests.Cart
             // Arrange
             var productId = Guid.NewGuid();
             var request = new HttpRequestMessage(
-                HttpMethod.Put, 
+                HttpMethod.Put,
                 $"/api/cart/items/{productId}");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
-            
+
             var payload = new { quantity = 5 };
             request.Content = JsonContent.Create(payload);
 
@@ -121,7 +121,7 @@ namespace Api_eCommerce.Tests.Cart
             // Arrange
             var productId = Guid.NewGuid();
             var request = new HttpRequestMessage(
-                HttpMethod.Delete, 
+                HttpMethod.Delete,
                 $"/api/cart/items/{productId}");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
@@ -175,7 +175,7 @@ namespace Api_eCommerce.Tests.Cart
             // Assert
             cart1Response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
             cart2Response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
-            
+
             // Los carritos deber�an ser independientes
         }
 
@@ -186,7 +186,7 @@ namespace Api_eCommerce.Tests.Cart
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/cart/items");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
-            
+
             var payload = new
             {
                 productId = Guid.NewGuid().ToString(),
@@ -222,7 +222,7 @@ namespace Api_eCommerce.Tests.Cart
             {
                 var request = CreateAddToCartRequest(sessionId, product.Id, product.Qty);
                 var response = await _client.SendAsync(request);
-                
+
                 response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
             }
 
@@ -244,7 +244,7 @@ namespace Api_eCommerce.Tests.Cart
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/cart/items");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
             request.Headers.Add("X-Session-Id", SessionId);
-            
+
             var payload = new
             {
                 productId = Guid.NewGuid().ToString(),

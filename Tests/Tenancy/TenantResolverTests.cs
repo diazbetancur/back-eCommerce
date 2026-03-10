@@ -62,7 +62,7 @@ namespace Api_eCommerce.Tests.Tenancy
 
             // Assert
             response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
-            
+
             var content = await response.Content.ReadAsStringAsync();
             content.Should().Contain("Tenant Required");
         }
@@ -79,7 +79,7 @@ namespace Api_eCommerce.Tests.Tenancy
 
             // Assert
             response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
-            
+
             var content = await response.Content.ReadAsStringAsync();
             content.Should().Contain("Tenant Not Found");
         }
@@ -96,7 +96,7 @@ namespace Api_eCommerce.Tests.Tenancy
 
             // Assert
             response.StatusCode.Should().Be(System.Net.HttpStatusCode.ServiceUnavailable);
-            
+
             var content = await response.Content.ReadAsStringAsync();
             content.Should().Contain("Tenant Not Available");
         }
@@ -106,7 +106,7 @@ namespace Api_eCommerce.Tests.Tenancy
         {
             // Arrange
             var request = new HttpRequestMessage(
-                HttpMethod.Get, 
+                HttpMethod.Get,
                 $"{TenantScopedPath}?tenant=test-tenant-2");
             request.Headers.Add("X-Tenant-Slug", "test-tenant-1");
 
@@ -135,7 +135,7 @@ namespace Api_eCommerce.Tests.Tenancy
 
             // Assert
             // No deber�a ser 400 por falta de tenant
-            response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.BadRequest, 
+            response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.BadRequest,
                 $"Path {path} should not require tenant header");
         }
 
@@ -150,7 +150,7 @@ namespace Api_eCommerce.Tests.Tenancy
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.NotFound, 
+            response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.NotFound,
                 "Slug should be case-insensitive");
         }
 
@@ -165,7 +165,7 @@ namespace Api_eCommerce.Tests.Tenancy
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.NotFound, 
+            response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.NotFound,
                 "Slug should be trimmed");
         }
 

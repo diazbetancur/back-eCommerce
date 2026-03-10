@@ -51,7 +51,7 @@ namespace Api_eCommerce.Tests.Catalog
         {
             // Arrange
             var request = new HttpRequestMessage(
-                HttpMethod.Get, 
+                HttpMethod.Get,
                 "/api/products?page=1&pageSize=10");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
@@ -60,7 +60,7 @@ namespace Api_eCommerce.Tests.Catalog
 
             // Assert
             response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
@@ -85,7 +85,7 @@ namespace Api_eCommerce.Tests.Catalog
             // Assert
             response1.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
             response2.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
-            
+
             // Los datos deber�an ser independientes por tenant
             // (aunque en este test no tenemos productos seed, verificamos que no hay error)
         }
@@ -96,7 +96,7 @@ namespace Api_eCommerce.Tests.Catalog
             // Arrange
             var productId = Guid.NewGuid();
             var request = new HttpRequestMessage(
-                HttpMethod.Get, 
+                HttpMethod.Get,
                 $"/api/products/{productId}");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
@@ -104,9 +104,9 @@ namespace Api_eCommerce.Tests.Catalog
             var response = await _client.SendAsync(request);
 
             // Assert
-            response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest, 
+            response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest,
                 "Request should not fail due to missing tenant");
-            response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden, 
+            response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden,
                 "Tenant should be active");
         }
 
@@ -116,7 +116,7 @@ namespace Api_eCommerce.Tests.Catalog
             // Arrange
             var productId = Guid.NewGuid();
             var request = new HttpRequestMessage(
-                HttpMethod.Get, 
+                HttpMethod.Get,
                 $"/api/products/{productId}");
 
             // Act
@@ -146,7 +146,7 @@ namespace Api_eCommerce.Tests.Catalog
         {
             // Arrange
             var request = new HttpRequestMessage(
-                HttpMethod.Get, 
+                HttpMethod.Get,
                 "/api/products?search=test");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
@@ -165,7 +165,7 @@ namespace Api_eCommerce.Tests.Catalog
         {
             // Arrange
             var request = new HttpRequestMessage(
-                HttpMethod.Get, 
+                HttpMethod.Get,
                 $"/api/products{queryString}");
             request.Headers.Add("X-Tenant-Slug", ValidTenantSlug);
 
