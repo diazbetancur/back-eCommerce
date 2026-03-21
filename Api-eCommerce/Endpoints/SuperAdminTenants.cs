@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using System.Text.RegularExpressions;
 
@@ -108,9 +109,10 @@ namespace Api_eCommerce.Endpoints
 
         private static async Task<IResult> CreateTenant(
             AdminDbContext adminDb,
-            ITenantConnectionProtector protector,
+            ITenantSecretProtector protector,
             TenantDbContextFactory factory,
             ILoggerFactory loggerFactory,
+            IOptions<TenantSecretsOptions> tenantSecretOptions,
             [FromBody] CreateTenantRequest request)
         {
             var logger = loggerFactory.CreateLogger("SuperAdminTenants");
@@ -244,7 +246,10 @@ namespace Api_eCommerce.Endpoints
                 }
 
                 // 3. Marcar como Ready
-                tenant.EncryptedConnection = protector.Protect(tenantCs);
+                tenant.EncryptedConnection = protector.Encrypt(tenantCs);
+                tenant.EncryptionKeyId = tenantSecretOptions.Value.KeyId;
+                tenant.EncryptionAlgorithm = tenantSecretOptions.Value.Algorithm;
+                tenant.EncryptionVersion = tenantSecretOptions.Value.Version;
                 tenant.Status = TenantStatus.Ready;
                 tenant.LastError = null;
                 tenant.UpdatedAt = DateTime.UtcNow;
@@ -276,9 +281,10 @@ namespace Api_eCommerce.Endpoints
 
         private static async Task<IResult> RepairTenant(
             AdminDbContext adminDb,
-            ITenantConnectionProtector protector,
+            ITenantSecretProtector protector,
             TenantDbContextFactory factory,
             IConfiguration configuration,  // ? AGREGAR para leer template
+            IOptions<TenantSecretsOptions> tenantSecretOptions,
             string tenant)
         {
             var t = await adminDb.Tenants.FirstOrDefaultAsync(x => x.Slug == tenant);
@@ -305,12 +311,15 @@ namespace Api_eCommerce.Endpoints
                     cs = template.Replace("{DbName}", t.DbName);
 
                     // Guardar la conexi�n encriptada
-                    t.EncryptedConnection = protector.Protect(cs);
+                    t.EncryptedConnection = protector.Encrypt(cs);
+                    t.EncryptionKeyId = tenantSecretOptions.Value.KeyId;
+                    t.EncryptionAlgorithm = tenantSecretOptions.Value.Algorithm;
+                    t.EncryptionVersion = tenantSecretOptions.Value.Version;
                 }
                 else
                 {
                     // Si ya existe, desencriptarla
-                    cs = protector.Unprotect(t.EncryptedConnection);
+                    cs = protector.Decrypt(t.EncryptedConnection);
                 }
 
                 // Aplicar migraciones a la DB del tenant

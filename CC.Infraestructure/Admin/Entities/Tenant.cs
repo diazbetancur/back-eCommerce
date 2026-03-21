@@ -35,6 +35,9 @@ namespace CC.Infraestructure.Admin.Entities
 
         // ? CAMBIAR: Nullable porque se asigna despu�s de crear la DB
         public string? EncryptedConnection { get; set; }
+        public string? EncryptionKeyId { get; set; }
+        public string? EncryptionAlgorithm { get; set; }
+        public string? EncryptionVersion { get; set; }
 
         public Guid? PlanId { get; set; }
         public Plan? Plan { get; set; }

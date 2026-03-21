@@ -41,6 +41,12 @@ namespace CC.Infraestructure.AdminDb
             modelBuilder.Entity<Plan>().HasIndex(p => p.Code).IsUnique();
             modelBuilder.Entity<Feature>().HasIndex(f => f.Code).IsUnique();
             modelBuilder.Entity<TenantEntity>().HasIndex(t => t.Slug).IsUnique();
+            modelBuilder.Entity<TenantEntity>(entity =>
+            {
+                entity.Property(t => t.EncryptionKeyId).HasMaxLength(100);
+                entity.Property(t => t.EncryptionAlgorithm).HasMaxLength(50);
+                entity.Property(t => t.EncryptionVersion).HasMaxLength(20);
+            });
 
             modelBuilder.Entity<PlanFeature>().HasKey(x => new { x.PlanId, x.FeatureId });
             modelBuilder.Entity<TenantFeatureOverride>().HasKey(x => new { x.TenantId, x.FeatureId });

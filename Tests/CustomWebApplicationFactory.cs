@@ -41,6 +41,10 @@ namespace Api_eCommerce.Tests
                     ["Jwt:Issuer"] = "ecommerce-api",
                     ["Jwt:Audience"] = "ecommerce-clients",
                     ["Jwt:StrictValidation"] = "true",
+                    ["TenantSecrets:MasterKey"] = "MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=",
+                    ["TenantSecrets:KeyId"] = "test-shared-key",
+                    ["TenantSecrets:Algorithm"] = "AES-256-GCM",
+                    ["TenantSecrets:Version"] = "v1",
                     ["Tenancy:TenantDbTemplate"] = "Host=localhost;Port=5432;Database={DbName};Username=test;Password=test"
                 });
             });
@@ -82,7 +86,7 @@ namespace Api_eCommerce.Tests
             db.Plans.RemoveRange(db.Plans);
             db.SaveChanges();
 
-            var protector = services.GetRequiredService<ITenantConnectionProtector>();
+            var protector = services.GetRequiredService<ITenantSecretProtector>();
 
             var premiumPlan = new Plan
             {
@@ -112,7 +116,10 @@ namespace Api_eCommerce.Tests
                     DbName = "tenant_test1_db",
                     PlanId = premiumPlan.Id,
                     Status = TenantStatus.Ready,
-                    EncryptedConnection = protector.Protect("Host=localhost;Port=5432;Database=tenant_test1_db;Username=test;Password=test"),
+                    EncryptedConnection = protector.Encrypt("Host=localhost;Port=5432;Database=tenant_test1_db;Username=test;Password=test"),
+                    EncryptionKeyId = "test-shared-key",
+                    EncryptionAlgorithm = "AES-256-GCM",
+                    EncryptionVersion = "v1",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 },
@@ -124,7 +131,10 @@ namespace Api_eCommerce.Tests
                     DbName = "tenant_test2_db",
                     PlanId = basicPlan.Id,
                     Status = TenantStatus.Ready,
-                    EncryptedConnection = protector.Protect("Host=localhost;Port=5432;Database=tenant_test2_db;Username=test;Password=test"),
+                    EncryptedConnection = protector.Encrypt("Host=localhost;Port=5432;Database=tenant_test2_db;Username=test;Password=test"),
+                    EncryptionKeyId = "test-shared-key",
+                    EncryptionAlgorithm = "AES-256-GCM",
+                    EncryptionVersion = "v1",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 },
@@ -136,7 +146,10 @@ namespace Api_eCommerce.Tests
                     DbName = "tenant_pending_db",
                     PlanId = basicPlan.Id,
                     Status = TenantStatus.Pending,
-                    EncryptedConnection = protector.Protect("Host=localhost;Port=5432;Database=tenant_pending_db;Username=test;Password=test"),
+                    EncryptedConnection = protector.Encrypt("Host=localhost;Port=5432;Database=tenant_pending_db;Username=test;Password=test"),
+                    EncryptionKeyId = "test-shared-key",
+                    EncryptionAlgorithm = "AES-256-GCM",
+                    EncryptionVersion = "v1",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 }

@@ -18,7 +18,6 @@ using CC.Infraestructure.Sql;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
@@ -62,6 +61,9 @@ builder.Services.AddCors(options =>
             if (host == "pwaecommercee.netlify.app")
                 return true;
 
+            if (host == "tuecom.online/")
+                return true;
+
             return false;
         }).AllowAnyMethod()
           .AllowAnyHeader()
@@ -93,8 +95,19 @@ builder.Services.AddSingleton<CC.Infraestructure.Cache.IFeatureCache, CC.Infraes
 builder.Services.AddScoped<ITenantAccessor, TenantAccessor>();
 builder.Services.AddScoped<TenantDbContextFactory>();
 builder.Services.AddScoped<ITenantUnitOfWorkFactory, TenantUnitOfWorkFactory>();
-builder.Services.AddDataProtection();
-builder.Services.AddScoped<ITenantConnectionProtector, TenantConnectionProtector>();
+builder.Services
+    .AddOptions<TenantSecretsOptions>()
+    .Bind(builder.Configuration.GetSection(TenantSecretsOptions.SectionName))
+    .Validate(options => !string.IsNullOrWhiteSpace(options.MasterKey),
+        "TenantSecrets:MasterKey is required.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.KeyId),
+        "TenantSecrets:KeyId is required.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Algorithm),
+        "TenantSecrets:Algorithm is required.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Version),
+        "TenantSecrets:Version is required.")
+    .ValidateOnStart();
+builder.Services.AddScoped<ITenantSecretProtector, AesTenantSecretProtector>();
 builder.Services.AddScoped<ITenantResolver, TenantResolver>();
 
 // ==================== EF CORE SERVICES ====================
@@ -239,7 +252,7 @@ if (!app.Environment.IsEnvironment("Testing"))
         await CC.Infraestructure.Admin.AdminDbSeeder.SeedAsync(adminDb, logger);
 
         logger.LogInformation("🔄 Applying pending migrations for READY tenant databases...");
-        var protector = scope.ServiceProvider.GetRequiredService<ITenantConnectionProtector>();
+        var protector = scope.ServiceProvider.GetRequiredService<ITenantSecretProtector>();
         var tenantFactory = scope.ServiceProvider.GetRequiredService<TenantDbContextFactory>();
 
         var readyTenants = await adminDb.Tenants
@@ -250,7 +263,7 @@ if (!app.Environment.IsEnvironment("Testing"))
         {
             try
             {
-                var tenantConnection = protector.Unprotect(tenant.EncryptedConnection!);
+                var tenantConnection = protector.Decrypt(tenant.EncryptedConnection!);
                 await using var tenantDb = tenantFactory.Create(tenantConnection);
                 await tenantDb.Database.MigrateAsync();
                 logger.LogInformation("✅ Tenant DB migrated: {TenantSlug}", tenant.Slug);
