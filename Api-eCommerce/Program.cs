@@ -43,16 +43,40 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(
-                "https://pwaecommercee.netlify.app",   // Producci�n
-                "http://localhost:4200",                // Desarrollo local - Angular
-                "http://localhost:3000",                // Desarrollo local - React/Next
-                "http://localhost:5173"                 // Desarrollo local - Vite
-            )
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials()
-            .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
+        policy.SetIsOriginAllowed(o =>
+        {
+            if (string.IsNullOrEmpty(o)) return false;
+            if (!Uri.TryCreate(o, UriKind.Absolute, out var uri)) return false;
+
+            var host = uri.Host.ToLowerInvariant();
+
+            // Desarrollo local
+            // Permite:
+            // localhost
+            // mi-tienda.localhost
+            // cualquier-subdominio.localhost
+            if (host == "localhost" || host.EndsWith(".localhost"))
+                return true;
+
+            // Netlify actual si todavía lo usas
+            if (host == "pwaecommercee.netlify.app")
+                return true;
+
+            return false;
+        }).AllowAnyMethod()
+          .AllowAnyHeader()
+          .AllowCredentials()
+          .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
+        // policy.WithOrigins(
+        //         "https://pwaecommercee.netlify.app",   // Producci�n
+        //         "http://localhost:4200",                // Desarrollo local - Angular
+        //         "http://localhost:3000",                // Desarrollo local - React/Next
+        //         "http://localhost:5173"                 // Desarrollo local - Vite
+        //     )
+        //     .AllowAnyMethod()
+        //     .AllowAnyHeader()
+        //     .AllowCredentials()
+        //     .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
     });
 });
 
