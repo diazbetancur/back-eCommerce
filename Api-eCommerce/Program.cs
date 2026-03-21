@@ -49,19 +49,10 @@ builder.Services.AddCors(options =>
 
             var host = uri.Host.ToLowerInvariant();
 
-            // Desarrollo local
-            // Permite:
-            // localhost
-            // mi-tienda.localhost
-            // cualquier-subdominio.localhost
             if (host == "localhost" || host.EndsWith(".localhost"))
                 return true;
 
-            // Netlify actual si todavía lo usas
-            if (host == "pwaecommercee.netlify.app")
-                return true;
-
-            if (host == "tuecom.online/")
+            if (host == "tuecom.online" || host.EndsWith(".tuecom.online"))
                 return true;
 
             return false;
@@ -69,16 +60,6 @@ builder.Services.AddCors(options =>
           .AllowAnyHeader()
           .AllowCredentials()
           .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
-        // policy.WithOrigins(
-        //         "https://pwaecommercee.netlify.app",   // Producci�n
-        //         "http://localhost:4200",                // Desarrollo local - Angular
-        //         "http://localhost:3000",                // Desarrollo local - React/Next
-        //         "http://localhost:5173"                 // Desarrollo local - Vite
-        //     )
-        //     .AllowAnyMethod()
-        //     .AllowAnyHeader()
-        //     .AllowCredentials()
-        //     .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
     });
 });
 
