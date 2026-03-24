@@ -47,6 +47,8 @@ namespace CC.Infraestructure.Tenant
     public DbSet<TenantEntities.ProductCategory> ProductCategories => Set<TenantEntities.ProductCategory>();
     public DbSet<TenantEntities.ProductImage> ProductImages => Set<TenantEntities.ProductImage>();
     public DbSet<TenantEntities.Banner> Banners => Set<TenantEntities.Banner>();
+    public DbSet<TenantEntities.TenantAsset> TenantAssets => Set<TenantEntities.TenantAsset>();
+    public DbSet<TenantEntities.TenantAssetQuotaSnapshot> TenantAssetQuotaSnapshots => Set<TenantEntities.TenantAssetQuotaSnapshot>();
     #endregion
 
     #region Shopping Cart
@@ -416,14 +418,46 @@ namespace CC.Infraestructure.Tenant
         entity.ToTable("Banners");
         entity.HasKey(e => e.Id);
         entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
-        entity.Property(e => e.ImageUrlDesktop).IsRequired().HasMaxLength(500);
-        entity.Property(e => e.ImageUrlMobile).HasMaxLength(500);
+        entity.Property(e => e.ImageUrl)
+              .HasColumnName("ImageUrlDesktop")
+              .IsRequired()
+              .HasMaxLength(500);
         entity.Property(e => e.TargetUrl).HasMaxLength(500);
         entity.Property(e => e.ButtonText).HasMaxLength(100);
 
         entity.HasIndex(e => e.IsActive);
         entity.HasIndex(e => e.Position);
         entity.HasIndex(e => e.DisplayOrder);
+      });
+
+      modelBuilder.Entity<TenantEntities.TenantAsset>(entity =>
+      {
+        entity.ToTable("TenantAssets");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.Module).IsRequired().HasMaxLength(80);
+        entity.Property(e => e.EntityType).HasMaxLength(80);
+        entity.Property(e => e.EntityId).HasMaxLength(80);
+        entity.Property(e => e.OriginalFileName).IsRequired().HasMaxLength(260);
+        entity.Property(e => e.SafeFileName).IsRequired().HasMaxLength(260);
+        entity.Property(e => e.StorageKey).HasMaxLength(700);
+        entity.Property(e => e.StorageBucket).HasMaxLength(120);
+        entity.Property(e => e.PublicUrl).HasMaxLength(1000);
+        entity.Property(e => e.UrlOrPath).IsRequired();
+        entity.Property(e => e.Extension).IsRequired().HasMaxLength(20);
+        entity.Property(e => e.ContentType).IsRequired().HasMaxLength(120);
+        entity.Property(e => e.Provider).IsRequired().HasMaxLength(30);
+        entity.Property(e => e.UploadedByUserId).HasMaxLength(100);
+        entity.HasIndex(e => new { e.TenantId, e.Module, e.EntityType, e.EntityId })
+              .HasDatabaseName("IX_TenantAssets_Tenant_Module_Entity");
+        entity.HasIndex(e => new { e.TenantId, e.LifecycleStatus })
+              .HasDatabaseName("IX_TenantAssets_Tenant_Status");
+      });
+
+      modelBuilder.Entity<TenantEntities.TenantAssetQuotaSnapshot>(entity =>
+      {
+        entity.ToTable("TenantAssetQuotaSnapshots");
+        entity.HasKey(e => e.TenantId);
+        entity.Property(e => e.PlanCodeSnapshot).IsRequired().HasMaxLength(80);
       });
       #endregion
 

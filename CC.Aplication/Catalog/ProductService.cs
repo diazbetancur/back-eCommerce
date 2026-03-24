@@ -1,4 +1,5 @@
 using CC.Domain.Dto;
+using CC.Domain.Assets;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
@@ -27,15 +28,18 @@ namespace CC.Aplication.Catalog
   {
     private readonly TenantDbContextFactory _dbFactory;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly IAssetService _assetService;
     private readonly ILogger<ProductService> _logger;
 
     public ProductService(
         TenantDbContextFactory dbFactory,
         ITenantAccessor tenantAccessor,
+        IAssetService assetService,
         ILogger<ProductService> logger)
     {
       _dbFactory = dbFactory;
       _tenantAccessor = tenantAccessor;
+      _assetService = assetService;
       _logger = logger;
     }
 
@@ -366,6 +370,16 @@ namespace CC.Aplication.Catalog
       if (product == null)
       {
         return false;
+      }
+
+      if (_tenantAccessor.TenantInfo != null)
+      {
+        await _assetService.PurgeByEntityAsync(
+            _tenantAccessor.TenantInfo.Id,
+            module: "product",
+            entityType: "product",
+            entityId: id.ToString(),
+            ct);
       }
 
       // Soft delete: marcar como inactivo

@@ -1,4 +1,5 @@
 using Api_eCommerce.Authorization;
+using CC.Domain.Assets;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.Tenancy;
@@ -371,6 +372,8 @@ namespace Api_eCommerce.Endpoints
         // ==================== DELETE TENANT ====================
         private static async Task<IResult> DeleteTenant(
             AdminDbContext adminDb,
+            ITenantSecretProtector protector,
+            ITenantAssetPurgeService tenantAssetPurgeService,
             ILoggerFactory loggerFactory,
             string slug,
             [FromQuery] bool hardDelete = true)  // ✅ Cambiado a true por defecto
@@ -388,6 +391,20 @@ namespace Api_eCommerce.Endpoints
                 // Hard delete: eliminar base de datos física y registro
                 try
                 {
+                    if (!string.IsNullOrWhiteSpace(tenant.EncryptedConnection))
+                    {
+                        try
+                        {
+                            var tenantConnection = protector.Decrypt(tenant.EncryptedConnection);
+                            var purged = await tenantAssetPurgeService.PurgeTenantAsync(tenant.Id, tenantConnection);
+                            logger.LogInformation("Purged {Count} tenant assets before hard-delete for tenant {Slug}", purged, slug);
+                        }
+                        catch (Exception purgeEx)
+                        {
+                            logger.LogError(purgeEx, "Failed to purge tenant assets before hard-delete for tenant {Slug}", slug);
+                        }
+                    }
+
                     var adminConn = adminDb.Database.GetConnectionString();
                     var csb = new NpgsqlConnectionStringBuilder(adminConn);
                     var masterCs = new NpgsqlConnectionStringBuilder(csb.ConnectionString) { Database = "defaultdb" }.ToString();
@@ -509,7 +526,7 @@ namespace Api_eCommerce.Endpoints
     public record PlanLimitDto
     {
         public string LimitCode { get; set; } = string.Empty;
-        public int LimitValue { get; set; }
+        public long LimitValue { get; set; }
         public string? Description { get; set; }
     }
 

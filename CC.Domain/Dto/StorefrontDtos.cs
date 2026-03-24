@@ -10,8 +10,7 @@ namespace CC.Domain.Dto
     public Guid Id { get; init; }
     public string Title { get; init; } = string.Empty;
     public string? Subtitle { get; init; }
-    public string ImageUrlDesktop { get; init; } = string.Empty;
-    public string? ImageUrlMobile { get; init; }
+    public string ImageUrl { get; init; } = string.Empty;
     public string? TargetUrl { get; init; }
     public string? ButtonText { get; init; }
     public string Position { get; init; } = "hero";

@@ -1,5 +1,6 @@
 using CC.Domain.Entities;
 using CC.Domain.Enums;
+using CC.Domain.Assets;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using Microsoft.EntityFrameworkCore;
@@ -27,15 +28,18 @@ namespace CC.Aplication.Loyalty
   {
     private readonly TenantDbContextFactory _dbFactory;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly IAssetService _assetService;
     private readonly ILogger<LoyaltyRewardsService> _logger;
 
     public LoyaltyRewardsService(
         TenantDbContextFactory dbFactory,
         ITenantAccessor tenantAccessor,
+        IAssetService assetService,
         ILogger<LoyaltyRewardsService> logger)
     {
       _dbFactory = dbFactory;
       _tenantAccessor = tenantAccessor;
+      _assetService = assetService;
       _logger = logger;
     }
 
@@ -222,6 +226,16 @@ namespace CC.Aplication.Loyalty
         db.LoyaltyRewards.Remove(reward);
         await db.SaveChangesAsync(ct);
         _logger.LogInformation("Deleted loyalty reward {RewardId}", id);
+      }
+
+      if (_tenantAccessor.TenantInfo != null)
+      {
+        await _assetService.PurgeByEntityAsync(
+          _tenantAccessor.TenantInfo.Id,
+          module: "loyalty",
+          entityType: "reward",
+          entityId: id.ToString(),
+          ct);
       }
     }
 

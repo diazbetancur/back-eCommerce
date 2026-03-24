@@ -6,14 +6,14 @@ using Microsoft.EntityFrameworkCore;
 namespace CC.Aplication.Plans
 {
     /// <summary>
-    /// Servicio para validar y obtener límites del plan del tenant
+    /// Servicio para validar y obtener lï¿½mites del plan del tenant
     /// </summary>
     public interface IPlanLimitService
     {
-        Task<int> GetLimitValueAsync(string limitCode);
-        Task<bool> CanExceedLimitAsync(string limitCode, int currentValue);
-        Task ThrowIfExceedsLimitAsync(string limitCode, int currentValue, string? customMessage = null);
-        Task<Dictionary<string, int>> GetAllLimitsAsync();
+        Task<long> GetLimitValueAsync(string limitCode);
+        Task<bool> CanExceedLimitAsync(string limitCode, long currentValue);
+        Task ThrowIfExceedsLimitAsync(string limitCode, long currentValue, string? customMessage = null);
+        Task<Dictionary<string, long>> GetAllLimitsAsync();
     }
 
     public class PlanLimitService : IPlanLimitService
@@ -28,10 +28,10 @@ namespace CC.Aplication.Plans
         }
 
         /// <summary>
-        /// Obtiene el valor del límite para el tenant actual
-        /// Retorna -1 si es ilimitado, 0 si está bloqueado
+        /// Obtiene el valor del lï¿½mite para el tenant actual
+        /// Retorna -1 si es ilimitado, 0 si estï¿½ bloqueado
         /// </summary>
-        public async Task<int> GetLimitValueAsync(string limitCode)
+        public async Task<long> GetLimitValueAsync(string limitCode)
         {
             if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
             {
@@ -49,14 +49,14 @@ namespace CC.Aplication.Plans
             }
 
             var limit = tenant.Plan.Limits.FirstOrDefault(l => l.LimitCode == limitCode);
-            
-            return limit?.LimitValue ?? 0; // Si no existe el límite, retornar 0 (bloqueado)
+
+            return limit?.LimitValue ?? 0; // Si no existe el lï¿½mite, retornar 0 (bloqueado)
         }
 
         /// <summary>
-        /// Verifica si el tenant puede exceder el límite
+        /// Verifica si el tenant puede exceder el lï¿½mite
         /// </summary>
-        public async Task<bool> CanExceedLimitAsync(string limitCode, int currentValue)
+        public async Task<bool> CanExceedLimitAsync(string limitCode, long currentValue)
         {
             var limitValue = await GetLimitValueAsync(limitCode);
 
@@ -72,18 +72,18 @@ namespace CC.Aplication.Plans
                 return false;
             }
 
-            // Verificar si el valor actual está dentro del límite
+            // Verificar si el valor actual estï¿½ dentro del lï¿½mite
             return currentValue < limitValue;
         }
 
         /// <summary>
-        /// Lanza excepción si se excede el límite
+        /// Lanza excepciï¿½n si se excede el lï¿½mite
         /// </summary>
-        public async Task ThrowIfExceedsLimitAsync(string limitCode, int currentValue, string? customMessage = null)
+        public async Task ThrowIfExceedsLimitAsync(string limitCode, long currentValue, string? customMessage = null)
         {
             var limitValue = await GetLimitValueAsync(limitCode);
 
-            // -1 = ilimitado, no hay restricción
+            // -1 = ilimitado, no hay restricciï¿½n
             if (limitValue == -1)
             {
                 return;
@@ -96,26 +96,26 @@ namespace CC.Aplication.Plans
                     limitCode,
                     limitValue,
                     currentValue,
-                    customMessage ?? $"Esta funcionalidad está bloqueada en tu plan actual"
+                    customMessage ?? $"Esta funcionalidad estï¿½ bloqueada en tu plan actual"
                 );
             }
 
-            // Verificar si se excede el límite
+            // Verificar si se excede el lï¿½mite
             if (currentValue >= limitValue)
             {
                 throw new PlanLimitExceededException(
                     limitCode,
                     limitValue,
                     currentValue,
-                    customMessage ?? $"Has alcanzado el límite de tu plan ({limitValue}). Mejora tu plan para continuar."
+                    customMessage ?? $"Has alcanzado el lï¿½mite de tu plan ({limitValue}). Mejora tu plan para continuar."
                 );
             }
         }
 
         /// <summary>
-        /// Obtiene todos los límites del plan del tenant actual
+        /// Obtiene todos los lï¿½mites del plan del tenant actual
         /// </summary>
-        public async Task<Dictionary<string, int>> GetAllLimitsAsync()
+        public async Task<Dictionary<string, long>> GetAllLimitsAsync()
         {
             if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
             {
@@ -129,7 +129,7 @@ namespace CC.Aplication.Plans
 
             if (tenant?.Plan == null)
             {
-                return new Dictionary<string, int>();
+                return new Dictionary<string, long>();
             }
 
             return tenant.Plan.Limits.ToDictionary(
@@ -140,18 +140,18 @@ namespace CC.Aplication.Plans
     }
 
     /// <summary>
-    /// Excepción personalizada cuando se excede un límite del plan
+    /// Excepciï¿½n personalizada cuando se excede un lï¿½mite del plan
     /// </summary>
     public class PlanLimitExceededException : Exception
     {
         public string LimitCode { get; }
-        public int LimitValue { get; }
-        public int CurrentValue { get; }
+        public long LimitValue { get; }
+        public long CurrentValue { get; }
 
         public PlanLimitExceededException(
             string limitCode,
-            int limitValue,
-            int currentValue,
+            long limitValue,
+            long currentValue,
             string message) : base(message)
         {
             LimitCode = limitCode;

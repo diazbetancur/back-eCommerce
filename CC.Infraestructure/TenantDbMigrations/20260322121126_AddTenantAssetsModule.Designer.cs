@@ -3,6 +3,7 @@ using System;
 using CC.Infraestructure.Tenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CC.Infraestructure.TenantDbMigrations
 {
     [DbContext(typeof(TenantDbContext))]
-    partial class TenantDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260322121126_AddTenantAssetsModule")]
+    partial class AddTenantAssetsModule
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1099,10 +1102,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("PublicUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
                     b.Property<string>("SafeFileName")
                         .IsRequired()
                         .HasMaxLength(260)
@@ -1113,10 +1112,6 @@ namespace CC.Infraestructure.TenantDbMigrations
 
                     b.Property<int>("SourceType")
                         .HasColumnType("integer");
-
-                    b.Property<string>("StorageBucket")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
 
                     b.Property<string>("StorageKey")
                         .HasMaxLength(700)

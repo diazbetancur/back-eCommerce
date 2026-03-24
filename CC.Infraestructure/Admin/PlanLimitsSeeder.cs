@@ -12,6 +12,10 @@ namespace CC.Infraestructure.Admin
     /// </summary>
     public static class PlanLimitsSeeder
     {
+        private const long OneGbBytes = 1024L * 1024L * 1024L;
+        private const long BasicStorageBytes = 5L * OneGbBytes;
+        private const long PremiumStorageBytes = 10L * OneGbBytes;
+
         public static async Task SeedAsync(AdminDbContext adminDb, ILogger? logger = null)
         {
             logger?.LogInformation("?? Seeding plans and limits...");
@@ -145,9 +149,16 @@ namespace CC.Infraestructure.Admin
                 new PlanLimit
                 {
                     PlanId = basicPlanId,
+                    LimitCode = PlanLimitCodes.MaxStorageBytes,
+                    LimitValue = BasicStorageBytes,
+                    Description = "5 GB de almacenamiento (bytes)"
+                },
+                new PlanLimit
+                {
+                    PlanId = basicPlanId,
                     LimitCode = PlanLimitCodes.MaxStorageMB,
-                    LimitValue = 2048,  // 2 GB
-                    Description = "2 GB de almacenamiento"
+                    LimitValue = 5120,  // 5 GB
+                    Description = "5 GB de almacenamiento (compatibilidad)"
                 },
                 new PlanLimit
                 {
@@ -236,9 +247,16 @@ namespace CC.Infraestructure.Admin
                 new PlanLimit
                 {
                     PlanId = premiumPlanId,
+                    LimitCode = PlanLimitCodes.MaxStorageBytes,
+                    LimitValue = PremiumStorageBytes,
+                    Description = "10 GB de almacenamiento (bytes)"
+                },
+                new PlanLimit
+                {
+                    PlanId = premiumPlanId,
                     LimitCode = PlanLimitCodes.MaxStorageMB,
-                    LimitValue = 20480,  // 20 GB
-                    Description = "20 GB de almacenamiento"
+                    LimitValue = 10240,  // 10 GB
+                    Description = "10 GB de almacenamiento (compatibilidad)"
                 },
                 new PlanLimit
                 {

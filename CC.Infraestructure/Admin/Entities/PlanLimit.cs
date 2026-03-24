@@ -28,7 +28,7 @@ namespace CC.Infraestructure.Admin.Entities
         /// Valor del l�mite (-1 = ilimitado, 0 = bloqueado, N = l�mite espec�fico)
         /// </summary>
         [Required]
-        public int LimitValue { get; set; }
+        public long LimitValue { get; set; }
 
         /// <summary>
         /// Descripci�n del l�mite (opcional)
@@ -67,6 +67,7 @@ namespace CC.Infraestructure.Admin.Entities
         public const string MaxOrdersPerDay = "max_orders_per_day";
 
         // Almacenamiento
+        public const string MaxStorageBytes = "max_storage_bytes";
         public const string MaxStorageMB = "max_storage_mb";
         public const string MaxFileUploadMB = "max_file_upload_mb";
 

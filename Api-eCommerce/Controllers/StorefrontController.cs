@@ -1,10 +1,12 @@
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
+using CC.Domain.Assets;
 using CC.Domain.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Api_eCommerce.Controllers
 {
@@ -21,13 +23,16 @@ namespace Api_eCommerce.Controllers
   {
     private readonly TenantDbContextFactory _dbFactory;
     private readonly ITenantResolver _tenantResolver;
+    private readonly TenantAssetsOptions _assetsOptions;
 
     public StorefrontController(
         TenantDbContextFactory dbFactory,
-        ITenantResolver tenantResolver)
+        ITenantResolver tenantResolver,
+        IOptions<TenantAssetsOptions> assetsOptions)
     {
       _dbFactory = dbFactory;
       _tenantResolver = tenantResolver;
+      _assetsOptions = assetsOptions.Value;
     }
 
     // ==================== BANNERS ====================
@@ -56,20 +61,35 @@ namespace Api_eCommerce.Controllers
         query = query.Where(b => b.Position == position.Value);
       }
 
-      var banners = await query
+      var bannersData = await query
           .OrderBy(b => b.DisplayOrder)
+          .Select(b => new
+          {
+            b.Id,
+            b.Title,
+            b.Subtitle,
+            b.ImageUrl,
+            b.TargetUrl,
+            b.ButtonText,
+            b.Position
+          })
+          .ToListAsync();
+
+      var bannerImageMap = await BuildBannerImageUrlMapAsync(db, bannersData.Select(b => b.Id).ToList());
+      var banners = bannersData
           .Select(b => new StoreBannerDto
           {
             Id = b.Id,
             Title = b.Title,
             Subtitle = b.Subtitle,
-            ImageUrlDesktop = b.ImageUrlDesktop,
-            ImageUrlMobile = b.ImageUrlMobile,
+            ImageUrl = bannerImageMap.TryGetValue(b.Id, out var imageUrl)
+                ? imageUrl
+                : (BuildPublicUrlFromStorageKey(b.ImageUrl) ?? b.ImageUrl ?? string.Empty),
             TargetUrl = b.TargetUrl,
             ButtonText = b.ButtonText,
             Position = b.Position.ToString().ToLower()
           })
-          .ToListAsync();
+          .ToList();
 
       return Ok(banners);
     }
@@ -103,7 +123,9 @@ namespace Api_eCommerce.Controllers
           .ThenBy(c => c.Name)
           .ToListAsync();
 
-      var result = categories.Select(c => MapCategoryToDto(c, includeInactive)).ToList();
+      var categoryIds = CollectCategoryIds(categories);
+      var imageMap = await BuildCategoryImageUrlMapAsync(db, categoryIds);
+      var result = categories.Select(c => MapCategoryToDto(c, includeInactive, imageMap)).ToList();
       return Ok(result);
     }
 
@@ -133,13 +155,17 @@ namespace Api_eCommerce.Controllers
       var productCount = await db.ProductCategories
           .CountAsync(pc => pc.CategoryId == category.Id);
 
+      var imageMap = await BuildCategoryImageUrlMapAsync(
+        db,
+        CollectCategoryIds(new List<Category> { category }));
+
       return Ok(new StoreCategoryDetailDto
       {
         Id = category.Id,
         Name = category.Name,
         Slug = category.Slug,
         Description = category.Description,
-        ImageUrl = category.ImageUrl,
+        ImageUrl = imageMap.TryGetValue(category.Id, out var categoryImageUrl) ? categoryImageUrl : category.ImageUrl,
         ParentSlug = category.Parent?.Slug,
         ParentName = category.Parent?.Name,
         Children = category.Children?
@@ -150,7 +176,7 @@ namespace Api_eCommerce.Controllers
                 Id = c.Id,
                 Name = c.Name,
                 Slug = c.Slug,
-                ImageUrl = c.ImageUrl,
+                ImageUrl = imageMap.TryGetValue(c.Id, out var childImageUrl) ? childImageUrl : c.ImageUrl,
                 ProductCount = 0 // Se podría calcular si es necesario
               }).ToList() ?? new(),
         ProductCount = productCount,
@@ -495,21 +521,146 @@ namespace Api_eCommerce.Controllers
 
     // ==================== HELPERS ====================
 
-    private static StoreCategoryDto MapCategoryToDto(Category category, bool includeInactive)
+    private static StoreCategoryDto MapCategoryToDto(
+        Category category,
+        bool includeInactive,
+        IReadOnlyDictionary<Guid, string> imageMap)
     {
       return new StoreCategoryDto
       {
         Id = category.Id,
         Name = category.Name,
         Slug = category.Slug,
-        ImageUrl = category.ImageUrl,
+        ImageUrl = imageMap.TryGetValue(category.Id, out var imageUrl) ? imageUrl : category.ImageUrl,
         Children = category.Children?
               .Where(c => includeInactive || c.IsActive)
               .OrderBy(c => c.DisplayOrder)
               .ThenBy(c => c.Name)
-              .Select(c => MapCategoryToDto(c, includeInactive))
+              .Select(c => MapCategoryToDto(c, includeInactive, imageMap))
               .ToList() ?? new()
       };
+    }
+
+    private static HashSet<Guid> CollectCategoryIds(IEnumerable<Category> categories)
+    {
+      var ids = new HashSet<Guid>();
+
+      foreach (var category in categories)
+      {
+        CollectCategoryIds(category, ids);
+      }
+
+      return ids;
+    }
+
+    private static void CollectCategoryIds(Category category, HashSet<Guid> ids)
+    {
+      if (!ids.Add(category.Id))
+      {
+        return;
+      }
+
+      if (category.Children == null)
+      {
+        return;
+      }
+
+      foreach (var child in category.Children)
+      {
+        CollectCategoryIds(child, ids);
+      }
+    }
+
+    private async Task<Dictionary<Guid, string>> BuildCategoryImageUrlMapAsync(
+        TenantDbContext db,
+        IReadOnlyCollection<Guid> categoryIds)
+    {
+      if (categoryIds.Count == 0)
+      {
+        return new Dictionary<Guid, string>();
+      }
+
+      var entityIds = categoryIds.Select(x => x.ToString().ToLowerInvariant()).ToHashSet();
+      var assets = await db.TenantAssets
+          .AsNoTracking()
+          .Where(a => a.Module == "category" &&
+                      a.EntityType == "category" &&
+                      a.EntityId != null &&
+                      entityIds.Contains(a.EntityId) &&
+                      a.LifecycleStatus == TenantAssetLifecycleStatus.Active)
+          .OrderByDescending(a => a.CreatedAt)
+          .ToListAsync();
+
+      var result = new Dictionary<Guid, string>();
+      foreach (var asset in assets)
+      {
+        if (asset.EntityId == null || !Guid.TryParse(asset.EntityId, out var categoryId) || result.ContainsKey(categoryId))
+        {
+          continue;
+        }
+
+        var publicUrl = BuildPublicUrlFromStorageKey(asset.StorageKey)
+          ?? asset.PublicUrl
+          ?? asset.UrlOrPath;
+
+        if (!string.IsNullOrWhiteSpace(publicUrl))
+        {
+          result[categoryId] = publicUrl;
+        }
+      }
+
+      return result;
+    }
+
+    private async Task<Dictionary<Guid, string>> BuildBannerImageUrlMapAsync(
+        TenantDbContext db,
+        IReadOnlyCollection<Guid> bannerIds)
+    {
+      if (bannerIds.Count == 0)
+      {
+        return new Dictionary<Guid, string>();
+      }
+
+      var entityIds = bannerIds.Select(x => x.ToString().ToLowerInvariant()).ToHashSet();
+      var assets = await db.TenantAssets
+          .AsNoTracking()
+          .Where(a => a.Module == "banner" &&
+                      a.EntityType == "banner" &&
+                      a.EntityId != null &&
+                      entityIds.Contains(a.EntityId) &&
+                      a.LifecycleStatus == TenantAssetLifecycleStatus.Active)
+          .OrderByDescending(a => a.CreatedAt)
+          .ToListAsync();
+
+      var result = new Dictionary<Guid, string>();
+      foreach (var asset in assets)
+      {
+        if (asset.EntityId == null || !Guid.TryParse(asset.EntityId, out var bannerId) || result.ContainsKey(bannerId))
+        {
+          continue;
+        }
+
+        var publicUrl = BuildPublicUrlFromStorageKey(asset.StorageKey)
+          ?? asset.PublicUrl
+          ?? asset.UrlOrPath;
+
+        if (!string.IsNullOrWhiteSpace(publicUrl))
+        {
+          result[bannerId] = publicUrl;
+        }
+      }
+
+      return result;
+    }
+
+    private string? BuildPublicUrlFromStorageKey(string? storageKey)
+    {
+      if (string.IsNullOrWhiteSpace(storageKey) || string.IsNullOrWhiteSpace(_assetsOptions.CloudflareR2.PublicBaseUrl))
+      {
+        return null;
+      }
+
+      return $"{_assetsOptions.CloudflareR2.PublicBaseUrl.TrimEnd('/')}/{storageKey.TrimStart('/')}";
     }
   }
 }

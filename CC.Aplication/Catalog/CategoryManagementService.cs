@@ -1,6 +1,8 @@
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenancy;
+using CC.Domain.Assets;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
 
 namespace CC.Aplication.Catalog
@@ -19,13 +21,19 @@ namespace CC.Aplication.Catalog
   {
     private readonly TenantDbContextFactory _dbFactory;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly IAssetService _assetService;
+    private readonly TenantAssetsOptions _assetsOptions;
 
     public CategoryManagementService(
         TenantDbContextFactory dbFactory,
-        ITenantAccessor tenantAccessor)
+        ITenantAccessor tenantAccessor,
+        IAssetService assetService,
+        IOptions<TenantAssetsOptions> assetsOptions)
     {
       _dbFactory = dbFactory;
       _tenantAccessor = tenantAccessor;
+      _assetService = assetService;
+      _assetsOptions = assetsOptions.Value;
     }
 
     public async Task<CategoryResponse> CreateAsync(CreateCategoryRequest request, CancellationToken ct = default)
@@ -65,12 +73,15 @@ namespace CC.Aplication.Catalog
         Name = request.Name,
         Slug = slug,
         Description = request.Description,
-        ImageUrl = request.ImageUrl,
+        ImageUrl = null,
         IsActive = request.IsActive,
         ParentId = request.ParentId
       };
 
       db.Categories.Add(category);
+      await db.SaveChangesAsync(ct);
+
+      await UploadOrReplaceCategoryImageAsync(category, request, ct);
       await db.SaveChangesAsync(ct);
 
       return await GetByIdAsync(category.Id, ct)
@@ -122,10 +133,10 @@ namespace CC.Aplication.Catalog
 
       category.Name = request.Name;
       category.Description = request.Description;
-      category.ImageUrl = request.ImageUrl;
       category.IsActive = request.IsActive;
       category.ParentId = request.ParentId;
 
+      await UploadOrReplaceCategoryImageAsync(category, request, ct);
       await db.SaveChangesAsync(ct);
 
       return await GetByIdAsync(category.Id, ct)
@@ -136,6 +147,16 @@ namespace CC.Aplication.Catalog
     {
       if (!_tenantAccessor.HasTenant)
         throw new InvalidOperationException("Tenant context not available");
+
+      if (_tenantAccessor.TenantInfo != null)
+      {
+        await _assetService.PurgeByEntityAsync(
+            _tenantAccessor.TenantInfo.Id,
+            module: "category",
+            entityType: "category",
+            entityId: id.ToString(),
+            ct);
+      }
 
       await using var db = _dbFactory.Create();
 
@@ -184,13 +205,15 @@ namespace CC.Aplication.Catalog
           .Where(pc => pc.CategoryId == id)
           .CountAsync(ct);
 
+      var imageUrl = await ResolveCategoryImagePublicUrlAsync(db, category.Id, category.ImageUrl, ct);
+
       return new CategoryResponse
       {
         Id = category.Id,
         Name = category.Name,
         Slug = category.Slug,
         Description = category.Description,
-        ImageUrl = category.ImageUrl,
+        ImageUrl = imageUrl,
         IsActive = category.IsActive,
         ParentId = category.ParentId,
         ProductCount = productCount,
@@ -218,13 +241,15 @@ namespace CC.Aplication.Catalog
           .Where(pc => pc.CategoryId == category.Id)
           .CountAsync(ct);
 
+      var imageUrl = await ResolveCategoryImagePublicUrlAsync(db, category.Id, category.ImageUrl, ct);
+
       return new CategoryResponse
       {
         Id = category.Id,
         Name = category.Name,
         Slug = category.Slug,
         Description = category.Description,
-        ImageUrl = category.ImageUrl,
+        ImageUrl = imageUrl,
         IsActive = category.IsActive,
         ParentId = category.ParentId,
         ProductCount = productCount,
@@ -268,6 +293,8 @@ namespace CC.Aplication.Catalog
           .Take(pageSize)
           .ToListAsync(ct);
 
+      var imageMap = await BuildCategoryImageUrlMapAsync(db, categories.Select(c => c.Id).ToList(), ct);
+
       // Contar productos para cada categoría
       var items = new List<CategoryListItem>();
       foreach (var cat in categories)
@@ -281,7 +308,7 @@ namespace CC.Aplication.Catalog
           Id = cat.Id,
           Name = cat.Name,
           Slug = cat.Slug,
-          ImageUrl = cat.ImageUrl,
+          ImageUrl = imageMap.TryGetValue(cat.Id, out var imageUrl) ? imageUrl : cat.ImageUrl,
           IsActive = cat.IsActive,
           ProductCount = productCount
         });
@@ -318,6 +345,71 @@ namespace CC.Aplication.Catalog
       return slug;
     }
 
+    private async Task UploadOrReplaceCategoryImageAsync(
+        CC.Infraestructure.Tenant.Entities.Category category,
+        CreateCategoryRequest request,
+        CancellationToken ct)
+    {
+      if (request.ImageContent == null || request.ImageSizeBytes is null || request.ImageSizeBytes <= 0)
+      {
+        return;
+      }
+
+      if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
+      {
+        throw new InvalidOperationException("Tenant context not available");
+      }
+
+      if (request.ImageContent.CanSeek)
+      {
+        request.ImageContent.Position = 0;
+      }
+
+      // Categories allow a single image; replace the previous one if present.
+      await _assetService.PurgeByEntityAsync(
+          _tenantAccessor.TenantInfo.Id,
+          module: "category",
+          entityType: "category",
+          entityId: category.Id.ToString(),
+          ct);
+
+      var uploaded = await _assetService.UploadAsync(new UploadAssetCommand
+      {
+        TenantId = _tenantAccessor.TenantInfo.Id,
+        UploadedByUserId = string.IsNullOrWhiteSpace(request.UploadedByUserId) ? "system" : request.UploadedByUserId,
+        Module = "category",
+        EntityType = "category",
+        EntityId = category.Id.ToString(),
+        AssetType = TenantAssetType.Image,
+        Visibility = TenantAssetVisibility.Public,
+        OriginalFileName = request.ImageFileName ?? "category-image",
+        ContentType = request.ImageContentType ?? "application/octet-stream",
+        SizeBytes = request.ImageSizeBytes.Value,
+        Content = request.ImageContent,
+        SetAsPrimary = true
+      }, ct);
+
+      category.ImageUrl = uploaded.StorageKey;
+    }
+
+    private Task UploadOrReplaceCategoryImageAsync(
+        CC.Infraestructure.Tenant.Entities.Category category,
+        UpdateCategoryRequest request,
+        CancellationToken ct)
+    {
+      return UploadOrReplaceCategoryImageAsync(
+          category,
+          new CreateCategoryRequest
+          {
+            UploadedByUserId = request.UploadedByUserId,
+            ImageFileName = request.ImageFileName,
+            ImageContentType = request.ImageContentType,
+            ImageSizeBytes = request.ImageSizeBytes,
+            ImageContent = request.ImageContent
+          },
+          ct);
+    }
+
     private static string RemoveAccents(string text)
     {
       var normalizedString = text.Normalize(System.Text.NormalizationForm.FormD);
@@ -333,6 +425,84 @@ namespace CC.Aplication.Catalog
       }
 
       return stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC);
+    }
+
+    private async Task<string?> ResolveCategoryImagePublicUrlAsync(
+        TenantDbContext db,
+        Guid categoryId,
+        string? storedImageValue,
+        CancellationToken ct)
+    {
+      var entityId = categoryId.ToString().ToLowerInvariant();
+      var asset = await db.TenantAssets
+          .AsNoTracking()
+          .Where(a => a.Module == "category" &&
+                      a.EntityType == "category" &&
+                      a.EntityId == entityId &&
+                      a.LifecycleStatus == TenantAssetLifecycleStatus.Active)
+          .OrderByDescending(a => a.CreatedAt)
+          .FirstOrDefaultAsync(ct);
+
+      if (asset == null)
+      {
+        return BuildPublicUrlFromStorageKey(storedImageValue) ?? storedImageValue;
+      }
+
+      return BuildPublicUrlFromStorageKey(asset.StorageKey)
+          ?? asset.PublicUrl
+          ?? asset.UrlOrPath;
+    }
+
+    private async Task<Dictionary<Guid, string>> BuildCategoryImageUrlMapAsync(
+        TenantDbContext db,
+        IReadOnlyCollection<Guid> categoryIds,
+        CancellationToken ct)
+    {
+      if (categoryIds.Count == 0)
+      {
+        return new Dictionary<Guid, string>();
+      }
+
+      var entityIds = categoryIds.Select(x => x.ToString().ToLowerInvariant()).ToHashSet();
+      var assets = await db.TenantAssets
+          .AsNoTracking()
+          .Where(a => a.Module == "category" &&
+                      a.EntityType == "category" &&
+                      a.EntityId != null &&
+                      entityIds.Contains(a.EntityId) &&
+                      a.LifecycleStatus == TenantAssetLifecycleStatus.Active)
+          .OrderByDescending(a => a.CreatedAt)
+          .ToListAsync(ct);
+
+      var map = new Dictionary<Guid, string>();
+      foreach (var asset in assets)
+      {
+        if (asset.EntityId == null || !Guid.TryParse(asset.EntityId, out var categoryId) || map.ContainsKey(categoryId))
+        {
+          continue;
+        }
+
+        var publicUrl = BuildPublicUrlFromStorageKey(asset.StorageKey)
+          ?? asset.PublicUrl
+          ?? asset.UrlOrPath;
+
+        if (!string.IsNullOrWhiteSpace(publicUrl))
+        {
+          map[categoryId] = publicUrl;
+        }
+      }
+
+      return map;
+    }
+
+    private string? BuildPublicUrlFromStorageKey(string? storageKey)
+    {
+      if (string.IsNullOrWhiteSpace(storageKey) || string.IsNullOrWhiteSpace(_assetsOptions.CloudflareR2.PublicBaseUrl))
+      {
+        return null;
+      }
+
+      return $"{_assetsOptions.CloudflareR2.PublicBaseUrl.TrimEnd('/')}/{storageKey.TrimStart('/')}";
     }
   }
 }

@@ -14,13 +14,16 @@ namespace CC.Aplication.Catalog
     [StringLength(500, ErrorMessage = "La descripción no puede exceder 500 caracteres")]
     public string? Description { get; init; }
 
-    [Url(ErrorMessage = "La URL de la imagen no es válida")]
-    public string? ImageUrl { get; init; }
-
     public bool IsActive { get; init; } = true;
 
     // Preparado para futuro: jerarquía
     public Guid? ParentId { get; init; }
+
+    public string? UploadedByUserId { get; init; }
+    public string? ImageFileName { get; init; }
+    public string? ImageContentType { get; init; }
+    public long? ImageSizeBytes { get; init; }
+    public Stream? ImageContent { get; init; }
   }
 
   /// <summary>
@@ -38,13 +41,16 @@ namespace CC.Aplication.Catalog
     [StringLength(500, ErrorMessage = "La descripción no puede exceder 500 caracteres")]
     public string? Description { get; init; }
 
-    [Url(ErrorMessage = "La URL de la imagen no es válida")]
-    public string? ImageUrl { get; init; }
-
     public bool IsActive { get; init; }
 
     // Preparado para futuro: jerarquía
     public Guid? ParentId { get; init; }
+
+    public string? UploadedByUserId { get; init; }
+    public string? ImageFileName { get; init; }
+    public string? ImageContentType { get; init; }
+    public long? ImageSizeBytes { get; init; }
+    public Stream? ImageContent { get; init; }
   }
 
   /// <summary>

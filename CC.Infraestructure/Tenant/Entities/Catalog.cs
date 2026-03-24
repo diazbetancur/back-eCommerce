@@ -66,7 +66,7 @@ namespace CC.Infraestructure.Tenant.Entities
     }
 
     /// <summary>
-    /// Banner promocional con soporte para web y móvil (PWA)
+    /// Banner promocional
     /// </summary>
     public class Banner
     {
@@ -74,9 +74,8 @@ namespace CC.Infraestructure.Tenant.Entities
         public string Title { get; set; } = string.Empty;
         public string? Subtitle { get; set; }
 
-        // Imágenes responsive
-        public string ImageUrlDesktop { get; set; } = string.Empty; // Recomendado: 1920x600
-        public string? ImageUrlMobile { get; set; } // Recomendado: 768x400 (para PWA)
+        // Almacena la storage key canónica del banner.
+        public string ImageUrl { get; set; } = string.Empty;
 
         // Acción
         public string? TargetUrl { get; set; } // A dónde lleva el click

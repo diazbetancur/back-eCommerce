@@ -162,12 +162,13 @@ namespace Api_eCommerce.Controllers
     [Authorize]
     [RequireModule("catalog", "create")]
     [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType<CategoryResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> Create([FromBody] CreateCategoryRequest request)
+    public async Task<IActionResult> Create([FromForm] CreateCategoryFormRequest request, CancellationToken ct)
     {
       try
       {
@@ -181,7 +182,25 @@ namespace Api_eCommerce.Controllers
           );
         }
 
-        var category = await _categoryService.CreateAsync(request);
+        await using var imageStream = request.Image?.OpenReadStream();
+
+        var appRequest = new CreateCategoryRequest
+        {
+          Name = request.Name,
+          Description = request.Description,
+          IsActive = request.IsActive,
+          ParentId = request.ParentId,
+          UploadedByUserId = User.FindFirst("sub")?.Value
+              ?? User.FindFirst("id")?.Value
+              ?? User.FindFirst("email")?.Value
+              ?? "system",
+          ImageFileName = request.Image?.FileName,
+          ImageContentType = request.Image?.ContentType,
+          ImageSizeBytes = request.Image?.Length,
+          ImageContent = imageStream
+        };
+
+        var category = await _categoryService.CreateAsync(appRequest, ct);
         return CreatedAtAction(nameof(GetById), new { id = category.Id }, category);
       }
       catch (InvalidOperationException ex)
@@ -215,13 +234,14 @@ namespace Api_eCommerce.Controllers
     [Authorize]
     [RequireModule("catalog", "update")]
     [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType<CategoryResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCategoryRequest request)
+    public async Task<IActionResult> Update(Guid id, [FromForm] UpdateCategoryFormRequest request, CancellationToken ct)
     {
       try
       {
@@ -235,7 +255,26 @@ namespace Api_eCommerce.Controllers
           );
         }
 
-        var category = await _categoryService.UpdateAsync(id, request);
+        await using var imageStream = request.Image?.OpenReadStream();
+
+        var appRequest = new UpdateCategoryRequest
+        {
+          Id = id,
+          Name = request.Name,
+          Description = request.Description,
+          IsActive = request.IsActive,
+          ParentId = request.ParentId,
+          UploadedByUserId = User.FindFirst("sub")?.Value
+              ?? User.FindFirst("id")?.Value
+              ?? User.FindFirst("email")?.Value
+              ?? "system",
+          ImageFileName = request.Image?.FileName,
+          ImageContentType = request.Image?.ContentType,
+          ImageSizeBytes = request.Image?.Length,
+          ImageContent = imageStream
+        };
+
+        var category = await _categoryService.UpdateAsync(id, appRequest, ct);
         return Ok(category);
       }
       catch (InvalidOperationException ex)
@@ -308,5 +347,41 @@ namespace Api_eCommerce.Controllers
         );
       }
     }
+  }
+
+  public sealed class CreateCategoryFormRequest
+  {
+    [FromForm(Name = "name")]
+    public string Name { get; init; } = string.Empty;
+
+    [FromForm(Name = "description")]
+    public string? Description { get; init; }
+
+    [FromForm(Name = "isActive")]
+    public bool IsActive { get; init; } = true;
+
+    [FromForm(Name = "parentId")]
+    public Guid? ParentId { get; init; }
+
+    [FromForm(Name = "image")]
+    public IFormFile? Image { get; init; }
+  }
+
+  public sealed class UpdateCategoryFormRequest
+  {
+    [FromForm(Name = "name")]
+    public string Name { get; init; } = string.Empty;
+
+    [FromForm(Name = "description")]
+    public string? Description { get; init; }
+
+    [FromForm(Name = "isActive")]
+    public bool IsActive { get; init; }
+
+    [FromForm(Name = "parentId")]
+    public Guid? ParentId { get; init; }
+
+    [FromForm(Name = "image")]
+    public IFormFile? Image { get; init; }
   }
 }

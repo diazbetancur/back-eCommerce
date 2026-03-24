@@ -18,7 +18,6 @@ namespace CC.Infraestructure.Configurations
         public DbSet<Category> Categories { get; set; }
         public DbSet<ProductProperty> ProductProperties { get; set; }
         public DbSet<ProductImage> ProductImages { get; set; }
-        public DbSet<Banner> Banners { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -50,10 +49,6 @@ namespace CC.Infraestructure.Configurations
             modelBuilder.Entity<ProductImage>().HasKey(c => c.Id);
             modelBuilder.Entity<ProductImage>().Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
             modelBuilder.Entity<ProductImage>().Property(e => e.DateCreated).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-            modelBuilder.Entity<Banner>().HasKey(c => c.Id);
-            modelBuilder.Entity<Banner>().Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
-            modelBuilder.Entity<Banner>().Property(e => e.DateCreated).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             modelBuilder.HasDefaultSchema("Management");
             DisableCascadingDelete(modelBuilder);

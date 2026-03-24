@@ -5,8 +5,10 @@ using Api_eCommerce.Handlers;
 using Api_eCommerce.Metering;
 using Api_eCommerce.Middleware;
 using Api_eCommerce.Workers;
+using CC.Aplication.Assets;
 using CC.Aplication.Admin;
 using CC.Aplication.Services;
+using CC.Domain.Assets;
 using CC.Domain.Interfaces;
 using CC.Domain.Tenancy;
 using CC.Infraestructure.Admin.Entities;
@@ -17,8 +19,10 @@ using CC.Infraestructure.Provisioning;
 using CC.Infraestructure.Sql;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
+using CC.Infraestructure.Services.Assets;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using System.Text.Json.Serialization;
@@ -117,6 +121,7 @@ builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IFeatureService, FeatureService>();
 builder.Services.AddScoped<CC.Aplication.Catalog.ICategoryManagementService, CC.Aplication.Catalog.CategoryManagementService>();
 builder.Services.AddScoped<CC.Aplication.Catalog.IProductService, CC.Aplication.Catalog.ProductService>();
+builder.Services.AddScoped<CC.Aplication.Catalog.IBannerManagementService, CC.Aplication.Catalog.BannerManagementService>();
 
 // Auth services
 // ? DEPRECATED - Ahora usamos UnifiedAuthService
@@ -141,6 +146,20 @@ builder.Services.AddScoped<CC.Aplication.Loyalty.ILoyaltyRewardsService, CC.Apli
 // Store services (multi-location inventory)
 builder.Services.AddScoped<CC.Aplication.Stores.IStoreService, CC.Aplication.Stores.StoreService>();
 builder.Services.AddScoped<CC.Aplication.Stores.IStockService, CC.Aplication.Stores.StockService>();
+
+// ==================== TENANT ASSETS MODULE ====================
+builder.Services
+    .AddOptions<TenantAssetsOptions>()
+    .Bind(builder.Configuration.GetSection(TenantAssetsOptions.SectionName))
+    .Validate(options => !string.IsNullOrWhiteSpace(options.ActiveProvider),
+        "TenantAssets:ActiveProvider is required.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IFileStorageProvider, CloudflareR2FileStorageProvider>();
+builder.Services.AddScoped<IFileValidationService, FileValidationService>();
+builder.Services.AddScoped<ITenantPlanLimitResolver, TenantPlanLimitResolver>();
+builder.Services.AddScoped<ITenantAssetQuotaService, TenantAssetQuotaService>();
+builder.Services.AddScoped<IAssetService, TenantAssetService>();
+builder.Services.AddScoped<ITenantAssetPurgeService, TenantAssetPurgeService>();
 
 // ==================== SWAGGER ====================
 builder.Services.AddMultiTenantSwagger();
@@ -235,6 +254,8 @@ if (!app.Environment.IsEnvironment("Testing"))
         logger.LogInformation("🔄 Applying pending migrations for READY tenant databases...");
         var protector = scope.ServiceProvider.GetRequiredService<ITenantSecretProtector>();
         var tenantFactory = scope.ServiceProvider.GetRequiredService<TenantDbContextFactory>();
+        var tenantSecretsOptions = scope.ServiceProvider.GetRequiredService<IOptions<TenantSecretsOptions>>();
+        var tenantDbTemplate = builder.Configuration["Tenancy:TenantDbTemplate"];
 
         var readyTenants = await adminDb.Tenants
             .Where(t => t.Status == TenantStatus.Ready && !string.IsNullOrWhiteSpace(t.EncryptedConnection))
@@ -244,9 +265,34 @@ if (!app.Environment.IsEnvironment("Testing"))
         {
             try
             {
-                var tenantConnection = protector.Decrypt(tenant.EncryptedConnection!);
+                string tenantConnection;
+
+                try
+                {
+                    tenantConnection = protector.Decrypt(tenant.EncryptedConnection!);
+                }
+                catch (TenantSecretProtectionException ex)
+                {
+                    if (string.IsNullOrWhiteSpace(tenantDbTemplate) || !tenantDbTemplate.Contains("{DbName}"))
+                    {
+                        throw;
+                    }
+
+                    tenantConnection = tenantDbTemplate.Replace("{DbName}", tenant.DbName);
+                    tenant.EncryptedConnection = protector.Encrypt(tenantConnection);
+                    tenant.EncryptionKeyId = tenantSecretsOptions.Value.KeyId;
+                    tenant.EncryptionAlgorithm = tenantSecretsOptions.Value.Algorithm;
+                    tenant.EncryptionVersion = tenantSecretsOptions.Value.Version;
+                    tenant.UpdatedAt = DateTime.UtcNow;
+
+                    logger.LogWarning(ex,
+                        "⚠️ Tenant {TenantSlug} had legacy/invalid encrypted connection format. Rebuilt from template and re-encrypted using AES.",
+                        tenant.Slug);
+                }
+
                 await using var tenantDb = tenantFactory.Create(tenantConnection);
                 await tenantDb.Database.MigrateAsync();
+                await adminDb.SaveChangesAsync();
                 logger.LogInformation("✅ Tenant DB migrated: {TenantSlug}", tenant.Slug);
             }
             catch (Exception tenantEx)

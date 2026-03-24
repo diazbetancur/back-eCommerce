@@ -73,7 +73,6 @@ namespace Api_eCommerce.Handlers
         {
             services.AddScoped<ICategoryService, CategoryService>();
             services.AddScoped<IProductService, ProductService>();
-            services.AddScoped<IBannerService, BannerService>();
             services.AddScoped<IFileStorageService, CC.Infraestructure.Services.GoogleStorageService>(provider =>
                 new CC.Infraestructure.Services.GoogleStorageService(provider.GetRequiredService<IConfiguration>()));
             //services.AddScoped<IAuditService, AuditService>();
@@ -86,7 +85,6 @@ namespace Api_eCommerce.Handlers
             services.AddScoped<IQueryableUnitOfWork, DBContext>();
             services.AddScoped<ICategoryRepository, CategoryRepository>();
             services.AddScoped<IProductRepository, ProductRepository>();
-            services.AddScoped<IBannerRepository, BannerRepository>();
             //services.AddScoped<IAuditRepository, AuditRepository>();
         }
     }

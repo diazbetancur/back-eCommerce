@@ -11,46 +11,56 @@ namespace CC.Infraestructure.TenantDbMigrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_UserProfiles_UserAccount_Id",
-                schema: "public",
-                table: "UserProfiles");
+            migrationBuilder.Sql(@"
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'FK_UserProfiles_UserAccount_Id'
+    ) THEN
+        ALTER TABLE public.""UserProfiles"" DROP CONSTRAINT ""FK_UserProfiles_UserAccount_Id"";
+    END IF;
+END $$;
+");
 
-            migrationBuilder.DropTable(
-                name: "UserAccount",
-                schema: "public");
+            migrationBuilder.Sql(@"
+DROP TABLE IF EXISTS public.""UserAccount"";
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "UserAccount",
-                schema: "public",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    PasswordHash = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    PasswordSalt = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_UserAccount", x => x.Id);
-                });
+            migrationBuilder.Sql(@"
+CREATE TABLE IF NOT EXISTS public.""UserAccount"" (
+    ""Id"" uuid NOT NULL,
+    ""CreatedAt"" timestamp with time zone NOT NULL,
+    ""Email"" character varying(255) NOT NULL,
+    ""IsActive"" boolean NOT NULL,
+    ""PasswordHash"" character varying(500) NOT NULL,
+    ""PasswordSalt"" character varying(500) NOT NULL,
+    ""UpdatedAt"" timestamp with time zone NULL,
+    CONSTRAINT ""PK_UserAccount"" PRIMARY KEY (""Id"")
+);
+");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_UserProfiles_UserAccount_Id",
-                schema: "public",
-                table: "UserProfiles",
-                column: "Id",
-                principalSchema: "public",
-                principalTable: "UserAccount",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(@"
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'FK_UserProfiles_UserAccount_Id'
+    ) THEN
+        ALTER TABLE public.""UserProfiles""
+        ADD CONSTRAINT ""FK_UserProfiles_UserAccount_Id""
+        FOREIGN KEY (""Id"")
+        REFERENCES public.""UserAccount"" (""Id"")
+        ON DELETE CASCADE;
+    END IF;
+END $$;
+");
         }
     }
 }
