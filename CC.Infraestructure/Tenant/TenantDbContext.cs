@@ -373,6 +373,7 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.Sku).HasMaxLength(100);
         entity.Property(e => e.Price).HasPrecision(18, 2);
         entity.Property(e => e.CompareAtPrice).HasPrecision(18, 2);
+        entity.Property(e => e.TaxPercentage).HasPrecision(5, 2);
         entity.Property(e => e.Tags).HasMaxLength(500);
         entity.Property(e => e.Brand).HasMaxLength(100);
 
@@ -380,6 +381,8 @@ namespace CC.Infraestructure.Tenant
         entity.HasIndex(e => e.Sku);
         entity.HasIndex(e => e.IsActive);
         entity.HasIndex(e => e.IsFeatured);
+        entity.HasIndex(e => e.IsOnSale);
+        entity.HasIndex(e => e.IsTaxIncluded);
         // Índice para búsqueda full-text (typeahead)
         entity.HasIndex(e => e.Name);
         entity.HasIndex(e => e.Tags);

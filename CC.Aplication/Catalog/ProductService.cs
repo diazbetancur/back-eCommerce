@@ -49,6 +49,7 @@ namespace CC.Aplication.Catalog
     public async Task<ProductResponseDto> CreateAsync(CreateProductDto dto, CancellationToken ct = default)
     {
       ValidateTenantContext();
+      ValidateTaxConfiguration(dto.IsTaxIncluded, dto.TaxPercentage);
 
       await using var db = _dbFactory.Create();
 
@@ -69,6 +70,9 @@ namespace CC.Aplication.Catalog
         TrackInventory = dto.TrackInventory,
         IsActive = dto.IsActive,
         IsFeatured = dto.IsFeatured,
+        IsOnSale = dto.IsOnSale,
+        IsTaxIncluded = dto.IsTaxIncluded,
+        TaxPercentage = dto.TaxPercentage,
         Tags = dto.Tags?.Trim(),
         Brand = dto.Brand?.Trim(),
         MetaTitle = dto.MetaTitle?.Trim(),
@@ -156,6 +160,10 @@ namespace CC.Aplication.Catalog
         throw new InvalidOperationException($"Product {id} not found");
       }
 
+      var effectiveIsTaxIncluded = dto.IsTaxIncluded ?? product.IsTaxIncluded;
+      var effectiveTaxPercentage = dto.TaxPercentage ?? product.TaxPercentage;
+      ValidateTaxConfiguration(effectiveIsTaxIncluded, effectiveTaxPercentage);
+
       // Actualizar slug si cambió el nombre
       if (!string.IsNullOrEmpty(dto.Name) && dto.Name != product.Name)
       {
@@ -188,6 +196,9 @@ namespace CC.Aplication.Catalog
       product.TrackInventory = dto.TrackInventory ?? product.TrackInventory;
       product.IsActive = dto.IsActive ?? product.IsActive;
       product.IsFeatured = dto.IsFeatured ?? product.IsFeatured;
+      product.IsOnSale = dto.IsOnSale ?? product.IsOnSale;
+      product.IsTaxIncluded = dto.IsTaxIncluded ?? product.IsTaxIncluded;
+      product.TaxPercentage = dto.TaxPercentage ?? product.TaxPercentage;
       product.Tags = dto.Tags?.Trim() ?? product.Tags;
       product.Brand = dto.Brand?.Trim() ?? product.Brand;
       product.MetaTitle = dto.MetaTitle?.Trim() ?? product.MetaTitle;
@@ -539,6 +550,9 @@ namespace CC.Aplication.Catalog
         TrackInventory = product.TrackInventory,
         IsActive = product.IsActive,
         IsFeatured = product.IsFeatured,
+        IsOnSale = product.IsOnSale,
+        IsTaxIncluded = product.IsTaxIncluded,
+        TaxPercentage = product.TaxPercentage,
         Tags = product.Tags,
         Brand = product.Brand,
         MetaTitle = product.MetaTitle,
@@ -602,6 +616,19 @@ namespace CC.Aplication.Catalog
 
       return dto;
     }
+
+    private static void ValidateTaxConfiguration(bool isTaxIncluded, decimal? taxPercentage)
+    {
+      if (taxPercentage.HasValue && (taxPercentage.Value < 0 || taxPercentage.Value > 100))
+      {
+        throw new InvalidOperationException("TaxPercentage debe estar entre 0 y 100");
+      }
+
+      if (isTaxIncluded && !taxPercentage.HasValue)
+      {
+        throw new InvalidOperationException("TaxPercentage es requerido cuando IsTaxIncluded es true");
+      }
+    }
   }
 
   // ==================== DTOs ====================
@@ -618,6 +645,9 @@ namespace CC.Aplication.Catalog
     public bool TrackInventory { get; init; } = true;
     public bool IsActive { get; init; } = true;
     public bool IsFeatured { get; init; } = false;
+    public bool IsOnSale { get; init; } = false;
+    public bool IsTaxIncluded { get; init; } = false;
+    public decimal? TaxPercentage { get; init; }
     public string? Tags { get; init; }
     public string? Brand { get; init; }
     public List<InitialStoreStockDto>? InitialStoreStock { get; init; } // Stock inicial por tienda
@@ -639,6 +669,9 @@ namespace CC.Aplication.Catalog
     public bool? TrackInventory { get; init; }
     public bool? IsActive { get; init; }
     public bool? IsFeatured { get; init; }
+    public bool? IsOnSale { get; init; }
+    public bool? IsTaxIncluded { get; init; }
+    public decimal? TaxPercentage { get; init; }
     public string? Tags { get; init; }
     public string? Brand { get; init; }
     public string? MetaTitle { get; init; }
@@ -661,6 +694,9 @@ namespace CC.Aplication.Catalog
     public bool TrackInventory { get; set; }
     public bool IsActive { get; set; }
     public bool IsFeatured { get; set; }
+    public bool IsOnSale { get; set; }
+    public bool IsTaxIncluded { get; set; }
+    public decimal? TaxPercentage { get; set; }
     public string? Tags { get; set; }
     public string? Brand { get; set; }
     public string? MetaTitle { get; set; }

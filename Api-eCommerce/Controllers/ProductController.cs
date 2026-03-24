@@ -1,6 +1,7 @@
 using Api_eCommerce.Authorization;
 using CC.Aplication.Catalog;
 using CC.Infraestructure.Tenancy;
+using CC.Domain.Assets;
 using CC.Domain.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,15 +18,18 @@ namespace Api_eCommerce.Controllers
   public class ProductAdminController : ControllerBase
   {
     private readonly IProductService _productService;
+    private readonly IAssetService _assetService;
     private readonly ITenantResolver _tenantResolver;
     private readonly ILogger<ProductAdminController> _logger;
 
     public ProductAdminController(
         IProductService productService,
+        IAssetService assetService,
         ITenantResolver tenantResolver,
         ILogger<ProductAdminController> logger)
     {
       _productService = productService;
+      _assetService = assetService;
       _tenantResolver = tenantResolver;
       _logger = logger;
     }
@@ -189,6 +193,7 @@ namespace Api_eCommerce.Controllers
     /// <returns>Producto creado</returns>
     [HttpPost]
     [RequireModule("catalog", "create")]
+    [Consumes("application/json")]
     [ProducesResponseType<ProductResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -258,6 +263,121 @@ namespace Api_eCommerce.Controllers
     }
 
     /// <summary>
+    /// Crea un nuevo producto con carga de media (imagen principal, galería y videos)
+    /// </summary>
+    [HttpPost]
+    [RequireModule("catalog", "create")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<ProductResponseDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> CreateProductForm(
+        [FromForm] CreateProductFormRequest request,
+        CancellationToken ct)
+    {
+      try
+      {
+        var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+        if (tenantContext == null)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status400BadRequest,
+              title: "Tenant Not Resolved",
+              detail: "Unable to resolve tenant from request"
+          );
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+          return ValidationProblem(new ValidationProblemDetails
+          {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Validation Error",
+            Errors = new Dictionary<string, string[]>
+            {
+              { "Name", new[] { "El nombre del producto es requerido" } }
+            }
+          });
+        }
+
+        if (request.Price <= 0)
+        {
+          return ValidationProblem(new ValidationProblemDetails
+          {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Validation Error",
+            Errors = new Dictionary<string, string[]>
+            {
+              { "Price", new[] { "El precio debe ser mayor a 0" } }
+            }
+          });
+        }
+
+        var dto = new CreateProductDto
+        {
+          Name = request.Name,
+          Sku = request.Sku,
+          Description = request.Description,
+          ShortDescription = request.ShortDescription,
+          Price = request.Price,
+          CompareAtPrice = request.CompareAtPrice,
+          Stock = request.Stock,
+          TrackInventory = request.TrackInventory,
+          IsActive = request.IsActive,
+          IsFeatured = request.IsFeatured,
+          IsOnSale = request.IsOnSale,
+          IsTaxIncluded = request.IsTaxIncluded,
+          TaxPercentage = request.TaxPercentage,
+          Tags = request.Tags,
+          Brand = request.Brand,
+          MetaTitle = request.MetaTitle,
+          MetaDescription = request.MetaDescription,
+          CategoryIds = request.CategoryIds,
+          InitialStoreStock = request.InitialStoreStock
+        };
+
+        var created = await _productService.CreateAsync(dto, ct);
+        var userId = ResolveUserId();
+
+        await UploadProductMediaAsync(
+            created.Id,
+            tenantContext.TenantId,
+            userId,
+            request.MainImage,
+            request.Images,
+            request.Videos,
+            ct);
+
+        var product = await _productService.GetByIdAsync(created.Id, ct) ?? created;
+
+        return CreatedAtAction(
+            nameof(GetProductById),
+            new { id = product.Id },
+            product
+        );
+      }
+      catch (InvalidOperationException ex)
+      {
+        return Problem(
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Validation Error",
+            detail: ex.Message
+        );
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "Error al crear producto por form-data");
+        return Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Error al crear producto",
+            detail: ex.Message
+        );
+      }
+    }
+
+    /// <summary>
     /// Actualiza un producto existente
     /// </summary>
     /// <param name="id">ID del producto</param>
@@ -266,6 +386,7 @@ namespace Api_eCommerce.Controllers
     /// <returns>Producto actualizado</returns>
     [HttpPut("{id:guid}")]
     [RequireModule("catalog", "update")]
+    [Consumes("application/json")]
     [ProducesResponseType<ProductResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -319,6 +440,123 @@ namespace Api_eCommerce.Controllers
       catch (Exception ex)
       {
         _logger.LogError(ex, "Error al actualizar producto {ProductId}", id);
+        return Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Error al actualizar producto",
+            detail: ex.Message
+        );
+      }
+    }
+
+    /// <summary>
+    /// Actualiza un producto existente con carga de media
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    [RequireModule("catalog", "update")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<ProductResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UpdateProductForm(
+        Guid id,
+        [FromForm] UpdateProductFormRequest request,
+        CancellationToken ct)
+    {
+      try
+      {
+        var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+        if (tenantContext == null)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status400BadRequest,
+              title: "Tenant Not Resolved",
+              detail: "Unable to resolve tenant from request"
+          );
+        }
+
+        if (request.Price.HasValue && request.Price <= 0)
+        {
+          return ValidationProblem(new ValidationProblemDetails
+          {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Validation Error",
+            Errors = new Dictionary<string, string[]>
+            {
+              { "Price", new[] { "El precio debe ser mayor a 0" } }
+            }
+          });
+        }
+
+        var dto = new UpdateProductDto
+        {
+          Name = request.Name,
+          Sku = request.Sku,
+          Description = request.Description,
+          ShortDescription = request.ShortDescription,
+          Price = request.Price,
+          CompareAtPrice = request.CompareAtPrice,
+          Stock = request.Stock,
+          TrackInventory = request.TrackInventory,
+          IsActive = request.IsActive,
+          IsFeatured = request.IsFeatured,
+          IsOnSale = request.IsOnSale,
+          IsTaxIncluded = request.IsTaxIncluded,
+          TaxPercentage = request.TaxPercentage,
+          Tags = request.Tags,
+          Brand = request.Brand,
+          MetaTitle = request.MetaTitle,
+          MetaDescription = request.MetaDescription,
+          CategoryIds = request.CategoryIds
+        };
+
+        await _productService.UpdateAsync(id, dto, ct);
+
+        var userId = ResolveUserId();
+        await UploadProductMediaAsync(
+            id,
+            tenantContext.TenantId,
+            userId,
+            request.MainImage,
+            request.Images,
+            request.Videos,
+            ct);
+
+        var product = await _productService.GetByIdAsync(id, ct);
+        if (product == null)
+        {
+          return NotFound(new ProblemDetails
+          {
+            Status = StatusCodes.Status404NotFound,
+            Title = "Product Not Found",
+            Detail = $"Producto con ID {id} no encontrado"
+          });
+        }
+
+        return Ok(product);
+      }
+      catch (InvalidOperationException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+      {
+        return NotFound(new ProblemDetails
+        {
+          Status = StatusCodes.Status404NotFound,
+          Title = "Product Not Found",
+          Detail = ex.Message
+        });
+      }
+      catch (InvalidOperationException ex)
+      {
+        return Problem(
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Validation Error",
+            detail: ex.Message
+        );
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "Error al actualizar producto {ProductId} por form-data", id);
         return Problem(
             statusCode: StatusCodes.Status500InternalServerError,
             title: "Error al actualizar producto",
@@ -505,6 +743,208 @@ namespace Api_eCommerce.Controllers
         );
       }
     }
+
+    private async Task UploadProductMediaAsync(
+        Guid productId,
+        Guid tenantId,
+        string userId,
+        IFormFile? mainImage,
+        List<IFormFile>? images,
+        List<IFormFile>? videos,
+        CancellationToken ct)
+    {
+      if (mainImage is { Length: > 0 })
+      {
+        await UploadAssetAsync(productId, tenantId, userId, mainImage, TenantAssetType.Image, setAsPrimary: true, ct);
+      }
+
+      if (images is { Count: > 0 })
+      {
+        foreach (var image in images.Where(f => f is { Length: > 0 }))
+        {
+          await UploadAssetAsync(productId, tenantId, userId, image, TenantAssetType.Image, setAsPrimary: false, ct);
+        }
+      }
+
+      if (videos is { Count: > 0 })
+      {
+        foreach (var video in videos.Where(f => f is { Length: > 0 }))
+        {
+          await UploadAssetAsync(productId, tenantId, userId, video, TenantAssetType.Video, setAsPrimary: false, ct);
+        }
+      }
+    }
+
+    private async Task UploadAssetAsync(
+        Guid productId,
+        Guid tenantId,
+        string userId,
+        IFormFile file,
+        TenantAssetType assetType,
+        bool setAsPrimary,
+        CancellationToken ct)
+    {
+      await using var stream = file.OpenReadStream();
+
+      await _assetService.UploadAsync(new UploadAssetCommand
+      {
+        TenantId = tenantId,
+        UploadedByUserId = userId,
+        Module = "product",
+        EntityType = "product",
+        EntityId = productId.ToString(),
+        AssetType = assetType,
+        Visibility = TenantAssetVisibility.Public,
+        OriginalFileName = file.FileName,
+        ContentType = file.ContentType,
+        SizeBytes = file.Length,
+        Content = stream,
+        SetAsPrimary = setAsPrimary
+      }, ct);
+    }
+
+    private string ResolveUserId()
+    {
+      return User.FindFirst("sub")?.Value
+        ?? User.FindFirst("id")?.Value
+        ?? User.FindFirst("email")?.Value
+        ?? "system";
+    }
+  }
+
+  public sealed class CreateProductFormRequest
+  {
+    [FromForm(Name = "name")]
+    public string Name { get; init; } = string.Empty;
+
+    [FromForm(Name = "sku")]
+    public string? Sku { get; init; }
+
+    [FromForm(Name = "description")]
+    public string? Description { get; init; }
+
+    [FromForm(Name = "shortDescription")]
+    public string? ShortDescription { get; init; }
+
+    [FromForm(Name = "price")]
+    public decimal Price { get; init; }
+
+    [FromForm(Name = "compareAtPrice")]
+    public decimal? CompareAtPrice { get; init; }
+
+    [FromForm(Name = "stock")]
+    public int Stock { get; init; } = 0;
+
+    [FromForm(Name = "trackInventory")]
+    public bool TrackInventory { get; init; } = true;
+
+    [FromForm(Name = "isActive")]
+    public bool IsActive { get; init; } = true;
+
+    [FromForm(Name = "isFeatured")]
+    public bool IsFeatured { get; init; }
+
+    [FromForm(Name = "isOnSale")]
+    public bool IsOnSale { get; init; }
+
+    [FromForm(Name = "isTaxIncluded")]
+    public bool IsTaxIncluded { get; init; }
+
+    [FromForm(Name = "taxPercentage")]
+    public decimal? TaxPercentage { get; init; }
+
+    [FromForm(Name = "tags")]
+    public string? Tags { get; init; }
+
+    [FromForm(Name = "brand")]
+    public string? Brand { get; init; }
+
+    [FromForm(Name = "metaTitle")]
+    public string? MetaTitle { get; init; }
+
+    [FromForm(Name = "metaDescription")]
+    public string? MetaDescription { get; init; }
+
+    [FromForm(Name = "categoryIds")]
+    public List<Guid>? CategoryIds { get; init; }
+
+    [FromForm(Name = "mainImage")]
+    public IFormFile? MainImage { get; init; }
+
+    [FromForm(Name = "images")]
+    public List<IFormFile>? Images { get; init; }
+
+    [FromForm(Name = "videos")]
+    public List<IFormFile>? Videos { get; init; }
+
+    [FromForm(Name = "initialStoreStock")]
+    public List<InitialStoreStockDto>? InitialStoreStock { get; init; }
+  }
+
+  public sealed class UpdateProductFormRequest
+  {
+    [FromForm(Name = "name")]
+    public string? Name { get; init; }
+
+    [FromForm(Name = "sku")]
+    public string? Sku { get; init; }
+
+    [FromForm(Name = "description")]
+    public string? Description { get; init; }
+
+    [FromForm(Name = "shortDescription")]
+    public string? ShortDescription { get; init; }
+
+    [FromForm(Name = "price")]
+    public decimal? Price { get; init; }
+
+    [FromForm(Name = "compareAtPrice")]
+    public decimal? CompareAtPrice { get; init; }
+
+    [FromForm(Name = "stock")]
+    public int? Stock { get; init; }
+
+    [FromForm(Name = "trackInventory")]
+    public bool? TrackInventory { get; init; }
+
+    [FromForm(Name = "isActive")]
+    public bool? IsActive { get; init; }
+
+    [FromForm(Name = "isFeatured")]
+    public bool? IsFeatured { get; init; }
+
+    [FromForm(Name = "isOnSale")]
+    public bool? IsOnSale { get; init; }
+
+    [FromForm(Name = "isTaxIncluded")]
+    public bool? IsTaxIncluded { get; init; }
+
+    [FromForm(Name = "taxPercentage")]
+    public decimal? TaxPercentage { get; init; }
+
+    [FromForm(Name = "tags")]
+    public string? Tags { get; init; }
+
+    [FromForm(Name = "brand")]
+    public string? Brand { get; init; }
+
+    [FromForm(Name = "metaTitle")]
+    public string? MetaTitle { get; init; }
+
+    [FromForm(Name = "metaDescription")]
+    public string? MetaDescription { get; init; }
+
+    [FromForm(Name = "categoryIds")]
+    public List<Guid>? CategoryIds { get; init; }
+
+    [FromForm(Name = "mainImage")]
+    public IFormFile? MainImage { get; init; }
+
+    [FromForm(Name = "images")]
+    public List<IFormFile>? Images { get; init; }
+
+    [FromForm(Name = "videos")]
+    public List<IFormFile>? Videos { get; init; }
   }
 
   // ==================== CONTROLLER PÚBLICO ====================

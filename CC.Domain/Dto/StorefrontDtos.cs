@@ -61,6 +61,9 @@ namespace CC.Domain.Dto
     public string? Brand { get; init; }
     public bool InStock { get; init; }
     public bool IsFeatured { get; init; }
+    public bool IsOnSale { get; init; }
+    public bool IsTaxIncluded { get; init; }
+    public decimal? TaxPercentage { get; init; }
     public List<StoreCategoryRefDto> Categories { get; init; } = new();
   }
 
@@ -78,6 +81,9 @@ namespace CC.Domain.Dto
     public int? Stock { get; init; }
     public bool InStock { get; init; }
     public bool IsFeatured { get; init; }
+    public bool IsOnSale { get; init; }
+    public bool IsTaxIncluded { get; init; }
+    public decimal? TaxPercentage { get; init; }
     public List<StoreProductImageDto> Images { get; init; } = new();
     public List<StoreCategoryRefDto> Categories { get; init; } = new();
     public List<string> Tags { get; init; } = new();

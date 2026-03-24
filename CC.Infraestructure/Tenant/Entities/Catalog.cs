@@ -17,6 +17,9 @@ namespace CC.Infraestructure.Tenant.Entities
         public bool TrackInventory { get; set; } = true; // Si false, no validar stock
         public bool IsActive { get; set; } = true;
         public bool IsFeatured { get; set; } = false; // Para mostrar en home
+        public bool IsOnSale { get; set; } = false; // Producto en oferta
+        public bool IsTaxIncluded { get; set; } = false; // El precio incluye impuesto
+        public decimal? TaxPercentage { get; set; } // % de impuesto aplicado al precio
         public string? Tags { get; set; } // "verano,oferta,nuevo" - para búsqueda
         public string? Brand { get; set; }
 

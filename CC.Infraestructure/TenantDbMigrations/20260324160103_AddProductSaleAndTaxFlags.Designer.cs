@@ -3,6 +3,7 @@ using System;
 using CC.Infraestructure.Tenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CC.Infraestructure.TenantDbMigrations
 {
     [DbContext(typeof(TenantDbContext))]
-    partial class TenantDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260324160103_AddProductSaleAndTaxFlags")]
+    partial class AddProductSaleAndTaxFlags
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -811,10 +814,6 @@ namespace CC.Infraestructure.TenantDbMigrations
                     b.Property<string>("Tags")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
-
-                    b.Property<decimal?>("TaxPercentage")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
 
                     b.Property<bool>("TrackInventory")
                         .HasColumnType("boolean");

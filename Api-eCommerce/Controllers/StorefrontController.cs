@@ -297,7 +297,10 @@ namespace Api_eCommerce.Controllers
             p.Brand,
             p.TrackInventory,
             p.Stock,
-            p.IsFeatured
+            p.IsFeatured,
+            p.IsOnSale,
+            p.IsTaxIncluded,
+            p.TaxPercentage
           })
           .ToListAsync();
 
@@ -326,6 +329,9 @@ namespace Api_eCommerce.Controllers
         Brand = p.Brand,
         InStock = !p.TrackInventory || p.Stock > 0,
         IsFeatured = p.IsFeatured,
+        IsOnSale = p.IsOnSale,
+        IsTaxIncluded = p.IsTaxIncluded,
+        TaxPercentage = p.TaxPercentage,
         Categories = productCategories
             .Where(pc => pc.ProductId == p.Id)
             .Select(pc => new StoreCategoryRefDto { Name = pc.Name, Slug = pc.Slug })
@@ -372,7 +378,10 @@ namespace Api_eCommerce.Controllers
             p.MainImageUrl,
             p.Brand,
             p.TrackInventory,
-            p.Stock
+            p.Stock,
+            p.IsOnSale,
+            p.IsTaxIncluded,
+            p.TaxPercentage
           })
           .ToListAsync();
 
@@ -400,6 +409,9 @@ namespace Api_eCommerce.Controllers
         Brand = p.Brand,
         InStock = !p.TrackInventory || p.Stock > 0,
         IsFeatured = true,
+        IsOnSale = p.IsOnSale,
+        IsTaxIncluded = p.IsTaxIncluded,
+        TaxPercentage = p.TaxPercentage,
         Categories = productCategories
             .Where(pc => pc.ProductId == p.Id)
             .Select(pc => new StoreCategoryRefDto { Name = pc.Name, Slug = pc.Slug })
@@ -500,6 +512,9 @@ namespace Api_eCommerce.Controllers
         Stock = product.TrackInventory ? product.Stock : null,
         InStock = !product.TrackInventory || product.Stock > 0,
         IsFeatured = product.IsFeatured,
+        IsOnSale = product.IsOnSale,
+        IsTaxIncluded = product.IsTaxIncluded,
+        TaxPercentage = product.TaxPercentage,
         Images = product.Images?
               .OrderBy(i => i.Order)
               .Select(i => new StoreProductImageDto
