@@ -124,10 +124,6 @@ builder.Services.AddScoped<CC.Aplication.Catalog.IProductService, CC.Aplication.
 builder.Services.AddScoped<CC.Aplication.Catalog.IBannerManagementService, CC.Aplication.Catalog.BannerManagementService>();
 builder.Services.AddScoped<CC.Aplication.Catalog.IPopupManagementService, CC.Aplication.Catalog.PopupManagementService>();
 
-// Auth services
-// ? DEPRECATED - Ahora usamos UnifiedAuthService
-// builder.Services.AddScoped<CC.Aplication.Auth.IAuthService, CC.Aplication.Auth.AuthService>();
-// builder.Services.AddScoped<CC.Aplication.TenantAuth.ITenantAuthService, CC.Aplication.TenantAuth.TenantAuthService>();
 
 // ? NUEVO: Servicio unificado de autenticaci�n
 builder.Services.AddScoped<CC.Aplication.Auth.IUnifiedAuthService, CC.Aplication.Auth.UnifiedAuthService>();
@@ -212,13 +208,9 @@ if (!app.Environment.IsEnvironment("Testing"))
         var adminDb = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-
-        // En Aiven Cloud, necesitamos crear la DB usando 'defaultdb' como base de mantenimiento
         var adminCs = config.GetConnectionString("AdminDb");
         var csb = new NpgsqlConnectionStringBuilder(adminCs);
         var targetDb = csb.Database;
-
-        // Conectar a 'defaultdb' (base por defecto en Aiven) para crear la DB si no existe
         csb.Database = "defaultdb";
         var maintenanceCs = csb.ToString();
 
@@ -255,8 +247,6 @@ if (!app.Environment.IsEnvironment("Testing"))
         logger.LogInformation("🔄 Applying pending migrations for READY tenant databases...");
         var protector = scope.ServiceProvider.GetRequiredService<ITenantSecretProtector>();
         var tenantFactory = scope.ServiceProvider.GetRequiredService<TenantDbContextFactory>();
-        var tenantSecretsOptions = scope.ServiceProvider.GetRequiredService<IOptions<TenantSecretsOptions>>();
-        var tenantDbTemplate = builder.Configuration["Tenancy:TenantDbTemplate"];
 
         var readyTenants = await adminDb.Tenants
             .Where(t => t.Status == TenantStatus.Ready && !string.IsNullOrWhiteSpace(t.EncryptedConnection))
@@ -266,34 +256,10 @@ if (!app.Environment.IsEnvironment("Testing"))
         {
             try
             {
-                string tenantConnection;
-
-                try
-                {
-                    tenantConnection = protector.Decrypt(tenant.EncryptedConnection!);
-                }
-                catch (TenantSecretProtectionException ex)
-                {
-                    if (string.IsNullOrWhiteSpace(tenantDbTemplate) || !tenantDbTemplate.Contains("{DbName}"))
-                    {
-                        throw;
-                    }
-
-                    tenantConnection = tenantDbTemplate.Replace("{DbName}", tenant.DbName);
-                    tenant.EncryptedConnection = protector.Encrypt(tenantConnection);
-                    tenant.EncryptionKeyId = tenantSecretsOptions.Value.KeyId;
-                    tenant.EncryptionAlgorithm = tenantSecretsOptions.Value.Algorithm;
-                    tenant.EncryptionVersion = tenantSecretsOptions.Value.Version;
-                    tenant.UpdatedAt = DateTime.UtcNow;
-
-                    logger.LogWarning(ex,
-                        "⚠️ Tenant {TenantSlug} had legacy/invalid encrypted connection format. Rebuilt from template and re-encrypted using AES.",
-                        tenant.Slug);
-                }
+                var tenantConnection = protector.Decrypt(tenant.EncryptedConnection!);
 
                 await using var tenantDb = tenantFactory.Create(tenantConnection);
                 await tenantDb.Database.MigrateAsync();
-                await adminDb.SaveChangesAsync();
                 logger.LogInformation("✅ Tenant DB migrated: {TenantSlug}", tenant.Slug);
             }
             catch (Exception tenantEx)
@@ -361,27 +327,14 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 
 app.MapPublicTenantConfig();
 
-// ==================== STOREFRONT ENDPOINTS (Public) ====================
-// ✅ MIGRADO: StorefrontController (público)
-// Endpoints públicos del catálogo que requieren X-Tenant-Slug pero NO autenticación
-// var storefrontGroup = app.MapGroup("");
-// storefrontGroup.MapGroup("").MapStorefrontEndpoints();
 
 // ==================== TENANT ENDPOINTS ====================
 // NOTA: El middleware TenantResolutionMiddleware ya se ejecuta globalmente
 var tenantGroup = app.MapGroup("");
 tenantGroup.MapGroup("").MapFeatureFlagsEndpoints();
 tenantGroup.MapGroup("").MapTenantAuth();
-// tenantGroup.MapGroup("").MapPermissionsEndpoints();  // ✅ MIGRADO: PermissionsController
 tenantGroup.MapGroup("").MapTenantAdminEndpoints(); // Ya incluye /admin/products
-// tenantGroup.MapGroup("").MapCatalogEndpoints();  // ✅ MIGRADO: ProductController (público)
-// tenantGroup.MapGroup("").MapCategoryEndpoints();  // ✅ MIGRADO: CategoryController
-// tenantGroup.MapGroup("").MapProductEndpoints();  // ✅ MIGRADO: ProductAdminController
-// tenantGroup.MapGroup("").MapCartEndpoints();  // ✅ MIGRADO: CartController
-// tenantGroup.MapGroup("").MapCheckoutEndpoints();  // ✅ MIGRADO: CheckoutController
-// tenantGroup.MapGroup("").MapOrdersEndpoints();  // ✅ MIGRADO: OrdersController
-// tenantGroup.MapGroup("").MapFavoritesEndpoints();  // ✅ MIGRADO: FavoritesController
-// tenantGroup.MapGroup("").MapLoyaltyEndpoints();  // ✅ MIGRADO: LoyaltyController
+
 
 // ==================== CONTROLLERS ====================
 // Los controllers ahora pasan por TenantResolutionMiddleware (agregado globalmente)
