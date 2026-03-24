@@ -16,6 +16,14 @@ namespace CC.Domain.Dto
     public string Position { get; init; } = "hero";
   }
 
+  public record StorePopupDto
+  {
+    public Guid Id { get; init; }
+    public string? ImageUrl { get; init; }
+    public string? TargetUrl { get; init; }
+    public string? ButtonText { get; init; }
+  }
+
   // ==================== CATEGORY DTOs ====================
   public record StoreCategoryDto
   {

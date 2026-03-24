@@ -624,9 +624,9 @@ namespace CC.Aplication.Catalog
         throw new InvalidOperationException("TaxPercentage debe estar entre 0 y 100");
       }
 
-      if (isTaxIncluded && !taxPercentage.HasValue)
+      if (!isTaxIncluded && !taxPercentage.HasValue)
       {
-        throw new InvalidOperationException("TaxPercentage es requerido cuando IsTaxIncluded es true");
+        throw new InvalidOperationException("TaxPercentage es requerido cuando IsTaxIncluded es false");
       }
     }
   }

@@ -47,6 +47,7 @@ namespace CC.Infraestructure.Tenant
     public DbSet<TenantEntities.ProductCategory> ProductCategories => Set<TenantEntities.ProductCategory>();
     public DbSet<TenantEntities.ProductImage> ProductImages => Set<TenantEntities.ProductImage>();
     public DbSet<TenantEntities.Banner> Banners => Set<TenantEntities.Banner>();
+    public DbSet<TenantEntities.Popup> Popups => Set<TenantEntities.Popup>();
     public DbSet<TenantEntities.TenantAsset> TenantAssets => Set<TenantEntities.TenantAsset>();
     public DbSet<TenantEntities.TenantAssetQuotaSnapshot> TenantAssetQuotaSnapshots => Set<TenantEntities.TenantAssetQuotaSnapshot>();
     #endregion
@@ -431,6 +432,18 @@ namespace CC.Infraestructure.Tenant
         entity.HasIndex(e => e.IsActive);
         entity.HasIndex(e => e.Position);
         entity.HasIndex(e => e.DisplayOrder);
+      });
+
+      modelBuilder.Entity<TenantEntities.Popup>(entity =>
+      {
+        entity.ToTable("Popups");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.ImageUrl).HasMaxLength(500);
+        entity.Property(e => e.TargetUrl).HasMaxLength(500);
+        entity.Property(e => e.ButtonText).HasMaxLength(100);
+        entity.HasIndex(e => e.IsActive);
+        entity.HasIndex(e => e.StartDate);
+        entity.HasIndex(e => e.EndDate);
       });
 
       modelBuilder.Entity<TenantEntities.TenantAsset>(entity =>

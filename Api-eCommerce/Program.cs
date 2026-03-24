@@ -122,6 +122,7 @@ builder.Services.AddScoped<IFeatureService, FeatureService>();
 builder.Services.AddScoped<CC.Aplication.Catalog.ICategoryManagementService, CC.Aplication.Catalog.CategoryManagementService>();
 builder.Services.AddScoped<CC.Aplication.Catalog.IProductService, CC.Aplication.Catalog.ProductService>();
 builder.Services.AddScoped<CC.Aplication.Catalog.IBannerManagementService, CC.Aplication.Catalog.BannerManagementService>();
+builder.Services.AddScoped<CC.Aplication.Catalog.IPopupManagementService, CC.Aplication.Catalog.PopupManagementService>();
 
 // Auth services
 // ? DEPRECATED - Ahora usamos UnifiedAuthService

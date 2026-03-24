@@ -3,6 +3,7 @@ using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
 using CC.Domain.Assets;
 using CC.Domain.Dto;
+using CC.Aplication.Catalog;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,15 +25,18 @@ namespace Api_eCommerce.Controllers
     private readonly TenantDbContextFactory _dbFactory;
     private readonly ITenantResolver _tenantResolver;
     private readonly TenantAssetsOptions _assetsOptions;
+    private readonly IPopupManagementService _popupService;
 
     public StorefrontController(
         TenantDbContextFactory dbFactory,
         ITenantResolver tenantResolver,
-        IOptions<TenantAssetsOptions> assetsOptions)
+        IOptions<TenantAssetsOptions> assetsOptions,
+        IPopupManagementService popupService)
     {
       _dbFactory = dbFactory;
       _tenantResolver = tenantResolver;
       _assetsOptions = assetsOptions.Value;
+      _popupService = popupService;
     }
 
     // ==================== BANNERS ====================
@@ -188,6 +192,32 @@ namespace Api_eCommerce.Controllers
     // ==================== PRODUCTS ====================
 
     /// <summary>
+    /// Get active popup for storefront (returns max one)
+    /// </summary>
+    [HttpGet("popup")]
+    [ProducesResponseType(typeof(StorePopupDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> GetPopup(CancellationToken ct)
+    {
+      var tenant = await _tenantResolver.ResolveAsync(HttpContext);
+      if (tenant == null) return Problem(statusCode: 400, detail: "Tenant not resolved");
+
+      var popup = await _popupService.GetActiveForStorefrontAsync(ct);
+      if (popup == null)
+      {
+        return NoContent();
+      }
+
+      return Ok(new StorePopupDto
+      {
+        Id = popup.Id,
+        ImageUrl = popup.ImageUrl,
+        TargetUrl = popup.TargetUrl,
+        ButtonText = popup.ButtonText
+      });
+    }
+
+    /// <summary>
     /// Get products with filters and pagination
     /// </summary>
     [HttpGet("products")]
@@ -199,6 +229,7 @@ namespace Api_eCommerce.Controllers
         [FromQuery] decimal? maxPrice = null,
         [FromQuery] string? brand = null,
         [FromQuery] bool? featured = null,
+      [FromQuery] bool? onSale = null,
         [FromQuery] bool? inStock = null,
         [FromQuery] string? sortBy = null,        // price, name, newest
         [FromQuery] string? sortOrder = null,     // asc, desc
@@ -258,6 +289,10 @@ namespace Api_eCommerce.Controllers
       // Filtro por destacados
       if (featured.HasValue)
         query = query.Where(p => p.IsFeatured == featured.Value);
+
+      // Filtro por ofertas
+      if (onSale.HasValue)
+        query = query.Where(p => p.IsOnSale == onSale.Value);
 
       // Filtro por stock
       if (inStock == true)

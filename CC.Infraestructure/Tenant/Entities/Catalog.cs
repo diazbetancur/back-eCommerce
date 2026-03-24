@@ -99,6 +99,32 @@ namespace CC.Infraestructure.Tenant.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// Popup promocional para storefront.
+    /// Solo uno debe permanecer activo a la vez.
+    /// </summary>
+    public class Popup
+    {
+        public Guid Id { get; set; }
+
+        // Storage key canónica de la imagen asociada al popup (opcional).
+        public string? ImageUrl { get; set; }
+
+        // Acción opcional
+        public string? TargetUrl { get; set; }
+        public string? ButtonText { get; set; }
+
+        // Programación opcional
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+
+        // Estado
+        public bool IsActive { get; set; } = false;
+
+        // Auditoría
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
     public enum BannerPosition
     {
         Hero = 0,      // Banner principal grande

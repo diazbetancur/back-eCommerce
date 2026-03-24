@@ -67,7 +67,7 @@ Los limites ya existentes del modulo de assets se respetan automaticamente:
 - `isFeatured`
 - `isOnSale`
 - `isTaxIncluded`
-- `taxPercentage` (nullable, requerido cuando `isTaxIncluded=true`)
+- `taxPercentage` (nullable, requerido cuando `isTaxIncluded=false`)
 - `tags`
 - `brand`
 - `metaTitle`
