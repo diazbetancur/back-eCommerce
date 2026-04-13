@@ -383,15 +383,7 @@ namespace CC.Aplication.Catalog
         return false;
       }
 
-      if (_tenantAccessor.TenantInfo != null)
-      {
-        await _assetService.PurgeByEntityAsync(
-            _tenantAccessor.TenantInfo.Id,
-            module: "product",
-            entityType: "product",
-            entityId: id.ToString(),
-            ct);
-      }
+      await EnsureEntityAssetsDeletedOrThrowAsync(db, "product", "product", id, ct);
 
       // Soft delete: marcar como inactivo
       product.IsActive = false;
@@ -464,6 +456,53 @@ namespace CC.Aplication.Catalog
       if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
       {
         throw new InvalidOperationException("No tenant context available");
+      }
+    }
+
+    private async Task EnsureEntityAssetsDeletedOrThrowAsync(
+        TenantDbContext db,
+        string module,
+        string entityType,
+        Guid entityId,
+        CancellationToken ct)
+    {
+      if (_tenantAccessor.TenantInfo == null)
+      {
+        throw new InvalidOperationException("No tenant context available");
+      }
+
+      var normalizedEntityId = entityId.ToString().ToLowerInvariant();
+      var pendingAssets = await db.TenantAssets
+          .AsNoTracking()
+          .Where(a => a.Module == module &&
+                      a.EntityType == entityType &&
+                      a.EntityId == normalizedEntityId &&
+                      a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+          .CountAsync(ct);
+
+      if (pendingAssets == 0)
+      {
+        return;
+      }
+
+      var deletedCount = await _assetService.PurgeByEntityAsync(
+          _tenantAccessor.TenantInfo.Id,
+          module: module,
+          entityType: entityType,
+          entityId: entityId.ToString(),
+          ct);
+
+      var remainingAssets = await db.TenantAssets
+          .AsNoTracking()
+          .Where(a => a.Module == module &&
+                      a.EntityType == entityType &&
+                      a.EntityId == normalizedEntityId &&
+                      a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+          .CountAsync(ct);
+
+      if (deletedCount < pendingAssets || remainingAssets > 0)
+      {
+        throw new InvalidOperationException("Unable to delete all related product assets. Product deletion was canceled.");
       }
     }
 

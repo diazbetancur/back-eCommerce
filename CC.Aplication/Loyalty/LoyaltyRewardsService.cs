@@ -201,6 +201,8 @@ namespace CC.Aplication.Loyalty
       if (reward == null)
         throw new KeyNotFoundException($"Reward {id} not found");
 
+      await EnsureRewardAssetsDeletedOrThrowAsync(db, id, ct);
+
       var rewardProducts = await db.LoyaltyRewardProducts
         .Where(p => p.RewardId == id)
         .ToListAsync(ct);
@@ -226,16 +228,6 @@ namespace CC.Aplication.Loyalty
         db.LoyaltyRewards.Remove(reward);
         await db.SaveChangesAsync(ct);
         _logger.LogInformation("Deleted loyalty reward {RewardId}", id);
-      }
-
-      if (_tenantAccessor.TenantInfo != null)
-      {
-        await _assetService.PurgeByEntityAsync(
-          _tenantAccessor.TenantInfo.Id,
-          module: "loyalty",
-          entityType: "reward",
-          entityId: id.ToString(),
-          ct);
       }
     }
 
@@ -571,6 +563,51 @@ namespace CC.Aplication.Loyalty
     }
 
     // ==================== PRIVATE HELPERS ====================
+
+    private async Task EnsureRewardAssetsDeletedOrThrowAsync(
+      TenantDbContext db,
+      Guid rewardId,
+      CancellationToken ct)
+    {
+      if (_tenantAccessor.TenantInfo == null)
+      {
+        throw new InvalidOperationException("No tenant context available");
+      }
+
+      var normalizedEntityId = rewardId.ToString().ToLowerInvariant();
+      var pendingAssets = await db.TenantAssets
+        .AsNoTracking()
+        .Where(a => a.Module == "loyalty" &&
+                    a.EntityType == "reward" &&
+                    a.EntityId == normalizedEntityId &&
+                    a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+        .CountAsync(ct);
+
+      if (pendingAssets == 0)
+      {
+        return;
+      }
+
+      var deletedCount = await _assetService.PurgeByEntityAsync(
+        _tenantAccessor.TenantInfo.Id,
+        module: "loyalty",
+        entityType: "reward",
+        entityId: rewardId.ToString(),
+        ct);
+
+      var remainingAssets = await db.TenantAssets
+        .AsNoTracking()
+        .Where(a => a.Module == "loyalty" &&
+                    a.EntityType == "reward" &&
+                    a.EntityId == normalizedEntityId &&
+                    a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+        .CountAsync(ct);
+
+      if (deletedCount < pendingAssets || remainingAssets > 0)
+      {
+        throw new InvalidOperationException("Unable to delete all related loyalty reward assets. Reward deletion was canceled.");
+      }
+    }
 
     private async Task<LoyaltyRewardDto> MapToDto(TenantDbContext db, LoyaltyReward reward, CancellationToken ct)
     {

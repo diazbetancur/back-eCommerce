@@ -147,21 +147,13 @@ namespace CC.Aplication.Catalog
       if (!_tenantAccessor.HasTenant)
         throw new InvalidOperationException("Tenant context not available");
 
-      if (_tenantAccessor.TenantInfo != null)
-      {
-        await _assetService.PurgeByEntityAsync(
-            _tenantAccessor.TenantInfo.Id,
-            module: "category",
-            entityType: "category",
-            entityId: id.ToString(),
-            ct);
-      }
-
       await using var db = _dbFactory.Create();
 
       var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == id, ct);
       if (category == null)
         throw new InvalidOperationException("Categoría no encontrada");
+
+      await EnsureCategoryAssetsDeletedOrThrowAsync(db, id, ct);
 
       // Desvincular productos asociados (solo quitar la relación)
       var productCategories = await db.ProductCategories
@@ -496,6 +488,51 @@ namespace CC.Aplication.Catalog
       }
 
       return map;
+    }
+
+    private async Task EnsureCategoryAssetsDeletedOrThrowAsync(
+        TenantDbContext db,
+        Guid categoryId,
+        CancellationToken ct)
+    {
+      if (_tenantAccessor.TenantInfo == null)
+      {
+        throw new InvalidOperationException("Tenant context not available");
+      }
+
+      var normalizedEntityId = categoryId.ToString().ToLowerInvariant();
+      var pendingAssets = await db.TenantAssets
+          .AsNoTracking()
+          .Where(a => a.Module == "category" &&
+                      a.EntityType == "category" &&
+                      a.EntityId == normalizedEntityId &&
+                      a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+          .CountAsync(ct);
+
+      if (pendingAssets == 0)
+      {
+        return;
+      }
+
+      var deletedCount = await _assetService.PurgeByEntityAsync(
+          _tenantAccessor.TenantInfo.Id,
+          module: "category",
+          entityType: "category",
+          entityId: categoryId.ToString(),
+          ct);
+
+      var remainingAssets = await db.TenantAssets
+          .AsNoTracking()
+          .Where(a => a.Module == "category" &&
+                      a.EntityType == "category" &&
+                      a.EntityId == normalizedEntityId &&
+                      a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+          .CountAsync(ct);
+
+      if (deletedCount < pendingAssets || remainingAssets > 0)
+      {
+        throw new InvalidOperationException("Unable to delete all related category assets. Category deletion was canceled.");
+      }
     }
 
     private string? BuildPublicUrlFromStorageKey(string? storageKey)

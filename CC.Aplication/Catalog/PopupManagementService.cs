@@ -117,22 +117,14 @@ public class PopupManagementService : IPopupManagementService
   {
     EnsureTenantContext();
 
-    if (_tenantAccessor.TenantInfo != null)
-    {
-      await _assetService.PurgeByEntityAsync(
-          _tenantAccessor.TenantInfo.Id,
-          module: PopupModule,
-          entityType: PopupEntityType,
-          entityId: id.ToString(),
-          ct);
-    }
-
     await using var db = _dbFactory.Create();
     var popup = await db.Popups.FirstOrDefaultAsync(p => p.Id == id, ct);
     if (popup == null)
     {
       throw new InvalidOperationException("Popup not found");
     }
+
+    await EnsurePopupAssetsDeletedOrThrowAsync(db, id, ct);
 
     db.Popups.Remove(popup);
     await db.SaveChangesAsync(ct);
@@ -410,6 +402,51 @@ public class PopupManagementService : IPopupManagementService
     }
 
     return $"{_assetsOptions.CloudflareR2.PublicBaseUrl.TrimEnd('/')}/{storageKey.TrimStart('/')}";
+  }
+
+  private async Task EnsurePopupAssetsDeletedOrThrowAsync(
+      TenantDbContext db,
+      Guid popupId,
+      CancellationToken ct)
+  {
+    if (_tenantAccessor.TenantInfo == null)
+    {
+      throw new InvalidOperationException("Tenant context not available");
+    }
+
+    var normalizedEntityId = popupId.ToString().ToLowerInvariant();
+    var pendingAssets = await db.TenantAssets
+        .AsNoTracking()
+        .Where(a => a.Module == "popup" &&
+                    a.EntityType == "popup" &&
+                    a.EntityId == normalizedEntityId &&
+                    a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+        .CountAsync(ct);
+
+    if (pendingAssets == 0)
+    {
+      return;
+    }
+
+    var deletedCount = await _assetService.PurgeByEntityAsync(
+        _tenantAccessor.TenantInfo.Id,
+        module: "popup",
+        entityType: "popup",
+        entityId: popupId.ToString(),
+        ct);
+
+    var remainingAssets = await db.TenantAssets
+        .AsNoTracking()
+        .Where(a => a.Module == "popup" &&
+                    a.EntityType == "popup" &&
+                    a.EntityId == normalizedEntityId &&
+                    a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+        .CountAsync(ct);
+
+    if (deletedCount < pendingAssets || remainingAssets > 0)
+    {
+      throw new InvalidOperationException("Unable to delete all related popup assets. Popup deletion was canceled.");
+    }
   }
 
   private void EnsureTenantContext()

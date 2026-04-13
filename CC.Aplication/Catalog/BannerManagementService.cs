@@ -112,22 +112,14 @@ public class BannerManagementService : IBannerManagementService
   {
     EnsureTenantContext();
 
-    if (_tenantAccessor.TenantInfo != null)
-    {
-      await _assetService.PurgeByEntityAsync(
-          _tenantAccessor.TenantInfo.Id,
-          module: "banner",
-          entityType: "banner",
-          entityId: id.ToString(),
-          ct);
-    }
-
     await using var db = _dbFactory.Create();
     var banner = await db.Banners.FirstOrDefaultAsync(b => b.Id == id, ct);
     if (banner == null)
     {
       throw new InvalidOperationException("Banner not found");
     }
+
+    await EnsureBannerAssetsDeletedOrThrowAsync(db, id, ct);
 
     db.Banners.Remove(banner);
     await db.SaveChangesAsync(ct);
@@ -372,6 +364,51 @@ public class BannerManagementService : IBannerManagementService
     }
 
     return $"{_assetsOptions.CloudflareR2.PublicBaseUrl.TrimEnd('/')}/{storageKey.TrimStart('/')}";
+  }
+
+  private async Task EnsureBannerAssetsDeletedOrThrowAsync(
+      TenantDbContext db,
+      Guid bannerId,
+      CancellationToken ct)
+  {
+    if (_tenantAccessor.TenantInfo == null)
+    {
+      throw new InvalidOperationException("Tenant context not available");
+    }
+
+    var normalizedEntityId = bannerId.ToString().ToLowerInvariant();
+    var pendingAssets = await db.TenantAssets
+        .AsNoTracking()
+        .Where(a => a.Module == "banner" &&
+                    a.EntityType == "banner" &&
+                    a.EntityId == normalizedEntityId &&
+                    a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+        .CountAsync(ct);
+
+    if (pendingAssets == 0)
+    {
+      return;
+    }
+
+    var deletedCount = await _assetService.PurgeByEntityAsync(
+        _tenantAccessor.TenantInfo.Id,
+        module: "banner",
+        entityType: "banner",
+        entityId: bannerId.ToString(),
+        ct);
+
+    var remainingAssets = await db.TenantAssets
+        .AsNoTracking()
+        .Where(a => a.Module == "banner" &&
+                    a.EntityType == "banner" &&
+                    a.EntityId == normalizedEntityId &&
+                    a.LifecycleStatus != TenantAssetLifecycleStatus.PhysicallyDeleted)
+        .CountAsync(ct);
+
+    if (deletedCount < pendingAssets || remainingAssets > 0)
+    {
+      throw new InvalidOperationException("Unable to delete all related banner assets. Banner deletion was canceled.");
+    }
   }
 
   private void EnsureTenantContext()
