@@ -68,10 +68,9 @@ public class PopupManagementService : IPopupManagementService
       CreatedAt = DateTime.UtcNow
     };
 
-    db.Popups.Add(popup);
-    await db.SaveChangesAsync(ct);
-
     await UploadOrReplacePopupImageAsync(popup, request, ct);
+
+    db.Popups.Add(popup);
     await db.SaveChangesAsync(ct);
 
     return await GetByIdAsync(popup.Id, ct)
@@ -273,8 +272,6 @@ public class PopupManagementService : IPopupManagementService
     {
       popup.IsActive = false;
     }
-
-    await db.SaveChangesAsync(ct);
   }
 
   private async Task UploadOrReplacePopupImageAsync(Popup popup, CreatePopupRequest request, CancellationToken ct)
@@ -291,7 +288,7 @@ public class PopupManagementService : IPopupManagementService
       request.ImageContent.Position = 0;
     }
 
-    await _assetService.PurgeByEntityAsync(
+    var existingAssets = await _assetService.ListByEntityAsync(
       _tenantAccessor.TenantInfo!.Id,
       module: PopupModule,
       entityType: PopupEntityType,
@@ -313,6 +310,11 @@ public class PopupManagementService : IPopupManagementService
       Content = request.ImageContent,
       SetAsPrimary = true
     }, ct);
+
+    foreach (var existingAsset in existingAssets)
+    {
+      await _assetService.DeleteSingleAsync(_tenantAccessor.TenantInfo.Id, existingAsset.Id, ct);
+    }
 
     popup.ImageUrl = uploaded.StorageKey;
   }

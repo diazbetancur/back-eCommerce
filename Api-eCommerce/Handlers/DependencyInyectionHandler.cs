@@ -13,6 +13,11 @@ using ILogger = Serilog.ILogger;
 
 namespace Api_eCommerce.Handlers
 {
+    /// <summary>
+    /// Legacy DI handler kept only as transitional reference.
+    /// Program.cs is the active composition root since Fase 1 Lote 2.
+    /// </summary>
+    [Obsolete("Legacy DI handler. Program.cs is the active composition root. Pending retirement in a future lote.")]
     public class DependencyInyectionHandler
     {
         public static void DepencyInyectionConfig(IServiceCollection services)

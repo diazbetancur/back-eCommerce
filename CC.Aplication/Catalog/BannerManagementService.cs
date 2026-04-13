@@ -69,10 +69,9 @@ public class BannerManagementService : IBannerManagementService
       CreatedAt = DateTime.UtcNow
     };
 
-    db.Banners.Add(banner);
-    await db.SaveChangesAsync(ct);
-
     await UploadOrReplaceBannerImageAsync(banner, request, ct);
+
+    db.Banners.Add(banner);
     await db.SaveChangesAsync(ct);
 
     return await GetByIdAsync(banner.Id, ct)
@@ -248,7 +247,7 @@ public class BannerManagementService : IBannerManagementService
       request.ImageContent.Position = 0;
     }
 
-    await _assetService.PurgeByEntityAsync(
+    var existingAssets = await _assetService.ListByEntityAsync(
         _tenantAccessor.TenantInfo!.Id,
         module: "banner",
         entityType: "banner",
@@ -270,6 +269,11 @@ public class BannerManagementService : IBannerManagementService
       Content = request.ImageContent!,
       SetAsPrimary = true
     }, ct);
+
+    foreach (var existingAsset in existingAssets)
+    {
+      await _assetService.DeleteSingleAsync(_tenantAccessor.TenantInfo.Id, existingAsset.Id, ct);
+    }
 
     banner.ImageUrl = uploaded.StorageKey ?? string.Empty;
   }

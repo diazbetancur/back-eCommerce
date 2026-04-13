@@ -1,7 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System.ComponentModel.DataAnnotations;
 using System.Net;
-using System.Web.Http;
 using ILogger = Serilog.ILogger;
 
 namespace Api_eCommerce.Handlers
@@ -60,10 +59,6 @@ namespace Api_eCommerce.Handlers
             {
                 newCode = HttpStatusCode.BadRequest;
             }
-            else if (exception is HttpResponseException)
-            {
-                newCode = HttpStatusCode.Unauthorized;
-            }
             else if (exception is InvalidOperationException)
             {
                 newCode = HttpStatusCode.UnprocessableEntity;
@@ -80,10 +75,6 @@ namespace Api_eCommerce.Handlers
             {
                 var validation = ((ValidationException)exception).ValidationResult;
                 result = JsonConvert.SerializeObject(validation);
-            }
-            else if (exception is HttpResponseException)
-            {
-                result = JsonConvert.SerializeObject(new { errors = "You are not authorised to take this action" });
             }
             else
             {

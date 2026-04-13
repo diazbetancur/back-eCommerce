@@ -11,6 +11,7 @@ using CC.Aplication.Services;
 using CC.Domain.Assets;
 using CC.Domain.Interfaces;
 using CC.Domain.Tenancy;
+using CC.Infraestructure.Configurations;
 using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin;
@@ -25,6 +26,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using Serilog;
 using System.Text.Json.Serialization;
 using System.IdentityModel.Tokens.Jwt;
 
@@ -161,8 +163,22 @@ builder.Services.AddScoped<ITenantAssetPurgeService, TenantAssetPurgeService>();
 // ==================== SWAGGER ====================
 builder.Services.AddMultiTenantSwagger();
 
-// ==================== LEGACY DI (Revisar y limpiar) ====================
-DependencyInyectionHandler.DepencyInyectionConfig(builder.Services);
+// ==================== LEGACY TRANSITIONAL SERVICES (RUNTIME REQUIRED) ====================
+// Mantenidos en Program para hacer explicita la composicion mientras se retira el pipeline legacy.
+builder.Services.AddDbContext<DBContext>(opt =>
+    opt.UseNpgsql(builder.Configuration.GetConnectionString("PgSQL")));
+builder.Services.AddSingleton<ExceptionControl>();
+builder.Services.AddSingleton<Serilog.ILogger>(_ =>
+{
+    var logger = new LoggerConfiguration()
+        .WriteTo
+        .File("log.txt",
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+        .CreateLogger();
+
+    logger.Information("Done setting up serilog - Application starting up");
+    return logger;
+});
 
 // ==================== JWT AUTHENTICATION ====================
 var jwtStrictValidation = builder.Configuration.GetValue<bool>("Jwt:StrictValidation", true);

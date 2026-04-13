@@ -1,4 +1,5 @@
 using Api_eCommerce.Authorization;
+using CC.Domain.Assets;
 using CC.Domain.Dto;
 using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
@@ -148,10 +149,12 @@ namespace Api_eCommerce.Endpoints
                 .WithMetadata(new RequireModuleAttribute("settings", "update"))
                 .Produces<StoreSettingsResponse>(StatusCodes.Status200OK);
 
-            group.MapPatch("/settings/branding", UpdateBrandingSettings)
+            group.MapPatch("/settings/branding", UpdateBrandingSettingsWithAssets)
                 .WithName("AdminUpdateBranding")
-                .WithSummary("Update branding settings only")
+                .WithSummary("Update branding settings with multipart form-data")
                 .WithMetadata(new RequireModuleAttribute("settings", "update"))
+                .Accepts<UpdateBrandingAssetsRequest>("multipart/form-data")
+                .DisableAntiforgery()
                 .Produces<BrandingSettingsDto>(StatusCodes.Status200OK);
 
             group.MapPatch("/settings/contact", UpdateContactSettings)
@@ -1034,33 +1037,85 @@ namespace Api_eCommerce.Endpoints
             }
         }
 
-        private static async Task<IResult> UpdateBrandingSettings(
+        private static async Task<IResult> UpdateBrandingSettingsWithAssets(
             HttpContext context,
-            [FromBody] BrandingSettingsDto request,
+            [FromForm(Name = "logo")] IFormFile? logo,
+            [FromForm(Name = "logoFile")] IFormFile? logoFile,
+            [FromForm(Name = "favicon")] IFormFile? favicon,
+            [FromForm(Name = "faviconFile")] IFormFile? faviconFile,
+            [FromForm(Name = "primaryColor")] string? primaryColor,
+            [FromForm(Name = "secondaryColor")] string? secondaryColor,
+            [FromForm(Name = "accentColor")] string? accentColor,
+            [FromForm(Name = "backgroundColor")] string? backgroundColor,
             TenantDbContextFactory dbFactory,
-            ITenantResolver tenantResolver)
+            ITenantResolver tenantResolver,
+            IAssetService assetService,
+            CancellationToken ct)
         {
             try
             {
                 var tenantContext = await tenantResolver.ResolveAsync(context);
                 if (tenantContext == null) return TenantNotResolvedError();
 
+                var logoRequestFile = logo is { Length: > 0 } ? logo : logoFile;
+                var faviconRequestFile = favicon is { Length: > 0 } ? favicon : faviconFile;
+
+                if ((logo != null && logo.Length == 0) ||
+                    (logoFile != null && logoFile.Length == 0))
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["logo"] = new[] { "Logo file cannot be empty" }
+                    });
+                }
+
+                if ((favicon != null && favicon.Length == 0) ||
+                    (faviconFile != null && faviconFile.Length == 0))
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["favicon"] = new[] { "Favicon file cannot be empty" }
+                    });
+                }
+
                 await using var db = dbFactory.Create();
 
                 var updates = new Dictionary<string, string?>
                 {
-                    ["LogoUrl"] = request.LogoUrl,
-                    ["FaviconUrl"] = request.FaviconUrl,
-                    ["PrimaryColor"] = request.PrimaryColor,
-                    ["SecondaryColor"] = request.SecondaryColor,
-                    ["AccentColor"] = request.AccentColor,
-                    ["BackgroundColor"] = request.BackgroundColor
+                    ["PrimaryColor"] = primaryColor,
+                    ["SecondaryColor"] = secondaryColor,
+                    ["AccentColor"] = accentColor,
+                    ["BackgroundColor"] = backgroundColor
                 };
 
-                await UpsertSettingsAsync(db, updates);
-                await db.SaveChangesAsync();
+                var uploadedByUserId = ResolveUploadedByUserId(context.User);
 
-                var settings = await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value);
+                if (logoRequestFile != null)
+                {
+                    updates["LogoUrl"] = await UploadBrandingAssetAndReplaceAsync(
+                        assetService,
+                        tenantContext.TenantId,
+                        uploadedByUserId,
+                        logoRequestFile,
+                        "logo",
+                        ct);
+                }
+
+                if (faviconRequestFile != null)
+                {
+                    updates["FaviconUrl"] = await UploadBrandingAssetAndReplaceAsync(
+                        assetService,
+                        tenantContext.TenantId,
+                        uploadedByUserId,
+                        faviconRequestFile,
+                        "favicon",
+                        ct);
+                }
+
+                await UpsertSettingsAsync(db, updates);
+                await db.SaveChangesAsync(ct);
+
+                var settings = await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value, ct);
                 return Results.Ok(new BrandingSettingsDto
                 {
                     LogoUrl = settings.GetValueOrDefault("LogoUrl"),
@@ -1071,9 +1126,16 @@ namespace Api_eCommerce.Endpoints
                     BackgroundColor = settings.GetValueOrDefault("BackgroundColor", "#ffffff")
                 });
             }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid branding update request",
+                    detail: ex.Message);
+            }
             catch (Exception)
             {
-                return InternalServerError("updating branding settings");
+                return InternalServerError("updating branding settings with files");
             }
         }
 
@@ -1201,6 +1263,67 @@ namespace Api_eCommerce.Endpoints
                     Keywords = settings.GetValueOrDefault("SeoKeywords")
                 }
             };
+        }
+
+        private static async Task<string> UploadBrandingAssetAndReplaceAsync(
+            IAssetService assetService,
+            Guid tenantId,
+            string uploadedByUserId,
+            IFormFile file,
+            string entityId,
+            CancellationToken ct)
+        {
+            const string module = "branding";
+            const string entityType = "branding";
+
+            var existingAssets = await assetService.ListByEntityAsync(
+                tenantId,
+                module,
+                entityType,
+                entityId,
+                ct);
+
+            await using var stream = file.OpenReadStream();
+
+            var uploaded = await assetService.UploadAsync(new UploadAssetCommand
+            {
+                TenantId = tenantId,
+                UploadedByUserId = uploadedByUserId,
+                Module = module,
+                EntityType = entityType,
+                EntityId = entityId,
+                AssetType = TenantAssetType.Image,
+                Visibility = TenantAssetVisibility.Public,
+                OriginalFileName = string.IsNullOrWhiteSpace(file.FileName) ? $"{entityId}-image" : file.FileName,
+                ContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+                SizeBytes = file.Length,
+                Content = stream,
+                SetAsPrimary = true
+            }, ct);
+
+            foreach (var existingAsset in existingAssets)
+            {
+                await assetService.DeleteSingleAsync(tenantId, existingAsset.Id, ct);
+            }
+
+            var resolvedUrl = uploaded.PublicUrl
+                ?? uploaded.UrlOrPath
+                ?? uploaded.StorageKey;
+
+            if (string.IsNullOrWhiteSpace(resolvedUrl))
+            {
+                throw new InvalidOperationException("Could not resolve uploaded branding image URL.");
+            }
+
+            return resolvedUrl;
+        }
+
+        private static string ResolveUploadedByUserId(ClaimsPrincipal user)
+        {
+            return user.FindFirst("sub")?.Value
+                ?? user.FindFirst("id")?.Value
+                ?? user.FindFirst("email")?.Value
+                ?? "system";
         }
 
         // ==================== HELPER METHODS ====================
@@ -1370,6 +1493,33 @@ namespace Api_eCommerce.Endpoints
         public string SecondaryColor { get; set; } = "#1e40af";
         public string AccentColor { get; set; } = "#10b981";
         public string BackgroundColor { get; set; } = "#ffffff";
+    }
+
+    public record UpdateBrandingAssetsRequest
+    {
+        [FromForm(Name = "logo")]
+        public IFormFile? Logo { get; set; }
+
+        [FromForm(Name = "logoFile")]
+        public IFormFile? LogoFile { get; set; }
+
+        [FromForm(Name = "favicon")]
+        public IFormFile? Favicon { get; set; }
+
+        [FromForm(Name = "faviconFile")]
+        public IFormFile? FaviconFile { get; set; }
+
+        [FromForm(Name = "primaryColor")]
+        public string? PrimaryColor { get; set; }
+
+        [FromForm(Name = "secondaryColor")]
+        public string? SecondaryColor { get; set; }
+
+        [FromForm(Name = "accentColor")]
+        public string? AccentColor { get; set; }
+
+        [FromForm(Name = "backgroundColor")]
+        public string? BackgroundColor { get; set; }
     }
 
     public record ContactSettingsDto

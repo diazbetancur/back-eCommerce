@@ -1,3 +1,4 @@
+using CC.Domain.Dto;
 using Microsoft.EntityFrameworkCore;
 
 namespace CC.Infraestructure.Tenant.Extensions
@@ -123,19 +124,5 @@ namespace CC.Infraestructure.Tenant.Extensions
     {
       return string.IsNullOrWhiteSpace(value) ? query : query.Where(predicate);
     }
-  }
-
-  /// <summary>
-  /// Standard paginated result container
-  /// </summary>
-  public class PagedResult<T>
-  {
-    public List<T> Items { get; set; } = new();
-    public int TotalCount { get; set; }
-    public int Page { get; set; }
-    public int PageSize { get; set; }
-    public int TotalPages { get; set; }
-    public bool HasNextPage => Page < TotalPages;
-    public bool HasPreviousPage => Page > 1;
   }
 }

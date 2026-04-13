@@ -78,10 +78,9 @@ namespace CC.Aplication.Catalog
         ParentId = request.ParentId
       };
 
-      db.Categories.Add(category);
-      await db.SaveChangesAsync(ct);
-
       await UploadOrReplaceCategoryImageAsync(category, request, ct);
+
+      db.Categories.Add(category);
       await db.SaveChangesAsync(ct);
 
       return await GetByIdAsync(category.Id, ct)
@@ -365,8 +364,7 @@ namespace CC.Aplication.Catalog
         request.ImageContent.Position = 0;
       }
 
-      // Categories allow a single image; replace the previous one if present.
-      await _assetService.PurgeByEntityAsync(
+      var existingAssets = await _assetService.ListByEntityAsync(
           _tenantAccessor.TenantInfo.Id,
           module: "category",
           entityType: "category",
@@ -388,6 +386,11 @@ namespace CC.Aplication.Catalog
         Content = request.ImageContent,
         SetAsPrimary = true
       }, ct);
+
+      foreach (var existingAsset in existingAssets)
+      {
+        await _assetService.DeleteSingleAsync(_tenantAccessor.TenantInfo.Id, existingAsset.Id, ct);
+      }
 
       category.ImageUrl = uploaded.StorageKey;
     }
