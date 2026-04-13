@@ -22,6 +22,7 @@ using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Services.Assets;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -53,7 +54,7 @@ builder.Services.AddCors(options =>
             if (string.IsNullOrEmpty(o)) return false;
             if (!Uri.TryCreate(o, UriKind.Absolute, out var uri)) return false;
 
-            var host = uri.Host.ToLowerInvariant();
+            var host = uri.Host.TrimEnd('.').ToLowerInvariant();
 
             if (host == "localhost" || host.EndsWith(".localhost"))
                 return true;
@@ -67,6 +68,16 @@ builder.Services.AddCors(options =>
           .AllowCredentials()
           .WithExposedHeaders("X-Tenant-Slug");  // Exponer header custom
     });
+});
+
+// ==================== FORWARDED HEADERS (PROXY/CDN) ====================
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // Permitir cabeceras reenviadas en entornos detrás de proxy/CDN administrado externamente.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // ==================== ADMIN DB ====================
@@ -301,6 +312,8 @@ else
 {
     app.UseHsts();
 }
+
+app.UseForwardedHeaders();
 
 app.UseHttpsRedirection();
 
