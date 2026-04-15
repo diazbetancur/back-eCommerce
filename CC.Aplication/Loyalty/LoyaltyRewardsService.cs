@@ -82,7 +82,6 @@ namespace CC.Aplication.Loyalty
         AppliesToAllEligibleProducts = request.AppliesToAllEligibleProducts,
         SingleProductSelectionRule = request.SingleProductSelectionRule?.ToUpper(),
         DiscountValue = request.DiscountValue,
-        ImageUrl = request.ImageUrl,
         IsActive = request.IsActive,
         Stock = stockToPersist,
         ValidityDays = request.ValidityDays,
@@ -152,7 +151,6 @@ namespace CC.Aplication.Loyalty
       reward.AppliesToAllEligibleProducts = request.AppliesToAllEligibleProducts;
       reward.SingleProductSelectionRule = request.SingleProductSelectionRule?.ToUpper();
       reward.DiscountValue = request.DiscountValue;
-      reward.ImageUrl = request.ImageUrl;
       reward.IsActive = request.IsActive;
       reward.Stock = stockToPersist;
       reward.ValidityDays = request.ValidityDays;

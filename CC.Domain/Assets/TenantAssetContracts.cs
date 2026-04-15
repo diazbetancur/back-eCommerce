@@ -39,7 +39,18 @@ public sealed class TenantAssetsOptions
   public List<string> AllowedImageContentTypes { get; set; } = new() { "image/jpeg", "image/png", "image/webp" };
   public List<string> AllowedVideoContentTypes { get; set; } = new() { "video/mp4", "video/webm" };
 
+  public TenantImageOptimizationOptions ImageOptimization { get; set; } = new();
+
   public CloudflareR2AssetsOptions CloudflareR2 { get; set; } = new();
+}
+
+public sealed class TenantImageOptimizationOptions
+{
+  public bool Enabled { get; set; } = true;
+  public long MaxInputBytes { get; set; } = 5_242_880;
+  public long MinBytesToOptimize { get; set; } = 122_880;
+  public int JpegQuality { get; set; } = 100;
+  public int WebpQuality { get; set; } = 100;
 }
 
 public sealed class CloudflareR2AssetsOptions
@@ -122,6 +133,23 @@ public sealed class StorageUploadResult
   public required string Provider { get; init; }
 }
 
+public sealed class ImageOptimizationInput
+{
+  public required string OriginalFileName { get; init; }
+  public required string Extension { get; init; }
+  public required string ContentType { get; init; }
+  public required long SizeBytes { get; init; }
+  public required Stream Content { get; init; }
+}
+
+public sealed class OptimizedImagePayload
+{
+  public required Stream Content { get; init; }
+  public required string Extension { get; init; }
+  public required string ContentType { get; init; }
+  public required long SizeBytes { get; init; }
+}
+
 public sealed class TenantAssetQuotaStatusDto
 {
   public Guid TenantId { get; init; }
@@ -157,6 +185,11 @@ public interface IFileStorageProvider
 public interface IFileValidationService
 {
   Task<FileValidationResult> ValidateAsync(FileValidationInput input, CancellationToken ct = default);
+}
+
+public interface IImageOptimizationService
+{
+  Task<OptimizedImagePayload?> TryOptimizeAsync(ImageOptimizationInput input, CancellationToken ct = default);
 }
 
 public sealed class PlanAssetLimits

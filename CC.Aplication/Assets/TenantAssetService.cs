@@ -14,6 +14,7 @@ public sealed class TenantAssetService : IAssetService
   private readonly TenantDbContextFactory _dbFactory;
   private readonly IFileStorageProvider _storageProvider;
   private readonly IFileValidationService _validationService;
+  private readonly IImageOptimizationService _imageOptimizationService;
   private readonly ITenantAssetQuotaService _quotaService;
   private readonly IPlanLimitService _planLimitService;
   private readonly TenantAssetsOptions _options;
@@ -23,6 +24,7 @@ public sealed class TenantAssetService : IAssetService
       TenantDbContextFactory dbFactory,
       IFileStorageProvider storageProvider,
       IFileValidationService validationService,
+      IImageOptimizationService imageOptimizationService,
       ITenantAssetQuotaService quotaService,
         IPlanLimitService planLimitService,
       IOptions<TenantAssetsOptions> options,
@@ -31,6 +33,7 @@ public sealed class TenantAssetService : IAssetService
     _dbFactory = dbFactory;
     _storageProvider = storageProvider;
     _validationService = validationService;
+    _imageOptimizationService = imageOptimizationService;
     _quotaService = quotaService;
     _planLimitService = planLimitService;
     _options = options.Value;
@@ -45,9 +48,16 @@ public sealed class TenantAssetService : IAssetService
     }
 
     var maxSize = command.AssetType == TenantAssetType.Image ? _options.MaxImageBytes : _options.MaxVideoBytes;
-    if (command.SizeBytes > maxSize)
+
+    if (command.AssetType != TenantAssetType.Image && command.SizeBytes > maxSize)
     {
       throw new InvalidOperationException($"File exceeds max allowed size ({maxSize} bytes) for {command.AssetType}.");
+    }
+
+    if (command.AssetType == TenantAssetType.Image && command.SizeBytes > _options.ImageOptimization.MaxInputBytes)
+    {
+      throw new InvalidOperationException(
+          $"Image exceeds max optimization input size ({_options.ImageOptimization.MaxInputBytes} bytes).");
     }
 
     var normalizedModule = NormalizeNullableKey(command.Module) ?? "general";
@@ -55,8 +65,6 @@ public sealed class TenantAssetService : IAssetService
     var normalizedEntityId = NormalizeNullableKey(command.EntityId);
 
     await EnsureEntityLimitsAsync(command.TenantId, normalizedModule, normalizedEntityType, normalizedEntityId, command.AssetType, ct);
-
-    await _quotaService.EnsureUploadAllowedAsync(command.TenantId, command.AssetType, command.SizeBytes, ct);
 
     var validation = await _validationService.ValidateAsync(new FileValidationInput
     {
@@ -67,67 +75,114 @@ public sealed class TenantAssetService : IAssetService
       Content = command.Content
     }, ct);
 
-    if (command.Content.CanSeek)
+    var uploadStream = command.Content;
+    var uploadSizeBytes = command.SizeBytes;
+    var uploadContentType = validation.ContentType;
+    var uploadExtension = validation.Extension;
+    OptimizedImagePayload? optimizedPayload = null;
+
+    try
     {
-      command.Content.Position = 0;
+      if (command.AssetType == TenantAssetType.Image)
+      {
+        optimizedPayload = await _imageOptimizationService.TryOptimizeAsync(new ImageOptimizationInput
+        {
+          OriginalFileName = command.OriginalFileName,
+          Extension = validation.Extension,
+          ContentType = validation.ContentType,
+          SizeBytes = command.SizeBytes,
+          Content = command.Content
+        }, ct);
+
+        if (optimizedPayload != null)
+        {
+          uploadStream = optimizedPayload.Content;
+          uploadSizeBytes = optimizedPayload.SizeBytes;
+          uploadContentType = optimizedPayload.ContentType;
+          uploadExtension = optimizedPayload.Extension;
+        }
+      }
+
+      if (uploadSizeBytes > maxSize)
+      {
+        throw new InvalidOperationException($"File exceeds max allowed size ({maxSize} bytes) for {command.AssetType}.");
+      }
+
+      await _quotaService.EnsureUploadAllowedAsync(command.TenantId, command.AssetType, uploadSizeBytes, ct);
+
+      if (uploadStream.CanSeek)
+      {
+        uploadStream.Position = 0;
+      }
+
+      var key = TenantAssetHelpers.BuildStorageKey(
+          command.TenantId,
+        normalizedModule,
+        normalizedEntityType,
+        normalizedEntityId,
+          command.AssetType,
+          validation.SafeFileName,
+          uploadExtension,
+          _options.BasePrefix);
+
+      var storageResult = await _storageProvider.UploadAsync(new StorageUploadRequest
+      {
+        StorageKey = key,
+        ContentType = uploadContentType,
+        Content = uploadStream,
+        Visibility = command.Visibility
+      }, ct);
+
+      var publicUrl = ResolvePublicUrl(storageResult.Provider, storageResult.StorageKey, storageResult.PublicUrl, storageResult.UrlOrPath);
+
+      await using var db = _dbFactory.Create();
+
+      var asset = new TenantAsset
+      {
+        Id = Guid.NewGuid(),
+        TenantId = command.TenantId,
+        AssetType = command.AssetType,
+        SourceType = TenantAssetSourceType.InternalStorage,
+        Module = normalizedModule,
+        EntityType = normalizedEntityType,
+        EntityId = normalizedEntityId,
+        OriginalFileName = command.OriginalFileName,
+        SafeFileName = validation.SafeFileName,
+        StorageKey = storageResult.StorageKey,
+        StorageBucket = storageResult.StorageBucket,
+        PublicUrl = publicUrl,
+        UrlOrPath = publicUrl,
+        SizeBytes = uploadSizeBytes,
+        Extension = uploadExtension,
+        ContentType = uploadContentType,
+        Provider = storageResult.Provider,
+        Visibility = command.Visibility,
+        LifecycleStatus = TenantAssetLifecycleStatus.Active,
+        PhysicalDeletionRequired = true,
+        UploadedByUserId = command.UploadedByUserId,
+        CreatedAt = DateTime.UtcNow
+      };
+
+      db.TenantAssets.Add(asset);
+
+      await UpdateLegacyEntityImageFieldsAsync(db, asset, command.SetAsPrimary, ct);
+      await db.SaveChangesAsync(ct);
+
+      await _quotaService.IncreaseUsageAsync(command.TenantId, command.AssetType, uploadSizeBytes, ct);
+
+      return MapToDto(asset);
     }
-
-    var key = TenantAssetHelpers.BuildStorageKey(
-        command.TenantId,
-      normalizedModule,
-      normalizedEntityType,
-      normalizedEntityId,
-        command.AssetType,
-        validation.SafeFileName,
-        validation.Extension,
-        _options.BasePrefix);
-
-    var storageResult = await _storageProvider.UploadAsync(new StorageUploadRequest
+    finally
     {
-      StorageKey = key,
-      ContentType = validation.ContentType,
-      Content = command.Content,
-      Visibility = command.Visibility
-    }, ct);
-
-    var publicUrl = ResolvePublicUrl(storageResult.Provider, storageResult.StorageKey, storageResult.PublicUrl, storageResult.UrlOrPath);
-
-    await using var db = _dbFactory.Create();
-
-    var asset = new TenantAsset
-    {
-      Id = Guid.NewGuid(),
-      TenantId = command.TenantId,
-      AssetType = command.AssetType,
-      SourceType = TenantAssetSourceType.InternalStorage,
-      Module = normalizedModule,
-      EntityType = normalizedEntityType,
-      EntityId = normalizedEntityId,
-      OriginalFileName = command.OriginalFileName,
-      SafeFileName = validation.SafeFileName,
-      StorageKey = storageResult.StorageKey,
-      StorageBucket = storageResult.StorageBucket,
-      PublicUrl = publicUrl,
-      UrlOrPath = publicUrl,
-      SizeBytes = command.SizeBytes,
-      Extension = validation.Extension,
-      ContentType = validation.ContentType,
-      Provider = storageResult.Provider,
-      Visibility = command.Visibility,
-      LifecycleStatus = TenantAssetLifecycleStatus.Active,
-      PhysicalDeletionRequired = true,
-      UploadedByUserId = command.UploadedByUserId,
-      CreatedAt = DateTime.UtcNow
-    };
-
-    db.TenantAssets.Add(asset);
-
-    await UpdateLegacyEntityImageFieldsAsync(db, asset, command.SetAsPrimary, ct);
-    await db.SaveChangesAsync(ct);
-
-    await _quotaService.IncreaseUsageAsync(command.TenantId, command.AssetType, command.SizeBytes, ct);
-
-    return MapToDto(asset);
+      if (optimizedPayload?.Content is IAsyncDisposable asyncDisposable)
+      {
+        await asyncDisposable.DisposeAsync();
+      }
+      else
+      {
+        optimizedPayload?.Content?.Dispose();
+      }
+    }
   }
 
   public async Task<IReadOnlyList<TenantAssetDto>> ListByEntityAsync(Guid tenantId, string module, string entityType, string entityId, CancellationToken ct = default)

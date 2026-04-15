@@ -189,6 +189,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddSingleton<IFileStorageProvider, CloudflareR2FileStorageProvider>();
 builder.Services.AddScoped<IFileValidationService, FileValidationService>();
+builder.Services.AddScoped<IImageOptimizationService, ImageOptimizationService>();
 builder.Services.AddScoped<ITenantPlanLimitResolver, TenantPlanLimitResolver>();
 builder.Services.AddScoped<ITenantAssetQuotaService, TenantAssetQuotaService>();
 builder.Services.AddScoped<IAssetService, TenantAssetService>();

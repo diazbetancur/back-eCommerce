@@ -1,5 +1,6 @@
 using Api_eCommerce.Authorization;
 using CC.Aplication.Loyalty;
+using CC.Domain.Assets;
 using CC.Infraestructure.Tenancy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -22,17 +23,20 @@ namespace Api_eCommerce.Controllers
   {
     private readonly ILoyaltyRewardsService _rewardsService;
     private readonly ILoyaltyService _loyaltyService;
+    private readonly IAssetService _assetService;
     private readonly ITenantResolver _tenantResolver;
     private readonly ILogger<LoyaltyAdminController> _logger;
 
     public LoyaltyAdminController(
         ILoyaltyRewardsService rewardsService,
         ILoyaltyService loyaltyService,
+        IAssetService assetService,
         ITenantResolver tenantResolver,
         ILogger<LoyaltyAdminController> logger)
     {
       _rewardsService = rewardsService;
       _loyaltyService = loyaltyService;
+      _assetService = assetService;
       _tenantResolver = tenantResolver;
       _logger = logger;
     }
@@ -45,11 +49,49 @@ namespace Api_eCommerce.Controllers
     [HttpPost("rewards")]
     [RequireModule("loyalty", "create")]
     [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [Consumes("application/json")]
     [ProducesResponseType<LoyaltyRewardDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> CreateReward([FromBody] CreateLoyaltyRewardRequest request)
+    public async Task<IActionResult> CreateReward([FromBody] CreateLoyaltyRewardRequest request, CancellationToken ct)
+    {
+      return await CreateRewardInternalAsync(request, image: null, ct);
+    }
+
+    /// <summary>
+    /// Crear un nuevo premio de lealtad con carga de imagen
+    /// </summary>
+    [HttpPost("rewards")]
+    [RequireModule("loyalty", "create")]
+    [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<LoyaltyRewardDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> CreateRewardForm([FromForm] CreateLoyaltyRewardFormRequest request, CancellationToken ct)
+    {
+      if (request.Image is { Length: <= 0 })
+      {
+        return ValidationProblem(new ValidationProblemDetails
+        {
+          Status = StatusCodes.Status400BadRequest,
+          Errors = new Dictionary<string, string[]>
+          {
+            ["image"] = new[] { "La imagen no puede estar vacía." }
+          }
+        });
+      }
+
+      var createRequest = MapCreateRequest(request);
+      return await CreateRewardInternalAsync(createRequest, request.Image, ct);
+    }
+
+    private async Task<IActionResult> CreateRewardInternalAsync(
+      CreateLoyaltyRewardRequest request,
+      IFormFile? image,
+      CancellationToken ct)
     {
       try
       {
@@ -63,7 +105,40 @@ namespace Api_eCommerce.Controllers
           );
         }
 
-        var reward = await _rewardsService.CreateRewardAsync(request);
+        var reward = await _rewardsService.CreateRewardAsync(request, ct);
+
+        if (image is { Length: > 0 })
+        {
+          Guid? uploadedAssetId = null;
+
+          try
+          {
+            var uploadedAsset = await UploadRewardImageAsync(reward.Id, tenantContext.TenantId, image, ct);
+            uploadedAssetId = uploadedAsset.Id;
+
+            var refreshedReward = await _rewardsService.GetRewardByIdAsync(reward.Id, ct);
+            if (refreshedReward != null)
+            {
+              reward = refreshedReward;
+            }
+          }
+          catch (Exception ex)
+          {
+            await DeleteUploadedAssetBestEffortAsync(tenantContext.TenantId, uploadedAssetId, ct);
+            await DeleteRewardBestEffortAsync(reward.Id, ct);
+
+            _logger.LogWarning(
+                ex,
+                "Error al cargar la imagen para la recompensa {RewardId}. Se revirtió la creación.",
+                reward.Id);
+
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Error de validación",
+                detail: "No fue posible cargar la imagen de la recompensa. La creación se canceló para evitar datos incompletos.");
+          }
+        }
+
         return CreatedAtAction(nameof(GetRewardById), new { id = reward.Id }, reward);
       }
       catch (ArgumentException ex)
@@ -194,13 +269,57 @@ namespace Api_eCommerce.Controllers
     [HttpPut("rewards/{id:guid}")]
     [RequireModule("loyalty", "update")]
     [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [Consumes("application/json")]
     [ProducesResponseType<LoyaltyRewardDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> UpdateReward(Guid id, [FromBody] UpdateLoyaltyRewardRequest request)
+    public async Task<IActionResult> UpdateReward(Guid id, [FromBody] UpdateLoyaltyRewardRequest request, CancellationToken ct)
     {
+      return await UpdateRewardInternalAsync(id, request, image: null, ct);
+    }
+
+    /// <summary>
+    /// Actualizar un premio existente con carga de imagen
+    /// </summary>
+    [HttpPut("rewards/{id:guid}")]
+    [RequireModule("loyalty", "update")]
+    [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<LoyaltyRewardDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UpdateRewardForm(Guid id, [FromForm] UpdateLoyaltyRewardFormRequest request, CancellationToken ct)
+    {
+      if (request.Image is { Length: <= 0 })
+      {
+        return ValidationProblem(new ValidationProblemDetails
+        {
+          Status = StatusCodes.Status400BadRequest,
+          Errors = new Dictionary<string, string[]>
+          {
+            ["image"] = new[] { "La imagen no puede estar vacía." }
+          }
+        });
+      }
+
+      var updateRequest = MapUpdateRequest(request);
+
+      return await UpdateRewardInternalAsync(id, updateRequest, request.Image, ct);
+    }
+
+    private async Task<IActionResult> UpdateRewardInternalAsync(
+      Guid id,
+      UpdateLoyaltyRewardRequest request,
+      IFormFile? image,
+      CancellationToken ct)
+    {
+      Guid? uploadedAssetId = null;
+      Guid tenantId = Guid.Empty;
+
       try
       {
         var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
@@ -213,11 +332,21 @@ namespace Api_eCommerce.Controllers
           );
         }
 
-        var reward = await _rewardsService.UpdateRewardAsync(id, request);
+        tenantId = tenantContext.TenantId;
+
+        if (image is { Length: > 0 })
+        {
+          var uploadedAsset = await UploadRewardImageAsync(id, tenantId, image, ct);
+          uploadedAssetId = uploadedAsset.Id;
+        }
+
+        var reward = await _rewardsService.UpdateRewardAsync(id, request, ct);
         return Ok(reward);
       }
       catch (KeyNotFoundException ex)
       {
+        await DeleteUploadedAssetBestEffortAsync(tenantId, uploadedAssetId, ct);
+
         return NotFound(new ProblemDetails
         {
           Status = StatusCodes.Status404NotFound,
@@ -227,14 +356,30 @@ namespace Api_eCommerce.Controllers
       }
       catch (ArgumentException ex)
       {
+        await DeleteUploadedAssetBestEffortAsync(tenantId, uploadedAssetId, ct);
+
         return Problem(
             statusCode: StatusCodes.Status400BadRequest,
             title: "Validation Error",
             detail: ex.Message
         );
       }
-      catch (Exception)
+      catch (InvalidOperationException ex)
       {
+        await DeleteUploadedAssetBestEffortAsync(tenantId, uploadedAssetId, ct);
+
+        return Problem(
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Validation Error",
+            detail: ex.Message
+        );
+      }
+      catch (Exception ex)
+      {
+        await DeleteUploadedAssetBestEffortAsync(tenantId, uploadedAssetId, ct);
+
+        _logger.LogError(ex, "Error al actualizar la recompensa {RewardId}", id);
+
         return Problem(
             statusCode: StatusCodes.Status500InternalServerError,
             title: "Internal Server Error",
@@ -748,5 +893,210 @@ namespace Api_eCommerce.Controllers
 
       return null;
     }
+
+    private static CreateLoyaltyRewardRequest MapCreateRequest(CreateLoyaltyRewardFormRequest request)
+    {
+      return new CreateLoyaltyRewardRequest
+      {
+        Name = request.Name,
+        Description = request.Description,
+        PointsCost = request.PointsCost,
+        RewardType = request.RewardType,
+        ProductIds = request.ProductIds,
+        AppliesToAllEligibleProducts = request.AppliesToAllEligibleProducts,
+        SingleProductSelectionRule = request.SingleProductSelectionRule,
+        DiscountValue = request.DiscountValue,
+        IsActive = request.IsActive,
+        Stock = request.Stock,
+        ValidityDays = request.ValidityDays,
+        CouponQuantity = request.CouponQuantity,
+        AvailableFrom = request.AvailableFrom,
+        AvailableUntil = request.AvailableUntil,
+        DisplayOrder = request.DisplayOrder
+      };
+    }
+
+    private static UpdateLoyaltyRewardRequest MapUpdateRequest(UpdateLoyaltyRewardFormRequest request)
+    {
+      return new UpdateLoyaltyRewardRequest
+      {
+        Name = request.Name,
+        Description = request.Description,
+        PointsCost = request.PointsCost,
+        RewardType = request.RewardType,
+        ProductIds = request.ProductIds,
+        AppliesToAllEligibleProducts = request.AppliesToAllEligibleProducts,
+        SingleProductSelectionRule = request.SingleProductSelectionRule,
+        DiscountValue = request.DiscountValue,
+        IsActive = request.IsActive,
+        Stock = request.Stock,
+        ValidityDays = request.ValidityDays,
+        CouponQuantity = request.CouponQuantity,
+        AvailableFrom = request.AvailableFrom,
+        AvailableUntil = request.AvailableUntil,
+        DisplayOrder = request.DisplayOrder
+      };
+    }
+
+    private async Task<TenantAssetDto> UploadRewardImageAsync(
+      Guid rewardId,
+      Guid tenantId,
+      IFormFile image,
+      CancellationToken ct)
+    {
+      var userId = User.FindFirst("sub")?.Value
+          ?? User.FindFirst("id")?.Value
+          ?? User.FindFirst("email")?.Value
+          ?? "system";
+
+      await using var stream = image.OpenReadStream();
+
+      return await _assetService.UploadAsync(new UploadAssetCommand
+      {
+        TenantId = tenantId,
+        UploadedByUserId = userId,
+        Module = "loyalty",
+        EntityType = "reward",
+        EntityId = rewardId.ToString(),
+        AssetType = TenantAssetType.Image,
+        Visibility = TenantAssetVisibility.Public,
+        OriginalFileName = image.FileName,
+        ContentType = image.ContentType,
+        SizeBytes = image.Length,
+        Content = stream,
+        SetAsPrimary = true
+      }, ct);
+    }
+
+    private async Task DeleteUploadedAssetBestEffortAsync(Guid tenantId, Guid? assetId, CancellationToken ct)
+    {
+      if (tenantId == Guid.Empty || !assetId.HasValue)
+      {
+        return;
+      }
+
+      try
+      {
+        await _assetService.DeleteSingleAsync(tenantId, assetId.Value, ct);
+      }
+      catch (Exception ex)
+      {
+        _logger.LogWarning(ex, "No fue posible eliminar el asset {AssetId} para tenant {TenantId}", assetId.Value, tenantId);
+      }
+    }
+
+    private async Task DeleteRewardBestEffortAsync(Guid rewardId, CancellationToken ct)
+    {
+      try
+      {
+        await _rewardsService.DeleteRewardAsync(rewardId, ct);
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "No fue posible revertir la recompensa {RewardId} tras fallo de imagen", rewardId);
+      }
+    }
+  }
+
+  public sealed class CreateLoyaltyRewardFormRequest
+  {
+    [FromForm(Name = "name")]
+    public string Name { get; init; } = string.Empty;
+
+    [FromForm(Name = "description")]
+    public string? Description { get; init; }
+
+    [FromForm(Name = "pointsCost")]
+    public int PointsCost { get; init; }
+
+    [FromForm(Name = "rewardType")]
+    public string RewardType { get; init; } = string.Empty;
+
+    [FromForm(Name = "productIds")]
+    public List<Guid>? ProductIds { get; init; }
+
+    [FromForm(Name = "appliesToAllEligibleProducts")]
+    public bool AppliesToAllEligibleProducts { get; init; } = true;
+
+    [FromForm(Name = "singleProductSelectionRule")]
+    public string? SingleProductSelectionRule { get; init; }
+
+    [FromForm(Name = "discountValue")]
+    public decimal? DiscountValue { get; init; }
+
+    [FromForm(Name = "image")]
+    public IFormFile? Image { get; init; }
+
+    [FromForm(Name = "isActive")]
+    public bool IsActive { get; init; } = true;
+
+    [FromForm(Name = "stock")]
+    public int? Stock { get; init; }
+
+    [FromForm(Name = "validityDays")]
+    public int? ValidityDays { get; init; }
+
+    [FromForm(Name = "couponQuantity")]
+    public int? CouponQuantity { get; init; }
+
+    [FromForm(Name = "availableFrom")]
+    public DateTime? AvailableFrom { get; init; }
+
+    [FromForm(Name = "availableUntil")]
+    public DateTime? AvailableUntil { get; init; }
+
+    [FromForm(Name = "displayOrder")]
+    public int DisplayOrder { get; init; }
+  }
+
+  public sealed class UpdateLoyaltyRewardFormRequest
+  {
+    [FromForm(Name = "name")]
+    public string Name { get; init; } = string.Empty;
+
+    [FromForm(Name = "description")]
+    public string? Description { get; init; }
+
+    [FromForm(Name = "pointsCost")]
+    public int PointsCost { get; init; }
+
+    [FromForm(Name = "rewardType")]
+    public string RewardType { get; init; } = string.Empty;
+
+    [FromForm(Name = "productIds")]
+    public List<Guid>? ProductIds { get; init; }
+
+    [FromForm(Name = "appliesToAllEligibleProducts")]
+    public bool AppliesToAllEligibleProducts { get; init; } = true;
+
+    [FromForm(Name = "singleProductSelectionRule")]
+    public string? SingleProductSelectionRule { get; init; }
+
+    [FromForm(Name = "discountValue")]
+    public decimal? DiscountValue { get; init; }
+
+    [FromForm(Name = "image")]
+    public IFormFile? Image { get; init; }
+
+    [FromForm(Name = "isActive")]
+    public bool IsActive { get; init; }
+
+    [FromForm(Name = "stock")]
+    public int? Stock { get; init; }
+
+    [FromForm(Name = "validityDays")]
+    public int? ValidityDays { get; init; }
+
+    [FromForm(Name = "couponQuantity")]
+    public int? CouponQuantity { get; init; }
+
+    [FromForm(Name = "availableFrom")]
+    public DateTime? AvailableFrom { get; init; }
+
+    [FromForm(Name = "availableUntil")]
+    public DateTime? AvailableUntil { get; init; }
+
+    [FromForm(Name = "displayOrder")]
+    public int DisplayOrder { get; init; }
   }
 }

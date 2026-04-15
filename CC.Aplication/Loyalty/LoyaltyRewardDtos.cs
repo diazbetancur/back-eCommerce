@@ -32,9 +32,6 @@ namespace CC.Aplication.Loyalty
     [Range(0, double.MaxValue, ErrorMessage = "El valor del descuento debe ser positivo")]
     public decimal? DiscountValue { get; init; }
 
-    [Url(ErrorMessage = "La URL de imagen no es válida")]
-    public string? ImageUrl { get; init; }
-
     public bool IsActive { get; init; } = true;
 
     [Range(0, int.MaxValue, ErrorMessage = "El stock debe ser positivo")]
@@ -80,9 +77,6 @@ namespace CC.Aplication.Loyalty
 
     [Range(0, double.MaxValue, ErrorMessage = "El valor del descuento debe ser positivo")]
     public decimal? DiscountValue { get; init; }
-
-    [Url(ErrorMessage = "La URL de imagen no es válida")]
-    public string? ImageUrl { get; init; }
 
     public bool IsActive { get; init; }
 
