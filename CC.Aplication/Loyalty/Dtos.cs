@@ -80,4 +80,30 @@ namespace CC.Aplication.Loyalty
         bool IsEnabled,
         decimal? MinPurchaseForPoints
     );
+
+    // ==================== POINTS AS MONEY CONFIGURATION ====================
+
+    /// <summary>
+    /// Configuración para permitir uso de puntos como dinero en checkout.
+    /// Esta versión solo gestiona configuración y exposición de datos.
+    /// </summary>
+    public record LoyaltyPointsPaymentConfigDto(
+        bool IsEnabled,
+        decimal MoneyPerPoint,
+        bool AllowCombineWithCoupons,
+        decimal? MaxMoneyPerTransaction,
+        decimal MinimumPayableAmount,
+        string Currency
+    );
+
+    /// <summary>
+    /// Request para actualizar configuración de puntos como dinero.
+    /// </summary>
+    public record UpdateLoyaltyPointsPaymentConfigRequest(
+        bool IsEnabled,
+        decimal MoneyPerPoint,
+        bool AllowCombineWithCoupons,
+        decimal? MaxMoneyPerTransaction,
+        decimal MinimumPayableAmount
+    );
 }

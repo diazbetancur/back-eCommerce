@@ -66,6 +66,11 @@ namespace CC.Infraestructure.TenantSeeders
         ["LoyaltyPointsPerDollar"] = "1",
         ["LoyaltyMinRedemption"] = "100",
         ["LoyaltyPointValue"] = "0.01", // 100 puntos = $1
+        ["LoyaltyPointsAsMoneyEnabled"] = "false",
+        ["LoyaltyMoneyPerPoint"] = "0.01",
+        ["LoyaltyAllowCombineWithCoupons"] = "false",
+        ["LoyaltyMaxMoneyPerTransaction"] = "0",
+        ["LoyaltyMinimumPayableAmount"] = "0",
 
         // ==================== CHECKOUT ====================
         ["MinOrderAmount"] = "0",

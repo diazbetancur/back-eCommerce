@@ -507,6 +507,87 @@ namespace Api_eCommerce.Controllers
       }
     }
 
+    /// <summary>
+    /// Obtener configuración de uso de puntos como dinero.
+    /// </summary>
+    [HttpGet("points-payment-config")]
+    [RequireModule("loyalty", "view")]
+    [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [ProducesResponseType<LoyaltyPointsPaymentConfigDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetPointsPaymentConfiguration()
+    {
+      try
+      {
+        var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+        if (tenantContext == null)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status409Conflict,
+              title: "Tenant Not Resolved",
+              detail: "Unable to resolve tenant from request"
+          );
+        }
+
+        var config = await _loyaltyService.GetLoyaltyPointsPaymentConfigAsync();
+        return Ok(config);
+      }
+      catch (Exception)
+      {
+        return Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Internal Server Error",
+            detail: "An error occurred while retrieving loyalty points payment configuration"
+        );
+      }
+    }
+
+    /// <summary>
+    /// Actualizar configuración de uso de puntos como dinero.
+    /// </summary>
+    [HttpPut("points-payment-config")]
+    [RequireModule("loyalty", "update")]
+    [ServiceFilter(typeof(ModuleAuthorizationActionFilter))]
+    [ProducesResponseType<LoyaltyPointsPaymentConfigDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UpdatePointsPaymentConfiguration([FromBody] UpdateLoyaltyPointsPaymentConfigRequest request)
+    {
+      try
+      {
+        var tenantContext = await _tenantResolver.ResolveAsync(HttpContext);
+        if (tenantContext == null)
+        {
+          return Problem(
+              statusCode: StatusCodes.Status409Conflict,
+              title: "Tenant Not Resolved",
+              detail: "Unable to resolve tenant from request"
+          );
+        }
+
+        var config = await _loyaltyService.UpdateLoyaltyPointsPaymentConfigAsync(request);
+        return Ok(config);
+      }
+      catch (ArgumentException ex)
+      {
+        return Problem(
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Validation Error",
+            detail: ex.Message
+        );
+      }
+      catch (Exception)
+      {
+        return Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Internal Server Error",
+            detail: "An error occurred while updating loyalty points payment configuration"
+        );
+      }
+    }
+
     // ==================== MANUAL POINTS ADJUSTMENT ====================
 
     /// <summary>

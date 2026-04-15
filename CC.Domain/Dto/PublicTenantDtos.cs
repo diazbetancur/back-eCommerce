@@ -14,6 +14,7 @@ namespace CC.Domain.Dto
     public ThemeInfo Theme { get; init; } = new();
     public Dictionary<string, bool> Features { get; init; } = new();
     public AppFeaturesInfo AppFeatures { get; init; } = new();
+    public LoyaltyPointsPaymentInfo LoyaltyPointsPayment { get; init; } = new();
     public ContactInfo Contact { get; init; } = new();
     public SocialInfo Social { get; init; } = new();
     public SeoInfo Seo { get; init; } = new();
@@ -80,6 +81,16 @@ namespace CC.Domain.Dto
     public bool EnableLoyalty { get; init; } = true;
     public bool EnableGuestCheckout { get; init; } = true;
     public bool EnableNotifications { get; init; } = true;
+  }
+
+  public record LoyaltyPointsPaymentInfo
+  {
+    public bool IsEnabled { get; init; } = false;
+    public decimal MoneyPerPoint { get; init; } = 0.01m;
+    public bool AllowCombineWithCoupons { get; init; } = false;
+    public decimal? MaxMoneyPerTransaction { get; init; }
+    public decimal MinimumPayableAmount { get; init; } = 0m;
+    public string Currency { get; init; } = "COP";
   }
 
   public record MessagesInfo

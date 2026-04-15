@@ -5,6 +5,7 @@ using CC.Infraestructure.Tenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using System.Globalization;
 
 namespace CC.Aplication.Loyalty
 {
@@ -19,6 +20,8 @@ namespace CC.Aplication.Loyalty
         Task<LoyaltyAdminDashboardSummaryDto> GetAdminDashboardSummaryAsync(CancellationToken ct = default);
         Task<LoyaltyConfigDto> GetLoyaltyConfigurationAsync(CancellationToken ct = default);
         Task<LoyaltyConfigDto> UpdateLoyaltyConfigurationAsync(UpdateLoyaltyConfigRequest request, CancellationToken ct = default);
+        Task<LoyaltyPointsPaymentConfigDto> GetLoyaltyPointsPaymentConfigAsync(CancellationToken ct = default);
+        Task<LoyaltyPointsPaymentConfigDto> UpdateLoyaltyPointsPaymentConfigAsync(UpdateLoyaltyPointsPaymentConfigRequest request, CancellationToken ct = default);
     }
 
     public class LoyaltyService : ILoyaltyService
@@ -26,6 +29,14 @@ namespace CC.Aplication.Loyalty
         private readonly TenantDbContextFactory _dbFactory;
         private readonly ITenantAccessor _tenantAccessor;
         private readonly ILogger<LoyaltyService> _logger;
+
+        private const string PointsAsMoneyEnabledKey = "LoyaltyPointsAsMoneyEnabled";
+        private const string MoneyPerPointKey = "LoyaltyMoneyPerPoint";
+        private const string AllowCombineWithCouponsKey = "LoyaltyAllowCombineWithCoupons";
+        private const string MaxMoneyPerTransactionKey = "LoyaltyMaxMoneyPerTransaction";
+        private const string MinimumPayableAmountKey = "LoyaltyMinimumPayableAmount";
+        private const string LegacyPointValueKey = "LoyaltyPointValue";
+        private const string CurrencyKey = "Currency";
 
         public LoyaltyService(
             TenantDbContextFactory dbFactory,
@@ -1180,6 +1191,152 @@ namespace CC.Aplication.Loyalty
                 config.DateCreated,
                 config.UpdatedAt
             );
+        }
+
+        public async Task<LoyaltyPointsPaymentConfigDto> GetLoyaltyPointsPaymentConfigAsync(CancellationToken ct = default)
+        {
+            if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
+            {
+                throw new InvalidOperationException("No tenant context available");
+            }
+
+            await using var db = _dbFactory.Create();
+
+            var keys = new[]
+            {
+                PointsAsMoneyEnabledKey,
+                MoneyPerPointKey,
+                AllowCombineWithCouponsKey,
+                MaxMoneyPerTransactionKey,
+                MinimumPayableAmountKey,
+                LegacyPointValueKey,
+                CurrencyKey
+            };
+
+            var settings = await db.Settings
+                .AsNoTracking()
+                .Where(s => keys.Contains(s.Key))
+                .ToDictionaryAsync(s => s.Key, s => s.Value, ct);
+
+            var isEnabled = ParseBool(settings.GetValueOrDefault(PointsAsMoneyEnabledKey), false);
+            var moneyPerPoint = ParseDecimal(
+                settings.GetValueOrDefault(MoneyPerPointKey)
+                ?? settings.GetValueOrDefault(LegacyPointValueKey),
+                0.01m);
+            var allowCombineWithCoupons = ParseBool(settings.GetValueOrDefault(AllowCombineWithCouponsKey), false);
+            var maxMoneyPerTransaction = ParseNullableDecimal(settings.GetValueOrDefault(MaxMoneyPerTransactionKey));
+            var minimumPayableAmount = ParseDecimal(settings.GetValueOrDefault(MinimumPayableAmountKey), 0m);
+            var currency = settings.GetValueOrDefault(CurrencyKey) ?? "COP";
+
+            return new LoyaltyPointsPaymentConfigDto(
+                IsEnabled: isEnabled,
+                MoneyPerPoint: moneyPerPoint,
+                AllowCombineWithCoupons: allowCombineWithCoupons,
+                MaxMoneyPerTransaction: maxMoneyPerTransaction,
+                MinimumPayableAmount: minimumPayableAmount,
+                Currency: currency);
+        }
+
+        public async Task<LoyaltyPointsPaymentConfigDto> UpdateLoyaltyPointsPaymentConfigAsync(
+            UpdateLoyaltyPointsPaymentConfigRequest request,
+            CancellationToken ct = default)
+        {
+            if (!_tenantAccessor.HasTenant || _tenantAccessor.TenantInfo == null)
+            {
+                throw new InvalidOperationException("No tenant context available");
+            }
+
+            if (request.MoneyPerPoint <= 0)
+            {
+                throw new ArgumentException("MoneyPerPoint must be greater than 0");
+            }
+
+            if (request.MaxMoneyPerTransaction.HasValue && request.MaxMoneyPerTransaction.Value < 0)
+            {
+                throw new ArgumentException("MaxMoneyPerTransaction cannot be negative");
+            }
+
+            if (request.MinimumPayableAmount < 0)
+            {
+                throw new ArgumentException("MinimumPayableAmount cannot be negative");
+            }
+
+            await using var db = _dbFactory.Create();
+
+            var updates = new Dictionary<string, string>
+            {
+                [PointsAsMoneyEnabledKey] = request.IsEnabled.ToString().ToLowerInvariant(),
+                [MoneyPerPointKey] = request.MoneyPerPoint.ToString(CultureInfo.InvariantCulture),
+                [AllowCombineWithCouponsKey] = request.AllowCombineWithCoupons.ToString().ToLowerInvariant(),
+                [MaxMoneyPerTransactionKey] = request.MaxMoneyPerTransaction.HasValue
+                    ? request.MaxMoneyPerTransaction.Value.ToString(CultureInfo.InvariantCulture)
+                    : "0",
+                [MinimumPayableAmountKey] = request.MinimumPayableAmount.ToString(CultureInfo.InvariantCulture)
+            };
+
+            foreach (var (key, value) in updates)
+            {
+                var existing = await db.Settings.FirstOrDefaultAsync(s => s.Key == key, ct);
+                if (existing == null)
+                {
+                    db.Settings.Add(new CC.Infraestructure.Tenant.Entities.TenantSetting
+                    {
+                        Key = key,
+                        Value = value
+                    });
+                }
+                else
+                {
+                    existing.Value = value;
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "Updated loyalty points payment configuration for tenant {TenantSlug}. Enabled={Enabled}, MoneyPerPoint={MoneyPerPoint}, AllowCombineWithCoupons={AllowCombineWithCoupons}, MaxMoneyPerTransaction={MaxMoneyPerTransaction}, MinimumPayableAmount={MinimumPayableAmount}",
+                _tenantAccessor.TenantInfo.Slug,
+                request.IsEnabled,
+                request.MoneyPerPoint,
+                request.AllowCombineWithCoupons,
+                request.MaxMoneyPerTransaction,
+                request.MinimumPayableAmount);
+
+            return await GetLoyaltyPointsPaymentConfigAsync(ct);
+        }
+
+        private static bool ParseBool(string? value, bool defaultValue)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return defaultValue;
+            }
+
+            return bool.TryParse(value, out var parsed) ? parsed : defaultValue;
+        }
+
+        private static decimal ParseDecimal(string? value, decimal defaultValue)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return defaultValue;
+            }
+
+            return decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : defaultValue;
+        }
+
+        private static decimal? ParseNullableDecimal(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : null;
         }
     }
 }

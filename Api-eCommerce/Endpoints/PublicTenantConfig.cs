@@ -6,6 +6,7 @@ using CC.Domain.Dto;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace Api_eCommerce.Endpoints
 {
@@ -131,12 +132,24 @@ namespace Api_eCommerce.Endpoints
           },
           AppFeatures = new AppFeaturesInfo
           {
-            EnableCart = settings.GetValueOrDefault("EnableCart", "true") == "true",
-            EnableWishlist = settings.GetValueOrDefault("EnableWishlist", "true") == "true",
-            EnableReviews = settings.GetValueOrDefault("EnableReviews", "false") == "true",
-            EnableLoyalty = settings.GetValueOrDefault("EnableLoyalty", "true") == "true",
-            EnableGuestCheckout = settings.GetValueOrDefault("EnableGuestCheckout", "true") == "true",
-            EnableNotifications = settings.GetValueOrDefault("EnableNotifications", "true") == "true"
+            EnableCart = IsTrue(settings.GetValueOrDefault("EnableCart"), true),
+            EnableWishlist = IsTrue(settings.GetValueOrDefault("EnableWishlist"), true),
+            EnableReviews = IsTrue(settings.GetValueOrDefault("EnableReviews"), false),
+            EnableLoyalty = IsTrue(settings.GetValueOrDefault("EnableLoyalty"), true),
+            EnableGuestCheckout = IsTrue(settings.GetValueOrDefault("EnableGuestCheckout"), true),
+            EnableNotifications = IsTrue(settings.GetValueOrDefault("EnableNotifications"), true)
+          },
+          LoyaltyPointsPayment = new LoyaltyPointsPaymentInfo
+          {
+            IsEnabled = IsTrue(settings.GetValueOrDefault("LoyaltyPointsAsMoneyEnabled"), false),
+            MoneyPerPoint = ParseDecimal(
+              settings.GetValueOrDefault("LoyaltyMoneyPerPoint")
+              ?? settings.GetValueOrDefault("LoyaltyPointValue"),
+              0.01m),
+            AllowCombineWithCoupons = IsTrue(settings.GetValueOrDefault("LoyaltyAllowCombineWithCoupons"), false),
+            MaxMoneyPerTransaction = ParseNullableDecimal(settings.GetValueOrDefault("LoyaltyMaxMoneyPerTransaction")),
+            MinimumPayableAmount = ParseDecimal(settings.GetValueOrDefault("LoyaltyMinimumPayableAmount"), 0m),
+            Currency = settings.GetValueOrDefault("Currency", "COP")
           },
           Messages = new MessagesInfo
           {
@@ -176,6 +189,40 @@ namespace Api_eCommerce.Endpoints
     {
       if (string.IsNullOrEmpty(str)) return str;
       return char.ToLowerInvariant(str[0]) + str.Substring(1);
+    }
+
+    private static bool IsTrue(string? value, bool defaultValue)
+    {
+      if (string.IsNullOrWhiteSpace(value))
+      {
+        return defaultValue;
+      }
+
+      return bool.TryParse(value, out var parsed) ? parsed : defaultValue;
+    }
+
+    private static decimal ParseDecimal(string? value, decimal defaultValue)
+    {
+      if (string.IsNullOrWhiteSpace(value))
+      {
+        return defaultValue;
+      }
+
+      return decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+        ? parsed
+        : defaultValue;
+    }
+
+    private static decimal? ParseNullableDecimal(string? value)
+    {
+      if (string.IsNullOrWhiteSpace(value))
+      {
+        return null;
+      }
+
+      return decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+        ? parsed
+        : null;
     }
   }
 }
