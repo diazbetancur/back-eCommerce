@@ -50,8 +50,8 @@ namespace Api_eCommerce.Controllers
         {
           return Problem(
               statusCode: StatusCodes.Status400BadRequest,
-              title: "Tenant Not Resolved",
-              detail: "Unable to resolve tenant from request"
+              title: "Tenant no resuelto",
+              detail: "No se pudo resolver el tenant para la solicitud."
           );
         }
 
@@ -207,7 +207,7 @@ namespace Api_eCommerce.Controllers
       {
         return Problem(
             statusCode: StatusCodes.Status400BadRequest,
-            title: "Validation Error",
+            title: "Error de validación",
             detail: ex.Message
         );
       }
@@ -215,7 +215,7 @@ namespace Api_eCommerce.Controllers
       {
         return Problem(
             statusCode: StatusCodes.Status500InternalServerError,
-            title: "Internal Server Error",
+            title: "Error interno del servidor",
             detail: ex.Message
         );
       }
@@ -250,8 +250,8 @@ namespace Api_eCommerce.Controllers
         {
           return Problem(
               statusCode: StatusCodes.Status400BadRequest,
-              title: "Tenant Not Resolved",
-              detail: "Unable to resolve tenant from request"
+              title: "Tenant no resuelto",
+              detail: "No se pudo resolver el tenant para la solicitud."
           );
         }
 
@@ -281,7 +281,7 @@ namespace Api_eCommerce.Controllers
       {
         return Problem(
             statusCode: StatusCodes.Status400BadRequest,
-            title: "Validation Error",
+            title: "Error de validación",
             detail: ex.Message
         );
       }
@@ -289,7 +289,7 @@ namespace Api_eCommerce.Controllers
       {
         return Problem(
             statusCode: StatusCodes.Status500InternalServerError,
-            title: "Internal Server Error",
+            title: "Error interno del servidor",
             detail: ex.Message
         );
       }

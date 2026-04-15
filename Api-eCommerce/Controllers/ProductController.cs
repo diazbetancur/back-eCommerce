@@ -58,8 +58,8 @@ namespace Api_eCommerce.Controllers
         {
           return Problem(
               statusCode: StatusCodes.Status400BadRequest,
-              title: "Tenant Not Resolved",
-              detail: "Unable to resolve tenant from request"
+              title: "Tenant no resuelto",
+              detail: "No se pudo resolver el tenant para la solicitud."
           );
         }
 
@@ -294,7 +294,7 @@ namespace Api_eCommerce.Controllers
           return ValidationProblem(new ValidationProblemDetails
           {
             Status = StatusCodes.Status400BadRequest,
-            Title = "Validation Error",
+            Title = "Error de validación",
             Errors = new Dictionary<string, string[]>
             {
               { "Name", new[] { "El nombre del producto es requerido" } }
@@ -307,7 +307,7 @@ namespace Api_eCommerce.Controllers
           return ValidationProblem(new ValidationProblemDetails
           {
             Status = StatusCodes.Status400BadRequest,
-            Title = "Validation Error",
+            Title = "Error de validación",
             Errors = new Dictionary<string, string[]>
             {
               { "Price", new[] { "El precio debe ser mayor a 0" } }
@@ -341,14 +341,28 @@ namespace Api_eCommerce.Controllers
         var created = await _productService.CreateAsync(dto, ct);
         var userId = ResolveUserId();
 
-        await UploadProductMediaAsync(
-            created.Id,
-            tenantContext.TenantId,
-            userId,
-            request.MainImage,
-            request.Images,
-            request.Videos,
-            ct);
+        var uploadedAssetIds = new List<Guid>();
+        try
+        {
+          await UploadProductMediaAsync(
+              created.Id,
+              tenantContext.TenantId,
+              userId,
+              request.MainImage,
+              request.Images,
+              request.Videos,
+              uploadedAssetIds,
+              ct);
+        }
+        catch (Exception uploadEx)
+        {
+          await DeleteUploadedAssetsBestEffortAsync(tenantContext.TenantId, uploadedAssetIds, ct);
+          await RollbackCreatedProductBestEffortAsync(created.Id, ct);
+          _logger.LogWarning(uploadEx, "Upload de media fallido para producto {ProductId}. Se revirtió la creación.", created.Id);
+          throw new InvalidOperationException(
+              "No se pudo completar la carga de imagenes/videos del producto. Se intentó revertir la creación.",
+              uploadEx);
+        }
 
         var product = await _productService.GetByIdAsync(created.Id, ct) ?? created;
 
@@ -362,7 +376,7 @@ namespace Api_eCommerce.Controllers
       {
         return Problem(
             statusCode: StatusCodes.Status400BadRequest,
-            title: "Validation Error",
+            title: "Error de validación",
             detail: ex.Message
         );
       }
@@ -406,8 +420,8 @@ namespace Api_eCommerce.Controllers
         {
           return Problem(
               statusCode: StatusCodes.Status400BadRequest,
-              title: "Tenant Not Resolved",
-              detail: "Unable to resolve tenant from request"
+              title: "Tenant no resuelto",
+              detail: "No se pudo resolver el tenant para la solicitud."
           );
         }
 
@@ -482,7 +496,7 @@ namespace Api_eCommerce.Controllers
           return ValidationProblem(new ValidationProblemDetails
           {
             Status = StatusCodes.Status400BadRequest,
-            Title = "Validation Error",
+            Title = "Error de validación",
             Errors = new Dictionary<string, string[]>
             {
               { "Price", new[] { "El precio debe ser mayor a 0" } }
@@ -512,17 +526,49 @@ namespace Api_eCommerce.Controllers
           CategoryIds = request.CategoryIds
         };
 
-        await _productService.UpdateAsync(id, dto, ct);
+        var existingProduct = await _productService.GetByIdAsync(id, ct);
+        if (existingProduct == null)
+        {
+          return NotFound(new ProblemDetails
+          {
+            Status = StatusCodes.Status404NotFound,
+            Title = "Producto no encontrado",
+            Detail = $"Producto con ID {id} no encontrado"
+          });
+        }
 
         var userId = ResolveUserId();
-        await UploadProductMediaAsync(
-            id,
-            tenantContext.TenantId,
-            userId,
-            request.MainImage,
-            request.Images,
-            request.Videos,
-            ct);
+        var uploadedAssetIds = new List<Guid>();
+        try
+        {
+          await UploadProductMediaAsync(
+              id,
+              tenantContext.TenantId,
+              userId,
+              request.MainImage,
+              request.Images,
+              request.Videos,
+              uploadedAssetIds,
+              ct);
+        }
+        catch (Exception uploadEx)
+        {
+          await DeleteUploadedAssetsBestEffortAsync(tenantContext.TenantId, uploadedAssetIds, ct);
+          _logger.LogWarning(uploadEx, "Upload de media fallido para actualización de producto {ProductId}. Se revirtieron assets nuevos.", id);
+          throw new InvalidOperationException(
+              "No se pudo completar la carga de imagenes/videos del producto. La actualización no fue aplicada.",
+              uploadEx);
+        }
+
+        try
+        {
+          await _productService.UpdateAsync(id, dto, ct);
+        }
+        catch
+        {
+          await DeleteUploadedAssetsBestEffortAsync(tenantContext.TenantId, uploadedAssetIds, ct);
+          throw;
+        }
 
         var product = await _productService.GetByIdAsync(id, ct);
         if (product == null)
@@ -530,27 +576,29 @@ namespace Api_eCommerce.Controllers
           return NotFound(new ProblemDetails
           {
             Status = StatusCodes.Status404NotFound,
-            Title = "Product Not Found",
+            Title = "Producto no encontrado",
             Detail = $"Producto con ID {id} no encontrado"
           });
         }
 
         return Ok(product);
       }
-      catch (InvalidOperationException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+      catch (InvalidOperationException ex) when (
+          ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+          ex.Message.Contains("no encontrado", StringComparison.OrdinalIgnoreCase))
       {
         return NotFound(new ProblemDetails
         {
           Status = StatusCodes.Status404NotFound,
-          Title = "Product Not Found",
-          Detail = ex.Message
+          Title = "Producto no encontrado",
+          Detail = "No se encontró el producto solicitado."
         });
       }
       catch (InvalidOperationException ex)
       {
         return Problem(
             statusCode: StatusCodes.Status400BadRequest,
-            title: "Validation Error",
+            title: "Error de validación",
             detail: ex.Message
         );
       }
@@ -751,18 +799,21 @@ namespace Api_eCommerce.Controllers
         IFormFile? mainImage,
         List<IFormFile>? images,
         List<IFormFile>? videos,
+        List<Guid> uploadedAssetIds,
         CancellationToken ct)
     {
       if (mainImage is { Length: > 0 })
       {
-        await UploadAssetAsync(productId, tenantId, userId, mainImage, TenantAssetType.Image, setAsPrimary: true, ct);
+        uploadedAssetIds.Add(
+            await UploadAssetAsync(productId, tenantId, userId, mainImage, TenantAssetType.Image, setAsPrimary: true, ct));
       }
 
       if (images is { Count: > 0 })
       {
         foreach (var image in images.Where(f => f is { Length: > 0 }))
         {
-          await UploadAssetAsync(productId, tenantId, userId, image, TenantAssetType.Image, setAsPrimary: false, ct);
+          uploadedAssetIds.Add(
+              await UploadAssetAsync(productId, tenantId, userId, image, TenantAssetType.Image, setAsPrimary: false, ct));
         }
       }
 
@@ -770,12 +821,13 @@ namespace Api_eCommerce.Controllers
       {
         foreach (var video in videos.Where(f => f is { Length: > 0 }))
         {
-          await UploadAssetAsync(productId, tenantId, userId, video, TenantAssetType.Video, setAsPrimary: false, ct);
+          uploadedAssetIds.Add(
+              await UploadAssetAsync(productId, tenantId, userId, video, TenantAssetType.Video, setAsPrimary: false, ct));
         }
       }
     }
 
-    private async Task UploadAssetAsync(
+    private async Task<Guid> UploadAssetAsync(
         Guid productId,
         Guid tenantId,
         string userId,
@@ -786,7 +838,7 @@ namespace Api_eCommerce.Controllers
     {
       await using var stream = file.OpenReadStream();
 
-      await _assetService.UploadAsync(new UploadAssetCommand
+      var uploaded = await _assetService.UploadAsync(new UploadAssetCommand
       {
         TenantId = tenantId,
         UploadedByUserId = userId,
@@ -801,6 +853,35 @@ namespace Api_eCommerce.Controllers
         Content = stream,
         SetAsPrimary = setAsPrimary
       }, ct);
+
+      return uploaded.Id;
+    }
+
+    private async Task DeleteUploadedAssetsBestEffortAsync(Guid tenantId, IEnumerable<Guid> assetIds, CancellationToken ct)
+    {
+      foreach (var assetId in assetIds)
+      {
+        try
+        {
+          await _assetService.DeleteSingleAsync(tenantId, assetId, ct);
+        }
+        catch (Exception ex)
+        {
+          _logger.LogWarning(ex, "No fue posible revertir asset {AssetId} para tenant {TenantId}", assetId, tenantId);
+        }
+      }
+    }
+
+    private async Task RollbackCreatedProductBestEffortAsync(Guid productId, CancellationToken ct)
+    {
+      try
+      {
+        await _productService.DeleteAsync(productId, ct);
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "No fue posible revertir el producto {ProductId} tras fallo de upload", productId);
+      }
     }
 
     private string ResolveUserId()

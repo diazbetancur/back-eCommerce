@@ -23,6 +23,7 @@ using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Services.Assets;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -43,6 +44,28 @@ builder.Services.AddScoped<Api_eCommerce.Authorization.ModuleAuthorizationAction
 
 builder.Services.AddControllers();
 builder.Services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Title = ProblemTextLocalizer.ToSpanish(context.ProblemDetails.Title);
+        context.ProblemDetails.Detail = ProblemTextLocalizer.ToSpanish(context.ProblemDetails.Detail);
+
+        if (context.ProblemDetails is ValidationProblemDetails validationProblem)
+        {
+            var keys = validationProblem.Errors.Keys.ToList();
+            foreach (var key in keys)
+            {
+                var translated = validationProblem.Errors[key]
+                    .Select(ProblemTextLocalizer.ToSpanish)
+                    .Select(message => string.IsNullOrWhiteSpace(message) ? "Valor inválido." : message!)
+                    .ToArray();
+
+                validationProblem.Errors[key] = translated;
+            }
+        }
+    };
+});
 
 // ==================== CORS ====================
 builder.Services.AddCors(options =>

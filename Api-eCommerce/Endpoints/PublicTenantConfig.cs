@@ -29,7 +29,11 @@ namespace Api_eCommerce.Endpoints
 
         if (tenant == null)
         {
-          return Results.NotFound(new { error = "Tenant not found", slug });
+          return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Tenant no encontrado",
+                    detail: $"No se encontró el tenant con slug '{slug}'."
+                );
         }
 
         if (tenant.Status != TenantStatus.Ready)

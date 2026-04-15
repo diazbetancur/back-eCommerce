@@ -245,7 +245,10 @@ namespace Api_eCommerce.Endpoints
 
                 if (product == null)
                 {
-                    return Results.NotFound(new { error = "Product not found" });
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status404NotFound,
+                        title: "Producto no encontrado",
+                        detail: "No se encontró el producto solicitado.");
                 }
 
                 var dto = new ProductDetailDto
@@ -353,7 +356,10 @@ namespace Api_eCommerce.Endpoints
                 var product = await db.Products.FindAsync(id);
                 if (product == null)
                 {
-                    return Results.NotFound(new { error = "Product not found" });
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status404NotFound,
+                        title: "Producto no encontrado",
+                        detail: "No se encontró el producto solicitado.");
                 }
 
                 product.Name = request.Name ?? product.Name;
@@ -399,7 +405,10 @@ namespace Api_eCommerce.Endpoints
                 var product = await db.Products.FindAsync(id);
                 if (product == null)
                 {
-                    return Results.NotFound(new { error = "Product not found" });
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status404NotFound,
+                        title: "Producto no encontrado",
+                        detail: "No se encontró el producto solicitado.");
                 }
 
                 db.Products.Remove(product);
@@ -478,7 +487,10 @@ namespace Api_eCommerce.Endpoints
 
                 if (order == null)
                 {
-                    return Results.NotFound(new { error = "Order not found" });
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status404NotFound,
+                        title: "Orden no encontrada",
+                        detail: "No se encontró la orden solicitada.");
                 }
 
                 // Obtener items por separado
@@ -535,7 +547,10 @@ namespace Api_eCommerce.Endpoints
 
                 if (order == null)
                 {
-                    return Results.NotFound(new { error = "Order not found" });
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status404NotFound,
+                        title: "Orden no encontrada",
+                        detail: "No se encontró la orden solicitada.");
                 }
 
                 order.Status = request.Status;
@@ -706,7 +721,10 @@ namespace Api_eCommerce.Endpoints
                 // Verificar si el email ya existe
                 if (await db.Users.AnyAsync(u => u.Email == request.Email))
                 {
-                    return Results.Conflict(new { error = "Email already exists" });
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status409Conflict,
+                        title: "Conflicto de negocio",
+                        detail: "Ya existe un usuario con ese correo electrónico.");
                 }
 
                 // ? VALIDAR L�MITE DE USUARIOS ADMINISTRATIVOS (STAFF)
@@ -792,13 +810,19 @@ namespace Api_eCommerce.Endpoints
 
                 if (user == null)
                 {
-                    return Results.NotFound(new { error = "User not found" });
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status404NotFound,
+                        title: "Usuario no encontrado",
+                        detail: "No se encontró el usuario solicitado.");
                 }
 
                 var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == request.RoleName);
                 if (role == null)
                 {
-                    return Results.NotFound(new { error = "Role not found" });
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status404NotFound,
+                        title: "Rol no encontrado",
+                        detail: "No se encontró el rol solicitado.");
                 }
 
                 // Verificar si ya tiene el rol

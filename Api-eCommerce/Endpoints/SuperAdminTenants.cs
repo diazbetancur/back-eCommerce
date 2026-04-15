@@ -121,20 +121,33 @@ namespace Api_eCommerce.Endpoints
 
             if (!regex.IsMatch(request.Slug))
             {
-                return Results.ValidationProblem(new Dictionary<string, string[]> { { "slug", new[] { "invalid format: must be lowercase letters, numbers and hyphens, min 3 chars" } } });
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    { "slug", new[] { "Formato inválido: debe contener solo letras minúsculas, números y guiones, con mínimo 3 caracteres." } }
+                });
             }
 
             // Verificar si ya existe un tenant con ese slug
             var existingTenant = await adminDb.Tenants.FirstOrDefaultAsync(t => t.Slug == request.Slug);
             if (existingTenant != null)
             {
-                return Results.Conflict(new { error = $"Tenant with slug '{request.Slug}' already exists", existingStatus = existingTenant.Status.ToString() });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Conflicto de negocio",
+                    detail: $"Ya existe un tenant con el slug '{request.Slug}'.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["existingStatus"] = existingTenant.Status.ToString()
+                    });
             }
 
             // Validar que el email sea válido
             if (string.IsNullOrWhiteSpace(request.AdminEmail) || !request.AdminEmail.Contains("@"))
             {
-                return Results.BadRequest(new { error = "AdminEmail is required and must be a valid email address" });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Solicitud inválida",
+                    detail: "El correo del administrador es obligatorio y debe tener un formato válido.");
             }
 
             var finalAdminEmail = request.AdminEmail.Trim().ToLower();
@@ -142,7 +155,10 @@ namespace Api_eCommerce.Endpoints
             var plan = await adminDb.Plans.FirstOrDefaultAsync(p => p.Code == request.PlanCode);
             if (plan == null)
             {
-                return Results.NotFound(new { errors = "plan not found" });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Plan no encontrado",
+                    detail: "No se encontró el plan solicitado.");
             }
 
             var dbName = $"tenant_{request.Slug}";
@@ -180,11 +196,14 @@ namespace Api_eCommerce.Endpoints
                     if (exists != null)
                     {
                         logger.LogWarning("❌ Database {DbName} already exists, cannot create tenant", dbName);
-                        return Results.Conflict(new
-                        {
-                            error = $"Database '{dbName}' already exists. Cannot create tenant.",
-                            suggestion = "Use a different slug or contact administrator to clean up the orphaned database."
-                        });
+                        return Results.Problem(
+                            statusCode: StatusCodes.Status409Conflict,
+                            title: "Conflicto de negocio",
+                            detail: $"La base de datos '{dbName}' ya existe. No se puede crear el tenant.",
+                            extensions: new Dictionary<string, object?>
+                            {
+                                ["suggestion"] = "Usa un slug diferente o solicita limpiar la base de datos huérfana."
+                            });
                     }
                 }
 
@@ -383,7 +402,10 @@ namespace Api_eCommerce.Endpoints
 
             if (tenant == null)
             {
-                return Results.NotFound(new { error = $"Tenant '{slug}' not found" });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Tenant no encontrado",
+                    detail: $"No se encontró el tenant con slug '{slug}'.");
             }
 
             if (hardDelete)
@@ -481,7 +503,10 @@ namespace Api_eCommerce.Endpoints
 
             if (tenant == null)
             {
-                return Results.NotFound(new { error = $"Tenant '{slug}' not found" });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Tenant no encontrado",
+                    detail: $"No se encontró el tenant con slug '{slug}'.");
             }
 
             var newPlan = await adminDb.Plans
@@ -490,7 +515,10 @@ namespace Api_eCommerce.Endpoints
 
             if (newPlan == null)
             {
-                return Results.NotFound(new { error = $"Plan '{request.PlanCode}' not found" });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Plan no encontrado",
+                    detail: $"No se encontró el plan '{request.PlanCode}'.");
             }
 
             var oldPlanCode = tenant.Plan?.Code ?? "none";

@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Api_eCommerce.Extensions;
+using Newtonsoft.Json;
 using System.ComponentModel.DataAnnotations;
 using System.Net;
 using ILogger = Serilog.ILogger;
@@ -74,11 +75,21 @@ namespace Api_eCommerce.Handlers
             if (exception != null && exception is ValidationException)
             {
                 var validation = ((ValidationException)exception).ValidationResult;
+                if (validation != null && !string.IsNullOrWhiteSpace(validation.ErrorMessage))
+                {
+                    validation = new ValidationResult(
+                        ProblemTextLocalizer.ToSpanish(validation.ErrorMessage),
+                        validation.MemberNames);
+                }
+
                 result = JsonConvert.SerializeObject(validation);
             }
             else
             {
-                result = JsonConvert.SerializeObject(new { errors = message });
+                result = JsonConvert.SerializeObject(new
+                {
+                    errors = ProblemTextLocalizer.ToSpanish(message)
+                });
             }
 
             return result;

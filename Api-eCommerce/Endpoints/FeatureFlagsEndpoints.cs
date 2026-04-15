@@ -66,7 +66,10 @@ namespace Api_eCommerce.Endpoints
 
             if (tenant == null)
             {
-                return Results.NotFound(new { error = "Tenant not found" });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Tenant no encontrado",
+                    detail: "No se encontró el tenant solicitado.");
             }
 
             var usingDefaults = string.IsNullOrWhiteSpace(tenant.FeatureFlagsJson);
@@ -113,7 +116,10 @@ namespace Api_eCommerce.Endpoints
 
             if (tenant == null)
             {
-                return Results.NotFound(new { error = "Tenant not found" });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Tenant no encontrado",
+                    detail: "No se encontró el tenant solicitado.");
             }
 
             try
@@ -151,7 +157,8 @@ namespace Api_eCommerce.Endpoints
             {
                 logger.LogError(ex, "Invalid JSON in feature flags update for tenant {TenantId}", tenantId);
                 return Results.Problem(
-                    detail: "Invalid feature flags JSON format",
+                    title: "Solicitud inválida",
+                    detail: "El formato JSON de los feature flags es inválido.",
                     statusCode: StatusCodes.Status400BadRequest);
             }
         }
@@ -166,7 +173,10 @@ namespace Api_eCommerce.Endpoints
 
             if (tenant == null)
             {
-                return Results.NotFound(new { error = "Tenant not found" });
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Tenant no encontrado",
+                    detail: "No se encontró el tenant solicitado.");
             }
 
             // Limpiar custom features para usar defaults

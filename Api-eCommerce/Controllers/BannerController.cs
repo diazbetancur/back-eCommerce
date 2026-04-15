@@ -42,8 +42,8 @@ public class BannerController : ControllerBase
     {
       return Problem(
           statusCode: StatusCodes.Status400BadRequest,
-          title: "Tenant Not Resolved",
-          detail: "Unable to resolve tenant from request");
+          title: "Tenant no resuelto",
+          detail: "No se pudo resolver el tenant para la solicitud.");
     }
 
     if (page < 1) page = 1;
@@ -65,8 +65,8 @@ public class BannerController : ControllerBase
     {
       return Problem(
           statusCode: StatusCodes.Status400BadRequest,
-          title: "Tenant Not Resolved",
-          detail: "Unable to resolve tenant from request");
+          title: "Tenant no resuelto",
+          detail: "No se pudo resolver el tenant para la solicitud.");
     }
 
     var banner = await _bannerService.GetByIdAsync(id, ct);
@@ -86,8 +86,8 @@ public class BannerController : ControllerBase
     {
       return Problem(
           statusCode: StatusCodes.Status400BadRequest,
-          title: "Tenant Not Resolved",
-          detail: "Unable to resolve tenant from request");
+          title: "Tenant no resuelto",
+          detail: "No se pudo resolver el tenant para la solicitud.");
     }
 
     if (string.IsNullOrWhiteSpace(request.Title))
@@ -95,7 +95,7 @@ public class BannerController : ControllerBase
       return ValidationProblem(new ValidationProblemDetails
       {
         Status = StatusCodes.Status400BadRequest,
-        Errors = new Dictionary<string, string[]> { ["title"] = new[] { "Title is required" } }
+        Errors = new Dictionary<string, string[]> { ["title"] = new[] { "El título es obligatorio" } }
       });
     }
 
@@ -104,7 +104,7 @@ public class BannerController : ControllerBase
       return ValidationProblem(new ValidationProblemDetails
       {
         Status = StatusCodes.Status400BadRequest,
-        Errors = new Dictionary<string, string[]> { ["image"] = new[] { "Image is required" } }
+        Errors = new Dictionary<string, string[]> { ["image"] = new[] { "La imagen es obligatoria" } }
       });
     }
 
@@ -139,8 +139,8 @@ public class BannerController : ControllerBase
     {
       return Problem(
           statusCode: StatusCodes.Status400BadRequest,
-          title: "Validation Error",
-          detail: ex.Message);
+          title: "Error de validación",
+          detail: TranslateBannerError(ex.Message));
     }
   }
 
@@ -158,8 +158,8 @@ public class BannerController : ControllerBase
     {
       return Problem(
           statusCode: StatusCodes.Status400BadRequest,
-          title: "Tenant Not Resolved",
-          detail: "Unable to resolve tenant from request");
+          title: "Tenant no resuelto",
+          detail: "No se pudo resolver el tenant para la solicitud.");
     }
 
     if (string.IsNullOrWhiteSpace(request.Title))
@@ -167,7 +167,7 @@ public class BannerController : ControllerBase
       return ValidationProblem(new ValidationProblemDetails
       {
         Status = StatusCodes.Status400BadRequest,
-        Errors = new Dictionary<string, string[]> { ["title"] = new[] { "Title is required" } }
+        Errors = new Dictionary<string, string[]> { ["title"] = new[] { "El título es obligatorio" } }
       });
     }
 
@@ -201,13 +201,14 @@ public class BannerController : ControllerBase
     catch (InvalidOperationException ex)
     {
       var statusCode = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.Contains("no encontrado", StringComparison.OrdinalIgnoreCase)
           ? StatusCodes.Status404NotFound
           : StatusCodes.Status400BadRequest;
 
       return Problem(
           statusCode: statusCode,
-          title: statusCode == StatusCodes.Status404NotFound ? "Not Found" : "Validation Error",
-          detail: ex.Message);
+        title: statusCode == StatusCodes.Status404NotFound ? "No encontrado" : "Error de validación",
+        detail: TranslateBannerError(ex.Message));
     }
   }
 
@@ -223,8 +224,8 @@ public class BannerController : ControllerBase
     {
       return Problem(
           statusCode: StatusCodes.Status400BadRequest,
-          title: "Tenant Not Resolved",
-          detail: "Unable to resolve tenant from request");
+          title: "Tenant no resuelto",
+          detail: "No se pudo resolver el tenant para la solicitud.");
     }
 
     try
@@ -236,9 +237,34 @@ public class BannerController : ControllerBase
     {
       return Problem(
           statusCode: StatusCodes.Status404NotFound,
-          title: "Not Found",
-          detail: ex.Message);
+          title: "No encontrado",
+          detail: TranslateBannerError(ex.Message));
     }
+  }
+
+  private static string TranslateBannerError(string message)
+  {
+    if (message.Contains("Banner not found", StringComparison.OrdinalIgnoreCase))
+    {
+      return "No se encontró el banner solicitado.";
+    }
+
+    if (message.Contains("Banner image is required", StringComparison.OrdinalIgnoreCase))
+    {
+      return "La imagen del banner es obligatoria.";
+    }
+
+    if (message.Contains("StartDate must be less than or equal to EndDate", StringComparison.OrdinalIgnoreCase))
+    {
+      return "La fecha de inicio no puede ser mayor que la fecha de fin.";
+    }
+
+    if (message.Contains("Tenant context not available", StringComparison.OrdinalIgnoreCase))
+    {
+      return "No hay contexto de tenant disponible para procesar la solicitud.";
+    }
+
+    return message;
   }
 }
 
