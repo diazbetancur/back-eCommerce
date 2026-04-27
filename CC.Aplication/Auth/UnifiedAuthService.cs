@@ -83,10 +83,12 @@ namespace CC.Aplication.Auth
             _logger.LogInformation("✅ Found user: {Email}, IsActive: {IsActive}, MustChangePassword: {MustChange}",
                 user.Email, user.IsActive, user.MustChangePassword);
 
-            if (!user.IsActive)
+            if (!user.IsActive || user.Status != UserStatus.Active)
             {
                 _logger.LogWarning("🔴 Login failed: User {Email} is not active", user.Email);
-                throw new UnauthorizedAccessException("Account is disabled");
+                throw new UnauthorizedAccessException(user.Status == UserStatus.PendingActivation
+                    ? "Account is pending activation"
+                    : "Account is disabled");
             }
 
             // Verificar password (Identity hasher)
@@ -226,6 +228,7 @@ namespace CC.Aplication.Auth
                 LastName = request.LastName,
                 PhoneNumber = request.PhoneNumber,
                 IsActive = true,
+                Status = UserStatus.Active,
                 MustChangePassword = false,
                 TenantId = _tenantAccessor.TenantInfo.Id, // ✅ Asignar tenant
                 CreatedAt = DateTime.UtcNow
@@ -524,6 +527,11 @@ namespace CC.Aplication.Auth
             if (user == null)
             {
                 throw new UnauthorizedAccessException("User not found");
+            }
+
+            if (user.Status != UserStatus.Active)
+            {
+                throw new UnauthorizedAccessException("Account is not active");
             }
 
             // Verificar contraseña actual

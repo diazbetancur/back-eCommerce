@@ -7,9 +7,11 @@ namespace CC.Domain.Dto
   public record PublicTenantConfigResponse
   {
     public TenantInfo Tenant { get; init; } = new();
-    public string Locale { get; init; } = "es-CO";
-    public string Currency { get; init; } = "COP";
-    public string CurrencySymbol { get; init; } = "$";
+    public bool Show { get; init; }
+    public string ActivationStatus { get; init; } = string.Empty;
+    public string Locale { get; init; } = "es-HN";
+    public string Currency { get; init; } = "HNL";
+    public string CurrencySymbol { get; init; } = "L";
     public decimal TaxRate { get; init; }
     public ThemeInfo Theme { get; init; } = new();
     public Dictionary<string, bool> Features { get; init; } = new();
@@ -90,7 +92,7 @@ namespace CC.Domain.Dto
     public bool AllowCombineWithCoupons { get; init; } = false;
     public decimal? MaxMoneyPerTransaction { get; init; }
     public decimal MinimumPayableAmount { get; init; } = 0m;
-    public string Currency { get; init; } = "COP";
+    public string Currency { get; init; } = "HNL";
   }
 
   public record MessagesInfo

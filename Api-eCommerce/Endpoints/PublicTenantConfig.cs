@@ -36,14 +36,17 @@ namespace Api_eCommerce.Endpoints
                 );
         }
 
-        if (tenant.Status != TenantStatus.Ready)
+        if (tenant.Status == TenantStatus.Deleted)
         {
           return Results.Problem(
-                    statusCode: 503,
-                    title: "Tenant not ready",
-                    detail: $"Tenant '{slug}' is in status: {tenant.Status}"
+              statusCode: StatusCodes.Status404NotFound,
+              title: "Tenant no encontrado",
+              detail: $"No se encontró el tenant con slug '{slug}'."
                 );
         }
+
+        var activationStatus = tenant.Status.ToString();
+        var show = CanShowPublicExperience(tenant.Status);
 
         // Obtener features del plan
         var planFeatures = await adminDb.PlanFeatures
@@ -101,9 +104,11 @@ namespace Api_eCommerce.Endpoints
               BackgroundColor = settings.GetValueOrDefault("BackgroundColor", "#ffffff")
             }
           },
-          Locale = settings.GetValueOrDefault("Locale", "es-CO"),
-          Currency = settings.GetValueOrDefault("Currency", "COP"),
-          CurrencySymbol = settings.GetValueOrDefault("CurrencySymbol", "$"),
+          Show = show,
+          ActivationStatus = activationStatus,
+          Locale = settings.GetValueOrDefault("Locale", "es-HN"),
+          Currency = settings.GetValueOrDefault("Currency", "HNL"),
+          CurrencySymbol = settings.GetValueOrDefault("CurrencySymbol", "L"),
           TaxRate = decimal.TryParse(settings.GetValueOrDefault("TaxRate", "0"), out var tax) ? tax : 0m,
           Theme = new ThemeInfo
           {
@@ -153,7 +158,7 @@ namespace Api_eCommerce.Endpoints
             AllowCombineWithCoupons = IsTrue(settings.GetValueOrDefault("LoyaltyAllowCombineWithCoupons"), false),
             MaxMoneyPerTransaction = ParseNullableDecimal(settings.GetValueOrDefault("LoyaltyMaxMoneyPerTransaction")),
             MinimumPayableAmount = ParseDecimal(settings.GetValueOrDefault("LoyaltyMinimumPayableAmount"), 0m),
-            Currency = settings.GetValueOrDefault("Currency", "COP")
+            Currency = settings.GetValueOrDefault("Currency", "HNL")
           },
           Messages = new MessagesInfo
           {
@@ -171,14 +176,13 @@ namespace Api_eCommerce.Endpoints
       .WithSummary("Get tenant public configuration by slug")
       .WithDescription("Returns tenant branding, features, locale and theme settings. No authentication required.")
       .Produces<PublicTenantConfigResponse>(StatusCodes.Status200OK)
-      .Produces(StatusCodes.Status404NotFound)
-      .Produces(StatusCodes.Status503ServiceUnavailable);
+      .Produces(StatusCodes.Status404NotFound);
 
       // Mantener el endpoint legacy por compatibilidad
       app.MapGet("/public/tenant-config", async (HttpContext http, AdminDbContext adminDb, ITenantResolver resolver) =>
       {
         var ctx = await resolver.ResolveAsync(http);
-        if (ctx == null) return Results.Problem(statusCode: 409, detail: "Tenant not resolved or not ready");
+        if (ctx == null) return Results.Problem(statusCode: 409, detail: "Tenant not resolved or not active");
         var t = await adminDb.Tenants.Include(x => x.Plan).AsNoTracking().FirstAsync(x => x.Slug == ctx.Slug);
         var features = await adminDb.PlanFeatures.Where(pf => pf.PlanId == t.PlanId).Select(pf => pf.Feature.Code).ToListAsync();
         return Results.Ok(new { name = t.Name, slug = t.Slug, theme = new { }, seo = new { }, features });
@@ -193,6 +197,18 @@ namespace Api_eCommerce.Endpoints
     {
       if (string.IsNullOrEmpty(str)) return str;
       return char.ToLowerInvariant(str[0]) + str.Substring(1);
+    }
+
+    private static bool CanShowPublicExperience(TenantStatus status)
+    {
+      return status switch
+      {
+        TenantStatus.Active => true,
+        TenantStatus.PendingActivation => true,
+        TenantStatus.Suspended => true,
+        TenantStatus.Disabled => true,
+        _ => false
+      };
     }
 
     private static bool IsTrue(string? value, bool defaultValue)

@@ -3,7 +3,7 @@ namespace CC.Domain.Dto
   /// <summary>
   /// DTOs para el proceso de aprovisionamiento de tenants
   /// </summary>
-  public record InitProvisioningRequest(string Slug, string Name, string Plan);
+  public record InitProvisioningRequest(string Slug, string Name, string Plan, string AdminEmail);
 
   public record InitProvisioningResponse(Guid ProvisioningId, string ConfirmToken, string Next, string Message);
 

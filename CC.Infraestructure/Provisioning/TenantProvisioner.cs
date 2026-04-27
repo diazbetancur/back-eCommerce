@@ -61,8 +61,8 @@ namespace CC.Infraestructure.Provisioning
                 // Paso 3: Seed de datos
                 await SeedDataStepAsync(tenant, cancellationToken);
 
-                // Marcar como completado
-                tenant.Status = TenantStatus.Ready;
+                // Marcar como completado, pendiente de activación del admin principal
+                tenant.Status = TenantStatus.PendingActivation;
                 tenant.UpdatedAt = DateTime.UtcNow;
                 await _adminDb.SaveChangesAsync(cancellationToken);
 
@@ -183,7 +183,7 @@ namespace CC.Infraestructure.Provisioning
 
                 step.Status = "Success";
                 step.CompletedAt = DateTime.UtcNow;
-                step.Message = $"Tenant data seeded successfully. Admin email: admin@{tenant.Slug}";
+                step.Message = $"Tenant data seeded successfully. Admin email: {tenant.PrimaryAdminEmail ?? $"admin@{tenant.Slug}"}";
                 await _adminDb.SaveChangesAsync(cancellationToken);
 
                 _logger.LogInformation("? Data seeded for tenant {TenantId}", tenant.Id);
@@ -205,8 +205,15 @@ namespace CC.Infraestructure.Provisioning
 
             await using var tenantDb = new Tenant.TenantDbContext(optionsBuilder.Options);
 
+            var adminEmail = string.IsNullOrWhiteSpace(tenant.PrimaryAdminEmail)
+                ? $"admin@{tenant.Slug}"
+                : tenant.PrimaryAdminEmail!;
+
             // Usar el TenantDbSeeder para seed consistente
-            await Tenant.TenantDbSeeder.SeedAsync(tenantDb, tenant.Slug, _logger);
+            var tenantAdmin = await Tenant.TenantDbSeeder.SeedAsync(tenantDb, tenant.Id, tenant.Slug, adminEmail, _logger);
+            tenant.PrimaryAdminUserId = tenantAdmin.Id;
+            tenant.PrimaryAdminEmail = tenantAdmin.Email;
+            await _adminDb.SaveChangesAsync(cancellationToken);
 
             // ==================== SEED SETTINGS COMPLETOS ====================
             // Usa el nuevo TenantSettingsSeeder con configuración completa por defecto
@@ -225,8 +232,6 @@ namespace CC.Infraestructure.Provisioning
                 );
                 await tenantDb.SaveChangesAsync(cancellationToken);
             }
-
-            _logger.LogWarning("??  Tenant {Slug} admin credentials - Email: admin@{Slug} | Password: TenantAdmin123!", tenant.Slug, tenant.Slug);
         }
 
         private string GetTenantConnectionString(string dbName)

@@ -15,6 +15,9 @@ namespace Api_eCommerce.Auth
             var group = app.MapGroup("/auth")
                 .WithTags("Authentication");
 
+            var publicGroup = app.MapGroup("/api/auth")
+                .WithTags("Authentication");
+
             group.MapPost("/register", Register)
                 .WithName("Register")
                 .WithSummary("Register a new user account")
@@ -55,6 +58,32 @@ namespace Api_eCommerce.Auth
                 .Produces<ChangePasswordResponse>(StatusCodes.Status200OK)
                 .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
                 .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
+
+            publicGroup.MapPost("/activate-account", ActivateAccount)
+                .AllowAnonymous()
+                .WithName("ActivateAccount")
+                .WithSummary("Activate the tenant admin account")
+                .WithDescription("Activates a pending tenant admin account using a one-time token and defines the initial password.")
+                .Produces<AuthOperationResponse>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+                .Produces<ProblemDetails>(StatusCodes.Status409Conflict);
+
+            publicGroup.MapPost("/forgot-password", ForgotPassword)
+                .AllowAnonymous()
+                .WithName("ForgotPassword")
+                .WithSummary("Request password assistance or resend activation")
+                .WithDescription("Generates a password reset token for active accounts or resends activation for pending tenant admins.")
+                .Produces<AuthOperationResponse>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status400BadRequest);
+
+            publicGroup.MapPost("/reset-password", ResetPassword)
+                .AllowAnonymous()
+                .WithName("ResetPassword")
+                .WithSummary("Reset password using a one-time token")
+                .WithDescription("Consumes a one-time password reset token and updates the password for an active user.")
+                .Produces<AuthOperationResponse>(StatusCodes.Status200OK)
+                .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+                .Produces<ProblemDetails>(StatusCodes.Status409Conflict);
 
             return app;
         }
@@ -420,5 +449,91 @@ namespace Api_eCommerce.Auth
                 );
             }
         }
+
+        private static async Task<IResult> ActivateAccount(
+            HttpContext context,
+            [FromBody] ActivateAccountRequest request,
+            ITenantAccountSecurityService tenantAccountSecurityService)
+        {
+            var result = await tenantAccountSecurityService.ActivateAccountAsync(
+                request.Token,
+                request.Password,
+                request.ConfirmPassword,
+                context.Connection.RemoteIpAddress?.ToString(),
+                context.Request.Headers.UserAgent.ToString());
+
+            if (!result.Success)
+            {
+                return ToAuthProblem(result, "Account Activation Failed");
+            }
+
+            return Results.Ok(new AuthOperationResponse(true, result.Message));
+        }
+
+        private static async Task<IResult> ForgotPassword(
+            [FromBody] ForgotPasswordRequest request,
+            ITenantAccountSecurityService tenantAccountSecurityService)
+        {
+            var result = await tenantAccountSecurityService.RequestPasswordAssistanceAsync(request.Email);
+            return Results.Ok(new AuthOperationResponse(true, result.Message));
+        }
+
+        private static async Task<IResult> ResetPassword(
+            HttpContext context,
+            [FromBody] ResetPasswordRequest request,
+            ITenantAccountSecurityService tenantAccountSecurityService)
+        {
+            var result = await tenantAccountSecurityService.ResetPasswordAsync(
+                request.Token,
+                request.Password,
+                request.ConfirmPassword,
+                context.Connection.RemoteIpAddress?.ToString(),
+                context.Request.Headers.UserAgent.ToString());
+
+            if (!result.Success)
+            {
+                return ToAuthProblem(result, "Password Reset Failed");
+            }
+
+            return Results.Ok(new AuthOperationResponse(true, result.Message));
+        }
+
+        private static IResult ToAuthProblem(AccountSecurityOperationResult result, string title)
+        {
+            var statusCode = result.ErrorCode switch
+            {
+                "PASSWORD_CONFIRMATION_MISMATCH" => StatusCodes.Status400BadRequest,
+                "PASSWORD_POLICY_NOT_MET" => StatusCodes.Status400BadRequest,
+                "INVALID_ACTIVATION_TOKEN" => StatusCodes.Status400BadRequest,
+                "EXPIRED_ACTIVATION_TOKEN" => StatusCodes.Status400BadRequest,
+                "INVALID_PASSWORD_RESET_TOKEN" => StatusCodes.Status400BadRequest,
+                "EXPIRED_PASSWORD_RESET_TOKEN" => StatusCodes.Status400BadRequest,
+                "TENANT_REQUIRED" => StatusCodes.Status400BadRequest,
+                "TENANT_MISMATCH" => StatusCodes.Status409Conflict,
+                "USED_ACTIVATION_TOKEN" => StatusCodes.Status409Conflict,
+                "REVOKED_ACTIVATION_TOKEN" => StatusCodes.Status409Conflict,
+                "TENANT_NOT_PENDING_ACTIVATION" => StatusCodes.Status409Conflict,
+                "USER_NOT_PENDING_ACTIVATION" => StatusCodes.Status409Conflict,
+                "USED_PASSWORD_RESET_TOKEN" => StatusCodes.Status409Conflict,
+                "REVOKED_PASSWORD_RESET_TOKEN" => StatusCodes.Status409Conflict,
+                "USER_NOT_ACTIVE" => StatusCodes.Status409Conflict,
+                "TENANT_SYNC_FAILED" => StatusCodes.Status500InternalServerError,
+                _ => StatusCodes.Status400BadRequest
+            };
+
+            return Results.Problem(
+                statusCode: statusCode,
+                title: title,
+                detail: result.Message,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["code"] = result.ErrorCode
+                });
+        }
     }
+
+    public record ActivateAccountRequest(string Token, string Password, string ConfirmPassword);
+    public record ForgotPasswordRequest(string Email);
+    public record ResetPasswordRequest(string Token, string Password, string ConfirmPassword);
+    public record AuthOperationResponse(bool Success, string Message);
 }

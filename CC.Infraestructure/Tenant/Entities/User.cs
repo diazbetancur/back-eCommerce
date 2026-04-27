@@ -1,3 +1,4 @@
+using CC.Domain.Users;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -34,6 +35,8 @@ namespace CC.Infraestructure.Tenant.Entities
     public string? PhoneNumber { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    public UserStatus Status { get; set; } = UserStatus.Active;
 
     /// <summary>
     /// Indica si el usuario debe cambiar la contraseña en el próximo inicio de sesión

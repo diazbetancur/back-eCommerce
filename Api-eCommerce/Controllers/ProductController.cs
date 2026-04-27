@@ -1,10 +1,12 @@
 using Api_eCommerce.Authorization;
+using Api_eCommerce.ModelBinding;
 using CC.Aplication.Catalog;
 using CC.Infraestructure.Tenancy;
 using CC.Domain.Assets;
 using CC.Domain.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Api_eCommerce.Controllers
 {
@@ -932,6 +934,7 @@ namespace Api_eCommerce.Controllers
     public bool IsTaxIncluded { get; init; }
 
     [FromForm(Name = "taxPercentage")]
+    [ModelBinder(BinderType = typeof(NullableDecimalFormValueBinder))]
     public decimal? TaxPercentage { get; init; }
 
     [FromForm(Name = "tags")]
@@ -1001,6 +1004,7 @@ namespace Api_eCommerce.Controllers
     public bool? IsTaxIncluded { get; init; }
 
     [FromForm(Name = "taxPercentage")]
+    [ModelBinder(BinderType = typeof(NullableDecimalFormValueBinder))]
     public decimal? TaxPercentage { get; init; }
 
     [FromForm(Name = "tags")]

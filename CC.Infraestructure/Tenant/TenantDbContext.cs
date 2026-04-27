@@ -87,6 +87,7 @@ namespace CC.Infraestructure.Tenant
         entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
         entity.Property(e => e.PhoneNumber).HasMaxLength(20);
         entity.Property(e => e.IsActive).IsRequired();
+        entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         entity.Property(e => e.MustChangePassword).IsRequired();
         entity.Property(e => e.TenantId).IsRequired();
         entity.Property(e => e.CreatedAt).IsRequired();
@@ -94,6 +95,8 @@ namespace CC.Infraestructure.Tenant
         // Índice para mejorar performance en validación de ownership
         entity.HasIndex(e => new { e.Id, e.TenantId })
           .HasDatabaseName("IX_Users_Id_TenantId");
+        entity.HasIndex(e => e.Status)
+          .HasDatabaseName("IX_Users_Status");
       });
 
       modelBuilder.Entity<TenantEntities.Role>(entity =>

@@ -1,3 +1,4 @@
+using CC.Domain.Notifications;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -60,16 +61,13 @@ namespace CC.Infraestructure.Admin
 
         private static async Task SeedPlanLimitsAsync(AdminDbContext adminDb, ILogger? logger)
         {
-            if (await adminDb.PlanLimits.AnyAsync())
-            {
-                logger?.LogInformation("??  Plan limits already exist, skipping");
-                return;
-            }
-
             logger?.LogInformation("Creating plan limits...");
 
             var basicPlanId = Guid.Parse("11111111-0000-0000-0000-000000000001");
             var premiumPlanId = Guid.Parse("22222222-0000-0000-0000-000000000002");
+            var allPlanIds = await adminDb.Plans
+                .Select(item => item.Id)
+                .ToListAsync();
 
             var limits = new List<PlanLimit>();
 
@@ -264,13 +262,39 @@ namespace CC.Infraestructure.Admin
                     LimitCode = PlanLimitCodes.MaxFileUploadMB,
                     LimitValue = 20,
                     Description = "M�ximo 20 MB por archivo"
-                }
+                },
             });
 
-            adminDb.PlanLimits.AddRange(limits);
+            limits.AddRange(allPlanIds.Select(planId => new PlanLimit
+            {
+                PlanId = planId,
+                LimitCode = NotificationPlanLimitCodes.IncludedEmailCreditsPerMonth,
+                LimitValue = planId == basicPlanId ? 200 : planId == premiumPlanId ? 1000 : 0,
+                Description = "Créditos mensuales de email incluidos"
+            }));
+
+            var existingKeys = await adminDb.PlanLimits
+                .Select(item => new { item.PlanId, item.LimitCode })
+                .ToListAsync();
+
+            var registeredKeys = existingKeys
+                .Select(item => $"{item.PlanId}:{item.LimitCode}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var missingLimits = limits
+                .Where(item => !registeredKeys.Contains($"{item.PlanId}:{item.LimitCode}"))
+                .ToList();
+
+            if (missingLimits.Count == 0)
+            {
+                logger?.LogInformation("??  Plan limits already seeded, skipping");
+                return;
+            }
+
+            adminDb.PlanLimits.AddRange(missingLimits);
             await adminDb.SaveChangesAsync();
 
-            logger?.LogInformation("? Created {Count} plan limits", limits.Count);
+            logger?.LogInformation("? Created {Count} plan limits", missingLimits.Count);
         }
     }
 }

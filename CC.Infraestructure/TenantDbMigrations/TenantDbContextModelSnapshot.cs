@@ -1303,6 +1303,11 @@ namespace CC.Infraestructure.TenantDbMigrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -1313,6 +1318,9 @@ namespace CC.Infraestructure.TenantDbMigrations
 
                     b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_Users_Status");
 
                     b.HasIndex("Id", "TenantId")
                         .HasDatabaseName("IX_Users_Id_TenantId");

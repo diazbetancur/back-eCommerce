@@ -87,7 +87,7 @@ namespace Api_eCommerce.Endpoints
                         statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                // Crear tenant en estado PENDING
+                // Crear tenant en estado pending activation
                 var dbName = $"ecom_tenant_{request.Slug.ToLower()}";
                 var tenant = new Tenant
                 {
@@ -96,7 +96,8 @@ namespace Api_eCommerce.Endpoints
                     Slug = request.Slug.ToLower(),
                     PlanId = plan.Id,
                     DbName = dbName,
-                    Status = TenantStatus.Pending,
+                    Status = TenantStatus.PendingActivation,
+                    PrimaryAdminEmail = request.AdminEmail.Trim().ToLower(),
                     EncryptedConnection = "", // Se llenar� durante el aprovisionamiento
                     CreatedAt = DateTime.UtcNow
                 };
@@ -194,7 +195,7 @@ namespace Api_eCommerce.Endpoints
                 }
 
                 // Verificar estado
-                if (tenant.Status != TenantStatus.Pending)
+                if (tenant.Status != TenantStatus.PendingActivation)
                 {
                     return Results.Problem(
                         title: "Invalid State",
@@ -271,8 +272,8 @@ namespace Api_eCommerce.Endpoints
 
                 var response = new ProvisioningStatusResponse(
                     tenant.Status.ToString(),
-                    tenant.Status == TenantStatus.Ready ? tenant.Slug : null,
-                    tenant.Status == TenantStatus.Ready ? tenant.DbName : null,
+                    (tenant.Status == TenantStatus.Active || tenant.Status == TenantStatus.PendingActivation) ? tenant.Slug : null,
+                    (tenant.Status == TenantStatus.Active || tenant.Status == TenantStatus.PendingActivation) ? tenant.DbName : null,
                     steps
                 );
 

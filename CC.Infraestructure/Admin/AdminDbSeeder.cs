@@ -1,3 +1,4 @@
+using CC.Domain.Notifications;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ namespace CC.Infraestructure.Admin
     {
         /// <summary>
         /// Seed de datos iniciales del AdminDb (roles y superadmin)
-        /// Este método es IDEMPOTENTE - puede ejecutarse múltiples veces sin duplicar datos
+        /// Este mï¿½todo es IDEMPOTENTE - puede ejecutarse mï¿½ltiples veces sin duplicar datos
         /// </summary>
         public static async Task SeedAsync(AdminDbContext adminDb, ILogger? logger = null)
         {
@@ -29,7 +30,286 @@ namespace CC.Infraestructure.Admin
             // ==================== 3. SEED PLANS AND LIMITS ? NUEVO ====================
             await PlanLimitsSeeder.SeedAsync(adminDb, logger);
 
+            // ==================== 4. SEED NOTIFICATION CATALOG ====================
+            await SeedNotificationsAsync(adminDb, logger);
+
             logger?.LogInformation("? AdminDb seed completed successfully");
+        }
+
+        private static async Task SeedNotificationsAsync(AdminDbContext adminDb, ILogger? logger)
+        {
+            logger?.LogInformation("Seeding notification catalog...");
+
+            var now = DateTime.UtcNow;
+            var events = new[]
+            {
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.PasswordReset,
+                    Name = "Password reset",
+                    Description = "Transactional password reset email",
+                    Category = NotificationCategory.Security,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = false,
+                    IsSystemRequired = true,
+                    ConsumesQuota = false,
+                    DefaultEnabled = true,
+                    TemplateCode = NotificationTemplateCodes.PasswordReset,
+                    IsActive = true,
+                    CreatedAt = now
+                },
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.TenantAdminActivation,
+                    Name = "Tenant admin activation",
+                    Description = "Transactional activation email for the tenant primary administrator",
+                    Category = NotificationCategory.Security,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = false,
+                    IsSystemRequired = true,
+                    ConsumesQuota = false,
+                    DefaultEnabled = true,
+                    TemplateCode = NotificationTemplateCodes.TenantAdminActivation,
+                    IsActive = true,
+                    CreatedAt = now
+                },
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.UserInvitation,
+                    Name = "User invitation",
+                    Description = "Transactional user invitation email",
+                    Category = NotificationCategory.Security,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = false,
+                    IsSystemRequired = true,
+                    ConsumesQuota = false,
+                    DefaultEnabled = true,
+                    TemplateCode = NotificationTemplateCodes.UserInvitation,
+                    IsActive = true,
+                    CreatedAt = now
+                },
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.OrderCreated,
+                    Name = "Order created",
+                    Description = "Commercial notification when an order is created",
+                    Category = NotificationCategory.Orders,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = true,
+                    IsSystemRequired = false,
+                    ConsumesQuota = true,
+                    DefaultEnabled = false,
+                    TemplateCode = NotificationTemplateCodes.OrderCreated,
+                    IsActive = false,
+                    CreatedAt = now
+                },
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.OrderShipped,
+                    Name = "Order shipped",
+                    Description = "Commercial notification when an order is shipped",
+                    Category = NotificationCategory.Orders,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = true,
+                    IsSystemRequired = false,
+                    ConsumesQuota = true,
+                    DefaultEnabled = false,
+                    TemplateCode = NotificationEventCodes.OrderShipped,
+                    IsActive = false,
+                    CreatedAt = now
+                },
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.OrderDelivered,
+                    Name = "Order delivered",
+                    Description = "Commercial notification when an order is delivered",
+                    Category = NotificationCategory.Orders,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = true,
+                    IsSystemRequired = false,
+                    ConsumesQuota = true,
+                    DefaultEnabled = false,
+                    TemplateCode = NotificationEventCodes.OrderDelivered,
+                    IsActive = false,
+                    CreatedAt = now
+                },
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.OrderCancelled,
+                    Name = "Order cancelled",
+                    Description = "Commercial notification when an order is cancelled",
+                    Category = NotificationCategory.Orders,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = true,
+                    IsSystemRequired = false,
+                    ConsumesQuota = true,
+                    DefaultEnabled = false,
+                    TemplateCode = NotificationEventCodes.OrderCancelled,
+                    IsActive = false,
+                    CreatedAt = now
+                },
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.PaymentApproved,
+                    Name = "Payment approved",
+                    Description = "Commercial notification when a payment is approved",
+                    Category = NotificationCategory.Payments,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = true,
+                    IsSystemRequired = false,
+                    ConsumesQuota = true,
+                    DefaultEnabled = false,
+                    TemplateCode = NotificationEventCodes.PaymentApproved,
+                    IsActive = false,
+                    CreatedAt = now
+                },
+                new NotificationEventDefinition
+                {
+                    Code = NotificationEventCodes.PaymentRejected,
+                    Name = "Payment rejected",
+                    Description = "Commercial notification when a payment is rejected",
+                    Category = NotificationCategory.Payments,
+                    Channel = NotificationChannel.Email,
+                    IsTenantConfigurable = true,
+                    IsSystemRequired = false,
+                    ConsumesQuota = true,
+                    DefaultEnabled = false,
+                    TemplateCode = NotificationEventCodes.PaymentRejected,
+                    IsActive = false,
+                    CreatedAt = now
+                }
+            };
+
+            var existingEvents = await adminDb.NotificationEventDefinitions.ToListAsync();
+            var addedEvents = 0;
+            var updatedEvents = 0;
+
+            foreach (var eventDefinition in events)
+            {
+                var existing = existingEvents.FirstOrDefault(item =>
+                    item.Code.Equals(eventDefinition.Code, StringComparison.OrdinalIgnoreCase) &&
+                    item.Channel == eventDefinition.Channel);
+
+                if (existing == null)
+                {
+                    adminDb.NotificationEventDefinitions.Add(eventDefinition);
+                    addedEvents++;
+                    continue;
+                }
+
+                existing.Name = eventDefinition.Name;
+                existing.Description = eventDefinition.Description;
+                existing.Category = eventDefinition.Category;
+                existing.IsTenantConfigurable = eventDefinition.IsTenantConfigurable;
+                existing.IsSystemRequired = eventDefinition.IsSystemRequired;
+                existing.ConsumesQuota = eventDefinition.ConsumesQuota;
+                existing.DefaultEnabled = eventDefinition.DefaultEnabled;
+                existing.TemplateCode = eventDefinition.TemplateCode;
+                existing.IsActive = eventDefinition.IsActive;
+                existing.UpdatedAt = now;
+                updatedEvents++;
+            }
+
+            var templates = new[]
+            {
+                new NotificationTemplate
+                {
+                    Code = NotificationTemplateCodes.PasswordReset,
+                    Channel = NotificationChannel.Email,
+                    SourceType = NotificationSourceType.Platform,
+                    Name = "Password reset",
+                    SubjectTemplate = "Restablece tu contraseÃ±a en {{tenantName}}",
+                    HtmlTemplate = "<p>Hola {{userName}},</p><p>Haz clic aquÃ­ para restablecer tu contraseÃ±a: <a href=\"{{resetPasswordUrl}}\">Restablecer contraseÃ±a</a></p><p>El enlace vence en {{expirationHours}} horas.</p><p>Si necesitas ayuda, escribe a {{supportEmail}}.</p>",
+                    TextTemplate = "Hola {{userName}}, usa este enlace para restablecer tu contraseÃ±a: {{resetPasswordUrl}}. El enlace vence en {{expirationHours}} horas. Soporte: {{supportEmail}}.",
+                    AvailableVariablesJson = "[\"tenantName\",\"userName\",\"resetPasswordUrl\",\"supportEmail\",\"expirationHours\"]",
+                    Version = 1,
+                    IsActive = true,
+                    CreatedAt = now
+                },
+                new NotificationTemplate
+                {
+                    Code = NotificationTemplateCodes.TenantAdminActivation,
+                    Channel = NotificationChannel.Email,
+                    SourceType = NotificationSourceType.Platform,
+                    Name = "Tenant admin activation",
+                    SubjectTemplate = "Activa tu cuenta de administrador en {{tenantName}}",
+                    HtmlTemplate = "<p>Hola {{adminName}},</p><p>Tu tienda <strong>{{tenantName}}</strong> ya estÃ¡ lista. Activa tu cuenta con este enlace de un solo uso: <a href=\"{{activationUrl}}\">Activar cuenta</a>.</p><p>El enlace vence en {{expirationHours}} horas.</p><p>Si necesitas ayuda, escribe a {{supportEmail}}.</p>",
+                    TextTemplate = "Hola {{adminName}}, activa tu cuenta de administrador en {{tenantName}} usando este enlace: {{activationUrl}}. El enlace vence en {{expirationHours}} horas. Soporte: {{supportEmail}}.",
+                    AvailableVariablesJson = "[\"tenantName\",\"adminName\",\"activationUrl\",\"supportEmail\",\"expirationHours\"]",
+                    Version = 1,
+                    IsActive = true,
+                    CreatedAt = now
+                },
+                new NotificationTemplate
+                {
+                    Code = NotificationTemplateCodes.UserInvitation,
+                    Channel = NotificationChannel.Email,
+                    SourceType = NotificationSourceType.Platform,
+                    Name = "User invitation",
+                    SubjectTemplate = "InvitaciÃ³n a {{tenantName}}",
+                    HtmlTemplate = "<p>Hola {{customerName}},</p><p>Tienes una invitaciÃ³n pendiente para acceder a {{tenantName}}. ActÃ­vala aquÃ­: <a href=\"{{actionUrl}}\">Aceptar invitaciÃ³n</a></p><p>Soporte: {{supportEmail}}</p>",
+                    TextTemplate = "Hola {{customerName}}, acepta tu invitaciÃ³n a {{tenantName}} en {{actionUrl}}. Soporte: {{supportEmail}}.",
+                    AvailableVariablesJson = "[\"tenantName\",\"customerName\",\"actionUrl\",\"supportEmail\"]",
+                    Version = 1,
+                    IsActive = true,
+                    CreatedAt = now
+                },
+                new NotificationTemplate
+                {
+                    Code = NotificationTemplateCodes.OrderCreated,
+                    Channel = NotificationChannel.Email,
+                    SourceType = NotificationSourceType.Platform,
+                    Name = "Order created",
+                    SubjectTemplate = "Tu pedido {{orderNumber}} fue creado",
+                    HtmlTemplate = "<p>Hola {{customerName}},</p><p>Confirmamos la creaciÃ³n de tu pedido <strong>{{orderNumber}}</strong> en {{tenantName}}.</p><p>Si necesitas ayuda, contÃ¡ctanos en {{supportEmail}}.</p>",
+                    TextTemplate = "Hola {{customerName}}, tu pedido {{orderNumber}} fue creado en {{tenantName}}. Soporte: {{supportEmail}}.",
+                    AvailableVariablesJson = "[\"tenantName\",\"customerName\",\"orderNumber\",\"supportEmail\"]",
+                    Version = 1,
+                    IsActive = true,
+                    CreatedAt = now
+                }
+            };
+
+            var existingTemplates = await adminDb.NotificationTemplates.ToListAsync();
+            var addedTemplates = 0;
+            var updatedTemplates = 0;
+
+            foreach (var template in templates)
+            {
+                var existing = existingTemplates.FirstOrDefault(item =>
+                    item.Code.Equals(template.Code, StringComparison.OrdinalIgnoreCase) &&
+                    item.Channel == template.Channel &&
+                    item.Version == template.Version);
+
+                if (existing == null)
+                {
+                    adminDb.NotificationTemplates.Add(template);
+                    addedTemplates++;
+                    continue;
+                }
+
+                existing.SourceType = template.SourceType;
+                existing.Name = template.Name;
+                existing.SubjectTemplate = template.SubjectTemplate;
+                existing.HtmlTemplate = template.HtmlTemplate;
+                existing.TextTemplate = template.TextTemplate;
+                existing.AvailableVariablesJson = template.AvailableVariablesJson;
+                existing.IsActive = template.IsActive;
+                existing.UpdatedAt = now;
+                updatedTemplates++;
+            }
+
+            if (addedEvents > 0 || updatedEvents > 0 || addedTemplates > 0 || updatedTemplates > 0)
+            {
+                await adminDb.SaveChangesAsync();
+            }
+
+            logger?.LogInformation(
+                "Notification catalog seed finished. Added {AddedEvents} events, updated {UpdatedEvents} events, added {AddedTemplates} templates and updated {UpdatedTemplates} templates",
+                addedEvents,
+                updatedEvents,
+                addedTemplates,
+                updatedTemplates);
         }
 
         /// <summary>
@@ -86,20 +366,12 @@ namespace CC.Infraestructure.Admin
         /// <summary>
         /// Seed del usuario SuperAdmin inicial
         /// Credenciales por defecto: admin@yourdomain.com / Admin123!
-        /// IMPORTANTE: Cambiar la contraseña después del primer login en producción
+        /// IMPORTANTE: Cambiar la contraseï¿½a despuï¿½s del primer login en producciï¿½n
         /// </summary>
         private static async Task SeedSuperAdminAsync(AdminDbContext adminDb, ILogger? logger)
         {
+            var superAdminId = Guid.Parse("99999999-9999-9999-9999-999999999999");
             const string adminEmail = "admin@yourdomain.com";
-
-            // Verificar si ya existe un admin
-            if (await adminDb.AdminUsers.AnyAsync(u => u.Email == adminEmail))
-            {
-                logger?.LogInformation("??  SuperAdmin user already exists, skipping seed");
-                return;
-            }
-
-            logger?.LogInformation("Creating SuperAdmin user...");
 
             // Obtener rol SuperAdmin
             var superAdminRole = await adminDb.AdminRoles
@@ -111,27 +383,47 @@ namespace CC.Infraestructure.Admin
                 throw new InvalidOperationException("SuperAdmin role not found. Roles must be seeded before users.");
             }
 
-            // Generar hash de la contraseña por defecto
-            var (hash, salt) = HashPassword("Admin123!");
+            var superAdmin = await adminDb.AdminUsers
+                .FirstOrDefaultAsync(u => u.Id == superAdminId || u.Email == adminEmail);
 
-            // Crear usuario SuperAdmin
-            var superAdmin = new AdminUser
+            if (superAdmin == null)
             {
-                Id = Guid.Parse("99999999-9999-9999-9999-999999999999"),
-                Email = adminEmail,
-                PasswordHash = hash,
-                PasswordSalt = salt,
-                FullName = "Super Administrator",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
+                logger?.LogInformation("Creating SuperAdmin user...");
 
-            adminDb.AdminUsers.Add(superAdmin);
-            await adminDb.SaveChangesAsync();
+                var (hash, salt) = HashPassword("Admin123!");
 
-            logger?.LogInformation("? Created SuperAdmin user: {Email}", adminEmail);
+                superAdmin = new AdminUser
+                {
+                    Id = superAdminId,
+                    Email = adminEmail,
+                    PasswordHash = hash,
+                    PasswordSalt = salt,
+                    FullName = "Super Administrator",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
 
-            // Asignar rol SuperAdmin
+                adminDb.AdminUsers.Add(superAdmin);
+                await adminDb.SaveChangesAsync();
+
+                logger?.LogInformation("? Created SuperAdmin user: {Email}", adminEmail);
+                logger?.LogWarning("??  DEFAULT CREDENTIALS - Email: {Email} | Password: Admin123!", adminEmail);
+                logger?.LogWarning("??  IMPORTANT: Change the password after first login in production!");
+            }
+            else
+            {
+                logger?.LogInformation("??  SuperAdmin user already exists, skipping creation");
+            }
+
+            var roleAlreadyAssigned = await adminDb.AdminUserRoles
+                .AnyAsync(ur => ur.AdminUserId == superAdmin.Id && ur.AdminRoleId == superAdminRole.Id);
+
+            if (roleAlreadyAssigned)
+            {
+                logger?.LogInformation("??  SuperAdmin role already assigned, skipping role seed");
+                return;
+            }
+
             var userRole = new AdminUserRole
             {
                 AdminUserId = superAdmin.Id,
@@ -143,12 +435,10 @@ namespace CC.Infraestructure.Admin
             await adminDb.SaveChangesAsync();
 
             logger?.LogInformation("? Assigned SuperAdmin role");
-            logger?.LogWarning("??  DEFAULT CREDENTIALS - Email: {Email} | Password: Admin123!", adminEmail);
-            logger?.LogWarning("??  IMPORTANT: Change the password after first login in production!");
         }
 
         /// <summary>
-        /// Crea un usuario administrativo adicional (útil para desarrollo o múltiples admins)
+        /// Crea un usuario administrativo adicional (ï¿½til para desarrollo o mï¿½ltiples admins)
         /// </summary>
         public static async Task CreateAdminUserAsync(
             AdminDbContext adminDb,

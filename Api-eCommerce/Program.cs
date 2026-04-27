@@ -5,17 +5,22 @@ using Api_eCommerce.Handlers;
 using Api_eCommerce.Metering;
 using Api_eCommerce.Middleware;
 using Api_eCommerce.Workers;
+using CC.Aplication.Auth;
 using CC.Aplication.Assets;
 using CC.Aplication.Admin;
+using CC.Aplication.Notifications;
 using CC.Aplication.Services;
 using CC.Domain.Assets;
 using CC.Domain.Interfaces;
+using CC.Domain.Interfaces.Notifications;
 using CC.Domain.Tenancy;
 using CC.Infraestructure.Configurations;
 using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin;
 using CC.Infraestructure.EF;
+using CC.Infraestructure.Notifications;
+using CC.Infraestructure.Notifications.Repositories;
 using CC.Infraestructure.Provisioning;
 using CC.Infraestructure.Sql;
 using CC.Infraestructure.Tenancy;
@@ -130,6 +135,16 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddScoped<ITenantSecretProtector, AesTenantSecretProtector>();
 builder.Services.AddScoped<ITenantResolver, TenantResolver>();
+builder.Services
+    .AddOptions<SecurityTokenOptions>()
+    .Bind(builder.Configuration.GetSection(SecurityTokenOptions.SectionName))
+    .Validate(options => options.ActivationTokenExpirationHours > 0,
+        "SecurityTokens:ActivationTokenExpirationHours must be greater than zero.")
+    .Validate(options => options.PasswordResetTokenExpirationHours > 0,
+        "SecurityTokens:PasswordResetTokenExpirationHours must be greater than zero.")
+    .Validate(options => options.RetentionDays > 0,
+        "SecurityTokens:RetentionDays must be greater than zero.")
+    .ValidateOnStart();
 
 // ==================== EF CORE SERVICES ====================
 builder.Services.AddScoped<IMigrationRunner, MigrationRunner>();
@@ -149,6 +164,22 @@ builder.Services.AddScoped<CC.Aplication.Admin.IAdminRoleManagementService, CC.A
 builder.Services.AddScoped<CC.Aplication.Admin.IAdminAuditService, CC.Aplication.Admin.AdminAuditService>();
 builder.Services.AddScoped<CC.Aplication.Roles.IRoleService, CC.Aplication.Roles.RoleService>();
 builder.Services.AddScoped<CC.Aplication.Users.IUserManagementService, CC.Aplication.Users.UserManagementService>();
+builder.Services.AddScoped<IUserSecurityTokenService, UserSecurityTokenService>();
+builder.Services.AddSingleton<TenantAccountSecuritySettings>();
+builder.Services.AddScoped<ITenantAccountSecurityService, TenantAccountSecurityService>();
+builder.Services.AddScoped<INotificationEventDefinitionRepository, NotificationEventDefinitionRepository>();
+builder.Services.AddScoped<INotificationTemplateRepository, NotificationTemplateRepository>();
+builder.Services.AddScoped<ITenantNotificationPreferenceRepository, TenantNotificationPreferenceRepository>();
+builder.Services.AddScoped<ITenantNotificationQuotaRepository, TenantNotificationQuotaRepository>();
+builder.Services.AddScoped<ITenantNotificationCreditLedgerRepository, TenantNotificationCreditLedgerRepository>();
+builder.Services.AddScoped<INotificationDeliveryLogRepository, NotificationDeliveryLogRepository>();
+builder.Services.AddScoped<INotificationTenantPlanRepository, NotificationTenantPlanRepository>();
+builder.Services.AddScoped<INotificationUnitOfWork, NotificationUnitOfWork>();
+builder.Services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
+builder.Services.AddScoped<INotificationQuotaService, NotificationQuotaService>();
+builder.Services.AddScoped<INotificationEligibilityService, NotificationEligibilityService>();
+builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+builder.Services.AddNotificationEmailServices(builder.Configuration);
 
 // ==================== BUSINESS SERVICES (TENANT) ====================
 builder.Services.AddScoped<ICatalogService, CatalogService>();
@@ -295,12 +326,13 @@ if (!app.Environment.IsEnvironment("Testing"))
         logger.LogInformation("🌱 Seeding AdminDb...");
         await CC.Infraestructure.Admin.AdminDbSeeder.SeedAsync(adminDb, logger);
 
-        logger.LogInformation("🔄 Applying pending migrations for READY tenant databases...");
+        logger.LogInformation("🔄 Applying pending migrations for provisioned tenant databases...");
         var protector = scope.ServiceProvider.GetRequiredService<ITenantSecretProtector>();
         var tenantFactory = scope.ServiceProvider.GetRequiredService<TenantDbContextFactory>();
 
         var readyTenants = await adminDb.Tenants
-            .Where(t => t.Status == TenantStatus.Ready && !string.IsNullOrWhiteSpace(t.EncryptedConnection))
+            .Where(t => (t.Status == TenantStatus.Active || t.Status == TenantStatus.PendingActivation)
+                && !string.IsNullOrWhiteSpace(t.EncryptedConnection))
             .ToListAsync();
 
         foreach (var tenant in readyTenants)

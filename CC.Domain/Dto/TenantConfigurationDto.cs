@@ -19,11 +19,11 @@ namespace CC.Domain.Dto
 
   public class LocaleConfig
   {
-    public string Locale { get; set; } = "es-CO";
-    public string Currency { get; set; } = "COP";
-    public string CurrencySymbol { get; set; } = "$";
+    public string Locale { get; set; } = "es-HN";
+    public string Currency { get; set; } = "HNL";
+    public string CurrencySymbol { get; set; } = "L";
     public decimal TaxRate { get; set; } = 19;
-    public string Timezone { get; set; } = "America/Bogota";
+    public string Timezone { get; set; } = "America/Tegucigalpa";
   }
 
   public class BrandingConfig

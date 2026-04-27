@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using CC.Domain.Notifications;
+using CC.Domain.SecurityTokens;
 using CC.Infraestructure.Admin.Entities;
 using TenantEntity = CC.Infraestructure.Admin.Entities.Tenant;
 
@@ -23,6 +25,13 @@ namespace CC.Infraestructure.AdminDb
         public DbSet<PlanLimit> PlanLimits => Set<PlanLimit>();  // ? NUEVO
         public DbSet<TenantFeatureOverride> TenantFeatureOverrides => Set<TenantFeatureOverride>();
         public DbSet<TenantUsageDaily> TenantUsageDaily => Set<TenantUsageDaily>();
+        public DbSet<NotificationEventDefinition> NotificationEventDefinitions => Set<NotificationEventDefinition>();
+        public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
+        public DbSet<TenantNotificationPreference> TenantNotificationPreferences => Set<TenantNotificationPreference>();
+        public DbSet<TenantNotificationQuota> TenantNotificationQuotas => Set<TenantNotificationQuota>();
+        public DbSet<TenantNotificationCreditLedger> TenantNotificationCreditLedgers => Set<TenantNotificationCreditLedger>();
+        public DbSet<NotificationDeliveryLog> NotificationDeliveryLogs => Set<NotificationDeliveryLog>();
+        public DbSet<UserSecurityToken> UserSecurityTokens => Set<UserSecurityToken>();
 
         // Entidades de administraci�n
         public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
@@ -46,11 +55,15 @@ namespace CC.Infraestructure.AdminDb
                 entity.Property(t => t.EncryptionKeyId).HasMaxLength(100);
                 entity.Property(t => t.EncryptionAlgorithm).HasMaxLength(50);
                 entity.Property(t => t.EncryptionVersion).HasMaxLength(20);
+                entity.Property(t => t.PrimaryAdminEmail).HasMaxLength(255);
             });
 
             modelBuilder.Entity<PlanFeature>().HasKey(x => new { x.PlanId, x.FeatureId });
             modelBuilder.Entity<TenantFeatureOverride>().HasKey(x => new { x.TenantId, x.FeatureId });
             modelBuilder.Entity<TenantUsageDaily>().HasKey(x => new { x.TenantId, x.Date });
+
+            ConfigureNotifications(modelBuilder);
+            ConfigureSecurityTokens(modelBuilder);
 
             // ? NUEVO: Configurar PlanLimit
             modelBuilder.Entity<PlanLimit>(entity =>
@@ -189,6 +202,133 @@ namespace CC.Infraestructure.AdminDb
                     .WithMany()
                     .HasForeignKey(e => e.AdminUserId)
                     .OnDelete(DeleteBehavior.Restrict); // No eliminar logs si se elimina usuario
+            });
+        }
+
+        private static void ConfigureNotifications(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<NotificationEventDefinition>(entity =>
+            {
+                entity.ToTable("NotificationEventDefinitions", "admin");
+                entity.HasKey(item => item.Id);
+                entity.HasIndex(item => new { item.Code, item.Channel }).IsUnique();
+                entity.Property(item => item.Code).IsRequired().HasMaxLength(100);
+                entity.Property(item => item.Name).IsRequired().HasMaxLength(200);
+                entity.Property(item => item.Description).HasMaxLength(500);
+                entity.Property(item => item.Category).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.Channel).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.TemplateCode).IsRequired().HasMaxLength(100);
+                entity.Property(item => item.CreatedAt).IsRequired();
+            });
+
+            modelBuilder.Entity<NotificationTemplate>(entity =>
+            {
+                entity.ToTable("NotificationTemplates", "admin");
+                entity.HasKey(item => item.Id);
+                entity.HasIndex(item => new { item.Code, item.Channel, item.Version }).IsUnique();
+                entity.Property(item => item.Code).IsRequired().HasMaxLength(100);
+                entity.Property(item => item.Channel).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.SourceType).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.Name).IsRequired().HasMaxLength(200);
+                entity.Property(item => item.SubjectTemplate).HasMaxLength(500);
+                entity.Property(item => item.HtmlTemplate);
+                entity.Property(item => item.TextTemplate);
+                entity.Property(item => item.AvailableVariablesJson).HasColumnType("jsonb");
+                entity.Property(item => item.CreatedAt).IsRequired();
+            });
+
+            modelBuilder.Entity<TenantNotificationPreference>(entity =>
+            {
+                entity.ToTable("TenantNotificationPreferences", "admin");
+                entity.HasKey(item => item.Id);
+                entity.HasIndex(item => new { item.TenantId, item.EventCode, item.Channel }).IsUnique();
+                entity.Property(item => item.EventCode).IsRequired().HasMaxLength(100);
+                entity.Property(item => item.Channel).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.CreatedAt).IsRequired();
+                entity.HasOne<TenantEntity>()
+                    .WithMany()
+                    .HasForeignKey(item => item.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<TenantNotificationQuota>(entity =>
+            {
+                entity.ToTable("TenantNotificationQuotas", "admin", tableBuilder =>
+                {
+                    tableBuilder.HasCheckConstraint("CK_TenantNotificationQuota_UsedEmailCredits_NonNegative", "\"UsedEmailCredits\" >= 0");
+                    tableBuilder.HasCheckConstraint("CK_TenantNotificationQuota_ReservedEmailCredits_NonNegative", "\"ReservedEmailCredits\" >= 0");
+                });
+                entity.HasKey(item => item.Id);
+                entity.HasIndex(item => new { item.TenantId, item.PeriodYear, item.PeriodMonth }).IsUnique();
+                entity.Property(item => item.CreatedAt).IsRequired();
+                entity.HasOne<TenantEntity>()
+                    .WithMany()
+                    .HasForeignKey(item => item.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<TenantNotificationCreditLedger>(entity =>
+            {
+                entity.ToTable("TenantNotificationCreditLedgers", "admin");
+                entity.HasKey(item => item.Id);
+                entity.HasIndex(item => new { item.TenantId, item.PeriodYear, item.PeriodMonth });
+                entity.Property(item => item.Channel).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.MovementType).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.Reason).IsRequired().HasMaxLength(500);
+                entity.Property(item => item.ReferenceType).HasMaxLength(100);
+                entity.Property(item => item.ReferenceId).HasMaxLength(100);
+                entity.Property(item => item.CreatedAt).IsRequired();
+                entity.HasOne<TenantEntity>()
+                    .WithMany()
+                    .HasForeignKey(item => item.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<NotificationDeliveryLog>(entity =>
+            {
+                entity.ToTable("NotificationDeliveryLogs", "admin");
+                entity.HasKey(item => item.Id);
+                entity.HasIndex(item => new { item.TenantId, item.CreatedAt });
+                entity.HasIndex(item => new { item.EventCode, item.Status });
+                entity.Property(item => item.EventCode).IsRequired().HasMaxLength(100);
+                entity.Property(item => item.TemplateCode).HasMaxLength(100);
+                entity.Property(item => item.Channel).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.Recipient).IsRequired().HasMaxLength(320);
+                entity.Property(item => item.FromEmail).HasMaxLength(320);
+                entity.Property(item => item.FromName).HasMaxLength(200);
+                entity.Property(item => item.ReplyTo).HasMaxLength(320);
+                entity.Property(item => item.Subject).HasMaxLength(500);
+                entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(50);
+                entity.Property(item => item.Provider).HasMaxLength(100);
+                entity.Property(item => item.ProviderMessageId).HasMaxLength(200);
+                entity.Property(item => item.ErrorCode).HasMaxLength(100);
+                entity.Property(item => item.ErrorMessage).HasMaxLength(2000);
+                entity.Property(item => item.ReferenceType).HasMaxLength(100);
+                entity.Property(item => item.ReferenceId).HasMaxLength(100);
+                entity.Property(item => item.CreatedAt).IsRequired();
+                entity.HasOne<TenantEntity>()
+                    .WithMany()
+                    .HasForeignKey(item => item.TenantId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+        }
+
+        private static void ConfigureSecurityTokens(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<UserSecurityToken>(entity =>
+            {
+                entity.ToTable("UserSecurityToken", "admin");
+                entity.HasKey(item => item.Id);
+                entity.HasIndex(item => item.TokenHash).IsUnique();
+                entity.HasIndex(item => new { item.UserId, item.Purpose, item.UsedAt, item.RevokedAt });
+                entity.HasIndex(item => new { item.TenantId, item.Purpose });
+                entity.HasIndex(item => item.ExpiresAt);
+                entity.Property(item => item.Purpose).HasConversion<string>().HasMaxLength(100).IsRequired();
+                entity.Property(item => item.TokenHash).HasMaxLength(128).IsRequired();
+                entity.Property(item => item.ConsumedIp).HasMaxLength(45);
+                entity.Property(item => item.ConsumedUserAgent).HasMaxLength(1024);
+                entity.Property(item => item.CreatedAt).IsRequired();
+                entity.Property(item => item.ExpiresAt).IsRequired();
             });
         }
     }

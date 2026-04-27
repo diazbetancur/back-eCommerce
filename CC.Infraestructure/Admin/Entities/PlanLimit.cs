@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using CC.Domain.Notifications;
 
 namespace CC.Infraestructure.Admin.Entities
 {
@@ -81,6 +82,7 @@ namespace CC.Infraestructure.Admin.Entities
 
         // Email/Notificaciones
         public const string MaxEmailsPerDay = "max_emails_per_day";
+        public const string IncludedEmailCreditsPerMonth = NotificationPlanLimitCodes.IncludedEmailCreditsPerMonth;
         public const string MaxPushNotificationsPerDay = "max_push_notifications_per_day";
     }
 }

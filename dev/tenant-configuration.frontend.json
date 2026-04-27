@@ -11,9 +11,7 @@
       "SEO"
     ],
     "tenantAdminFeatures": "read-only via /api/features and /api/tenant-config",
-    "superAdminCanModify": [
-      "Feature flags by tenant (FeatureFlagsJson)"
-    ]
+    "superAdminCanModify": ["Feature flags by tenant (FeatureFlagsJson)"]
   },
   "auth": {
     "tenantAdminHeaders": {
@@ -56,9 +54,9 @@
           "tikTok": "https://tiktok.com/@mitienda"
         },
         "locale": {
-          "locale": "es-CO",
-          "currency": "COP",
-          "currencySymbol": "$",
+          "locale": "es-HN",
+          "currency": "HNL",
+          "currencySymbol": "L",
           "taxRate": 19
         },
         "seo": {

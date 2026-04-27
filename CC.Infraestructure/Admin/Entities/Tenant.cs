@@ -5,12 +5,13 @@ namespace CC.Infraestructure.Admin.Entities
 {
     public enum TenantStatus
     {
-        Pending = 0,
+        PendingActivation = 0,
         Seeding = 1,
-        Ready = 2,
+        Active = 2,
         Suspended = 3,
         Failed = 4,
-        Disabled = 5
+        Disabled = 5,
+        Deleted = 6
     }
 
     [Table("Tenants", Schema = "admin")]
@@ -41,6 +42,9 @@ namespace CC.Infraestructure.Admin.Entities
 
         public Guid? PlanId { get; set; }
         public Plan? Plan { get; set; }
+        public Guid? PrimaryAdminUserId { get; set; }
+        [MaxLength(255)]
+        public string? PrimaryAdminEmail { get; set; }
         public string? FeatureFlagsJson { get; set; }
         public string? AllowedOrigins { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

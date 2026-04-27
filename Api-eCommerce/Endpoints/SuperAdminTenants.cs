@@ -1,4 +1,6 @@
 using Api_eCommerce.Authorization;
+using CC.Aplication.Auth;
+using CC.Aplication.Notifications;
 using CC.Domain.Assets;
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
@@ -6,6 +8,7 @@ using CC.Infraestructure.Tenancy;
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
 using CC.Domain.Helpers;
+using CC.Domain.Users;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
 // DTOs para SuperAdmin
@@ -21,14 +25,14 @@ public record CreateTenantRequest(string Slug, string Name, string PlanCode, str
 public record ChangeTenantPlanRequest(string PlanCode);
 
 /// <summary>
-/// Respuesta de creación de tenant con credenciales temporales
+/// Respuesta de creación de tenant con activación pendiente
 /// </summary>
 public record CreateTenantResponse
 {
     public string Slug { get; init; } = string.Empty;
     public string Status { get; init; } = string.Empty;
     public string AdminEmail { get; init; } = string.Empty;
-    public string TemporaryPassword { get; init; } = string.Empty;
+    public bool ActivationNotificationAccepted { get; init; }
     public string Message { get; init; } = string.Empty;
 }
 
@@ -114,6 +118,9 @@ namespace Api_eCommerce.Endpoints
             TenantDbContextFactory factory,
             ILoggerFactory loggerFactory,
             IOptions<TenantSecretsOptions> tenantSecretOptions,
+            INotificationPreferenceService notificationPreferenceService,
+            INotificationQuotaService notificationQuotaService,
+            ITenantAccountSecurityService tenantAccountSecurityService,
             [FromBody] CreateTenantRequest request)
         {
             var logger = loggerFactory.CreateLogger("SuperAdminTenants");
@@ -169,13 +176,14 @@ namespace Api_eCommerce.Endpoints
                 Slug = request.Slug,
                 Name = request.Name,
                 DbName = dbName,
-                Status = TenantStatus.Pending,
+                Status = TenantStatus.PendingActivation,
                 PlanId = plan.Id,
                 CreatedAt = DateTime.UtcNow
             };
 
-            // Variable para almacenar el password temporal (se genera después)
-            string? tempPassword = null;
+            Guid? primaryAdminUserId = null;
+            var adminFirstName = "Admin";
+            var adminLastName = "System";
 
             try
             {
@@ -244,47 +252,61 @@ namespace Api_eCommerce.Endpoints
                     await TenantDbSeeder.SeedRolePermissionsAsync(tenantDb, logger);
 
                     // PASO 2: Crear usuario admin con el email personalizado
-                    if (!await tenantDb.Users.AnyAsync(u => u.Email == finalAdminEmail))
-                    {
-                        // Generar password aleatorio seguro
-                        tempPassword = PasswordExtensions.GenerateRandomPassword();
+                    var activationSeedPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+                    var adminUser = await TenantDbSeeder.CreateTenantUserAsync(
+                        tenantDb,
+                        tenantId: tenant.Id,
+                        email: finalAdminEmail,
+                        password: activationSeedPassword,
+                        roleName: "SuperAdmin",
+                        firstName: adminFirstName,
+                        lastName: adminLastName,
+                        status: UserStatus.PendingActivation,
+                        isActive: false,
+                        mustChangePassword: false,
+                        logger: logger
+                    );
 
-                        await TenantDbSeeder.CreateTenantUserAsync(
-                            tenantDb,
-                            tenantId: tenant.Id, // ✅ Pasar TenantId
-                            email: finalAdminEmail,
-                            password: tempPassword,
-                            roleName: "SuperAdmin",
-                            firstName: "Admin",
-                            lastName: "System",
-                            logger: logger
-                        );
-
-                        logger.LogInformation("✅ Admin user created: {Email}", finalAdminEmail);
-                        logger.LogWarning("⚠️  TEMP PASSWORD for {Email}: {Password}", finalAdminEmail, tempPassword);
-                    }
+                    primaryAdminUserId = adminUser.Id;
+                    logger.LogInformation("✅ Tenant primary admin created in pending activation state: {Email}", finalAdminEmail);
                 }
 
-                // 3. Marcar como Ready
+                // 3. Marcar como pending activation
                 tenant.EncryptedConnection = protector.Encrypt(tenantCs);
                 tenant.EncryptionKeyId = tenantSecretOptions.Value.KeyId;
                 tenant.EncryptionAlgorithm = tenantSecretOptions.Value.Algorithm;
                 tenant.EncryptionVersion = tenantSecretOptions.Value.Version;
-                tenant.Status = TenantStatus.Ready;
+                tenant.PrimaryAdminUserId = primaryAdminUserId;
+                tenant.PrimaryAdminEmail = finalAdminEmail;
+                tenant.Status = TenantStatus.PendingActivation;
                 tenant.LastError = null;
                 tenant.UpdatedAt = DateTime.UtcNow;
                 await adminDb.SaveChangesAsync();
 
+                await notificationPreferenceService.InitializeTenantPreferencesAsync(tenant.Id);
+                await notificationQuotaService.GrantMonthlyPlanCreditsAsync(tenant.Id);
+
+                var activationDispatch = await tenantAccountSecurityService.CreateTenantAdminActivationAsync(new TenantAdminActivationDispatchRequest
+                {
+                    TenantId = tenant.Id,
+                    UserId = primaryAdminUserId ?? throw new InvalidOperationException("Primary admin user was not created."),
+                    TenantSlug = tenant.Slug,
+                    TenantName = tenant.Name,
+                    AdminEmail = finalAdminEmail,
+                    AdminName = $"{adminFirstName} {adminLastName}".Trim()
+                });
+
                 logger.LogInformation("🎉 Tenant {Slug} created successfully", request.Slug);
 
-                // Retornar respuesta con credenciales temporales
                 return Results.Created($"/superadmin/tenants/{request.Slug}", new CreateTenantResponse
                 {
                     Slug = request.Slug,
-                    Status = "Ready",
+                    Status = tenant.Status.ToString(),
                     AdminEmail = finalAdminEmail,
-                    TemporaryPassword = tempPassword ?? "(existing user - no new password)",
-                    Message = "Tenant created successfully. Admin should change password on first login."
+                    ActivationNotificationAccepted = activationDispatch.NotificationAccepted,
+                    Message = activationDispatch.NotificationAccepted
+                        ? "Tenant created successfully. Admin activation is pending."
+                        : "Tenant created successfully. Admin activation is pending, but notification dispatch was not accepted."
                 });
             }
             catch (Exception ex)
@@ -348,7 +370,7 @@ namespace Api_eCommerce.Endpoints
                     await tenantDb.Database.MigrateAsync();
                 }
 
-                t.Status = TenantStatus.Ready;
+                t.Status = TenantStatus.Active;
                 t.LastError = null;
                 t.UpdatedAt = DateTime.UtcNow;
                 await adminDb.SaveChangesAsync();

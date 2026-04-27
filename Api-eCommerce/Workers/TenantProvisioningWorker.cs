@@ -1,6 +1,7 @@
 using CC.Infraestructure.AdminDb;
 using CC.Infraestructure.Admin.Entities;
 using CC.Infraestructure.Provisioning;
+using CC.Aplication.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -53,6 +54,7 @@ namespace Api_eCommerce.Workers
                     using var scope = _serviceScopeFactory.CreateScope();
                     var provisioner = scope.ServiceProvider.GetRequiredService<ITenantProvisioner>();
                     var adminDb = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
+                    var tenantAccountSecurityService = scope.ServiceProvider.GetRequiredService<ITenantAccountSecurityService>();
 
                     // Actualizar estado a "Seeding"
                     var tenant = await adminDb.Tenants.FindAsync(new object[] { tenantId }, stoppingToken);
@@ -68,6 +70,25 @@ namespace Api_eCommerce.Workers
 
                     if (success)
                     {
+                        tenant = await adminDb.Tenants.FindAsync(new object[] { tenantId }, stoppingToken);
+                        if (tenant?.PrimaryAdminUserId != null && !string.IsNullOrWhiteSpace(tenant.PrimaryAdminEmail))
+                        {
+                            var dispatchResult = await tenantAccountSecurityService.CreateTenantAdminActivationAsync(new TenantAdminActivationDispatchRequest
+                            {
+                                TenantId = tenant.Id,
+                                UserId = tenant.PrimaryAdminUserId.Value,
+                                TenantSlug = tenant.Slug,
+                                TenantName = tenant.Name,
+                                AdminEmail = tenant.PrimaryAdminEmail,
+                                AdminName = "Admin System"
+                            }, stoppingToken);
+
+                            if (!dispatchResult.NotificationAccepted)
+                            {
+                                _logger.LogWarning("Tenant {TenantId} was provisioned but activation notification was not accepted", tenantId);
+                            }
+                        }
+
                         _logger.LogInformation("Provisioning completed successfully for tenant {TenantId}", tenantId);
                     }
                     else
@@ -78,7 +99,7 @@ namespace Api_eCommerce.Workers
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Unhandled error processing tenant {TenantId}", tenantId);
-                    
+
                     // Intentar marcar como fallido
                     try
                     {

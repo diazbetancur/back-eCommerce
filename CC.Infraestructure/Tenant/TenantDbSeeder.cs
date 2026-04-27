@@ -1,8 +1,10 @@
 using CC.Infraestructure.Tenant;
 using CC.Infraestructure.Tenant.Entities;
+using CC.Domain.Users;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
 
 namespace CC.Infraestructure.Tenant
 {
@@ -16,9 +18,11 @@ namespace CC.Infraestructure.Tenant
         /// Seed de datos iniciales de un tenant (roles, admin user)
         /// Este método es IDEMPOTENTE - puede ejecutarse múltiples veces sin duplicar datos
         /// </summary>
-        public static async Task SeedAsync(
+        public static async Task<User> SeedAsync(
             TenantDbContext tenantDb,
+            Guid tenantId,
             string tenantSlug,
+            string adminEmail,
             ILogger? logger = null)
         {
             logger?.LogInformation("🌱 Starting TenantDb seed for tenant: {TenantSlug}", tenantSlug);
@@ -33,9 +37,10 @@ namespace CC.Infraestructure.Tenant
             await SeedRolePermissionsAsync(tenantDb, logger);
 
             // ==================== 4. SEED ADMIN USER ====================
-            await SeedTenantAdminAsync(tenantDb, tenantSlug, logger);
+            var tenantAdmin = await SeedTenantAdminAsync(tenantDb, tenantId, adminEmail, logger);
 
             logger?.LogInformation("✅ TenantDb seed completed for tenant: {TenantSlug}", tenantSlug);
+            return tenantAdmin;
         }
 
         /// <summary>
@@ -78,22 +83,20 @@ namespace CC.Infraestructure.Tenant
         }
 
         /// <summary>
-        /// Seed del usuario administrador del tenant
-        /// Credenciales: admin@{tenantSlug} / TenantAdmin123!
-        /// Datos: FirstName="Admin", LastName="System"
+        /// Seed del usuario administrador del tenant en estado pendiente de activación.
         /// </summary>
-        private static async Task SeedTenantAdminAsync(
+        private static async Task<User> SeedTenantAdminAsync(
             TenantDbContext tenantDb,
-            string tenantSlug,
+            Guid tenantId,
+            string adminEmail,
             ILogger? logger)
         {
-            var adminEmail = $"admin@{tenantSlug}";
-
             // Verificar si ya existe un admin para este tenant
-            if (await tenantDb.Users.AnyAsync(u => u.Email == adminEmail))
+            var existingUser = await tenantDb.Users.FirstOrDefaultAsync(u => u.Email == adminEmail);
+            if (existingUser != null)
             {
                 logger?.LogInformation("⚠️  Tenant admin user already exists, skipping seed");
-                return;
+                return existingUser;
             }
 
             logger?.LogInformation("Creating tenant admin user...");
@@ -108,12 +111,11 @@ namespace CC.Infraestructure.Tenant
                 throw new InvalidOperationException("SuperAdmin role not found. Roles must be seeded before users.");
             }
 
-            // Generar contraseña única por tenant
-            var password = $"TenantAdmin123!";
+            var activationSeedPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
             // Hash de contraseña usando Identity PasswordHasher
             var hasher = new PasswordHasher<User>();
-            var passwordHash = hasher.HashPassword(null!, password);
+            var passwordHash = hasher.HashPassword(null!, activationSeedPassword);
 
             // Crear usuario admin del tenant
             var tenantAdmin = new User
@@ -124,8 +126,10 @@ namespace CC.Infraestructure.Tenant
                 FirstName = "Admin",
                 LastName = "System",
                 PhoneNumber = null,
-                IsActive = true,
+                IsActive = false,
+                Status = UserStatus.PendingActivation,
                 MustChangePassword = false,
+                TenantId = tenantId,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -146,8 +150,7 @@ namespace CC.Infraestructure.Tenant
             await tenantDb.SaveChangesAsync();
 
             logger?.LogInformation("✅ Assigned SuperAdmin role to tenant user");
-            logger?.LogWarning("🔑 TENANT ADMIN CREDENTIALS - Email: {Email} | Password: {Password}", adminEmail, password);
-            logger?.LogWarning("⚠️  IMPORTANT: Tenant admin should change password after first login!");
+            return tenantAdmin;
         }
 
         /// <summary>
@@ -349,7 +352,7 @@ namespace CC.Infraestructure.Tenant
         /// <summary>
         /// Crea un usuario adicional para el tenant (útil para crear staff, customers, etc.)
         /// </summary>
-        public static async Task CreateTenantUserAsync(
+        public static async Task<User> CreateTenantUserAsync(
             TenantDbContext tenantDb,
             Guid tenantId,
             string email,
@@ -357,13 +360,17 @@ namespace CC.Infraestructure.Tenant
             string roleName,
             string firstName,
             string lastName,
+            UserStatus status = UserStatus.Active,
+            bool? isActive = null,
+            bool mustChangePassword = false,
             ILogger? logger = null)
         {
             // Verificar si el usuario ya existe
-            if (await tenantDb.Users.AnyAsync(u => u.Email == email))
+            var existingUser = await tenantDb.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (existingUser != null)
             {
                 logger?.LogWarning("⚠️  User {Email} already exists in tenant", email);
-                return;
+                return existingUser;
             }
 
             // Buscar rol
@@ -385,8 +392,9 @@ namespace CC.Infraestructure.Tenant
                 PasswordHash = passwordHash,
                 FirstName = firstName,
                 LastName = lastName,
-                IsActive = true,
-                MustChangePassword = false,
+                IsActive = isActive ?? status == UserStatus.Active,
+                Status = status,
+                MustChangePassword = mustChangePassword,
                 TenantId = tenantId, // ✅ Establecer TenantId
                 CreatedAt = DateTime.UtcNow
             };
@@ -406,6 +414,7 @@ namespace CC.Infraestructure.Tenant
             await tenantDb.SaveChangesAsync();
 
             logger?.LogInformation("✅ Created tenant user: {Email} with role {Role}", email, roleName);
+            return user;
         }
     }
 }

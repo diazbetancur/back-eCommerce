@@ -59,7 +59,7 @@ namespace CC.Aplication.Admin
             // Contar total
             var totalCount = await tenantsQuery.CountAsync(ct);
 
-            // Paginación
+            // Paginaciï¿½n
             var pageSize = Math.Clamp(query.PageSize, 1, 100);
             var page = Math.Max(query.Page, 1);
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -98,7 +98,7 @@ namespace CC.Aplication.Admin
                 throw new InvalidOperationException($"Tenant {tenantId} not found");
             }
 
-            // Obtener últimos pasos de provisioning
+            // Obtener ï¿½ltimos pasos de provisioning
             var recentSteps = await _adminDb.TenantProvisionings
                 .Where(tp => tp.TenantId == tenantId)
                 .OrderByDescending(tp => tp.StartedAt)
@@ -172,7 +172,7 @@ namespace CC.Aplication.Admin
 
             if (request.IsActive.HasValue)
             {
-                tenant.Status = request.IsActive.Value ? TenantStatus.Ready : TenantStatus.Suspended;
+                tenant.Status = request.IsActive.Value ? TenantStatus.Active : TenantStatus.Suspended;
             }
 
             tenant.UpdatedAt = DateTime.UtcNow;
@@ -197,7 +197,14 @@ namespace CC.Aplication.Admin
                 throw new InvalidOperationException($"Tenant {tenantId} not found");
             }
 
-            if (Enum.TryParse<TenantStatus>(request.Status, true, out var status))
+            var normalizedStatus = request.Status?.Trim() switch
+            {
+                "Ready" => nameof(TenantStatus.Active),
+                "Pending" => nameof(TenantStatus.PendingActivation),
+                _ => request.Status
+            };
+
+            if (Enum.TryParse<TenantStatus>(normalizedStatus, true, out var status))
             {
                 tenant.Status = status;
                 tenant.UpdatedAt = DateTime.UtcNow;

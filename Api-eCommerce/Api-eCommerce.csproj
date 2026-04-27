@@ -1,10 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Api_eCommerce</RootNamespace>
+    <UserSecretsId>fe1dedec-6344-4eb3-a2b4-0c5981182d9f</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

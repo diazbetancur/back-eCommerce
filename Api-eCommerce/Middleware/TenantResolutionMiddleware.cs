@@ -53,7 +53,7 @@ namespace Api_eCommerce.Middleware
             }
 
             // ==================== VERIFICAR SI LA RUTA ESTÁ EXCLUIDA ====================
-            if (IsExcludedPath(context.Request.Path))
+            if (IsExcludedPath(context.Request.Path) || IsPublicTenantContextRequest(context.Request))
             {
                 await _next(context);
                 return;
@@ -97,8 +97,7 @@ namespace Api_eCommerce.Middleware
                 }
 
                 // ==================== VERIFICAR STATUS ====================
-                // Solo permitir tenants en status "Ready"
-                if (tenant.Status != TenantStatus.Ready)
+                if (!IsAllowedStatusForPath(context.Request.Path, tenant.Status))
                 {
                     _logger.LogWarning(
                         "Tenant not available. Slug: {Slug}, Status: {Status}",
@@ -155,6 +154,26 @@ namespace Api_eCommerce.Middleware
         {
             var pathValue = path.Value?.ToLower() ?? string.Empty;
             return ExcludedPaths.Any(excluded => pathValue.StartsWith(excluded, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsAllowedStatusForPath(PathString path, TenantStatus status)
+        {
+            var pathValue = path.Value?.ToLowerInvariant() ?? string.Empty;
+
+            if (pathValue.StartsWith("/api/auth/activate-account", StringComparison.OrdinalIgnoreCase)
+                || pathValue.StartsWith("/api/auth/forgot-password", StringComparison.OrdinalIgnoreCase)
+                || pathValue.StartsWith("/api/auth/reset-password", StringComparison.OrdinalIgnoreCase))
+            {
+                return status == TenantStatus.PendingActivation || status == TenantStatus.Active;
+            }
+
+            return status == TenantStatus.Active;
+        }
+
+        private static bool IsPublicTenantContextRequest(HttpRequest request)
+        {
+            return HttpMethods.IsGet(request.Method)
+                && request.Path.StartsWithSegments("/api/public/tenant", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetTenantSlug(HttpContext context)

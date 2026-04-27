@@ -1226,7 +1226,7 @@ namespace CC.Aplication.Loyalty
             var allowCombineWithCoupons = ParseBool(settings.GetValueOrDefault(AllowCombineWithCouponsKey), false);
             var maxMoneyPerTransaction = ParseNullableDecimal(settings.GetValueOrDefault(MaxMoneyPerTransactionKey));
             var minimumPayableAmount = ParseDecimal(settings.GetValueOrDefault(MinimumPayableAmountKey), 0m);
-            var currency = settings.GetValueOrDefault(CurrencyKey) ?? "COP";
+            var currency = settings.GetValueOrDefault(CurrencyKey) ?? "HNL";
 
             return new LoyaltyPointsPaymentConfigDto(
                 IsEnabled: isEnabled,

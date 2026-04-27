@@ -21,6 +21,10 @@ namespace CC.Aplication.Provisioning
 
         [Required(ErrorMessage = "El plan es requerido")]
         public string Plan { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "El correo del administrador es requerido")]
+        [EmailAddress(ErrorMessage = "El correo del administrador debe tener un formato válido")]
+        public string AdminEmail { get; set; } = string.Empty;
     }
 
     /// <summary>

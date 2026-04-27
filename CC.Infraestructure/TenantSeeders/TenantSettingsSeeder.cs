@@ -19,11 +19,11 @@ namespace CC.Infraestructure.TenantSeeders
         ["StoreDescription"] = $"Bienvenido a {tenantName}",
 
         // ==================== LOCALE & MONEDA ====================
-        ["Locale"] = "es-CO",
-        ["Currency"] = "COP",
-        ["CurrencySymbol"] = "$",
-        ["TaxRate"] = "19", // IVA Colombia
-        ["Timezone"] = "America/Bogota",
+        ["Locale"] = "es-HN",
+        ["Currency"] = "HNL ",
+        ["CurrencySymbol"] = "L",
+        ["TaxRate"] = "19", // IVA Honduras
+        ["Timezone"] = "America/Tegucigalpa",
 
         // ==================== BRANDING ====================
         ["LogoUrl"] = "", // El admin lo configura después
@@ -144,11 +144,11 @@ namespace CC.Infraestructure.TenantSeeders
 
         Locale = new LocaleConfig
         {
-          Locale = settings.GetValueOrDefault("Locale", "es-CO"),
-          Currency = settings.GetValueOrDefault("Currency", "COP"),
-          CurrencySymbol = settings.GetValueOrDefault("CurrencySymbol", "$"),
+          Locale = settings.GetValueOrDefault("Locale", "es-HN"),
+          Currency = settings.GetValueOrDefault("Currency", "HNL"),
+          CurrencySymbol = settings.GetValueOrDefault("CurrencySymbol", "L"),
           TaxRate = decimal.TryParse(settings.GetValueOrDefault("TaxRate", "19"), out var tax) ? tax : 19m,
-          Timezone = settings.GetValueOrDefault("Timezone", "America/Bogota")
+          Timezone = settings.GetValueOrDefault("Timezone", "America/Tegucigalpa")
         },
 
         Branding = new BrandingConfig

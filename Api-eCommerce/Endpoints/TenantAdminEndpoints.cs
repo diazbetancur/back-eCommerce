@@ -1275,9 +1275,9 @@ namespace Api_eCommerce.Endpoints
                 },
                 Locale = new LocaleSettingsDto
                 {
-                    Locale = settings.GetValueOrDefault("Locale", "es-CO"),
-                    Currency = settings.GetValueOrDefault("Currency", "COP"),
-                    CurrencySymbol = settings.GetValueOrDefault("CurrencySymbol", "$"),
+                    Locale = settings.GetValueOrDefault("Locale", "es-HN"),
+                    Currency = settings.GetValueOrDefault("Currency", "HNL"),
+                    CurrencySymbol = settings.GetValueOrDefault("CurrencySymbol", "L"),
                     TaxRate = decimal.TryParse(settings.GetValueOrDefault("TaxRate", "0"), out var tax) ? tax : 0m
                 },
                 Seo = new SeoSettingsDto
@@ -1564,9 +1564,9 @@ namespace Api_eCommerce.Endpoints
 
     public record LocaleSettingsDto
     {
-        public string Locale { get; set; } = "es-CO";
-        public string Currency { get; set; } = "COP";
-        public string CurrencySymbol { get; set; } = "$";
+        public string Locale { get; set; } = "es-HN";
+        public string Currency { get; set; } = "HNL";
+        public string CurrencySymbol { get; set; } = "L";
         public decimal TaxRate { get; set; }
     }
 

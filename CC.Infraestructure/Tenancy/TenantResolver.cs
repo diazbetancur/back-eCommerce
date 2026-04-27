@@ -38,7 +38,7 @@ namespace CC.Infraestructure.Tenancy
       var tenant = await _adminDb.Tenants.FirstOrDefaultAsync(t => t.Slug == slug);
       if (tenant == null) return null;
 
-      if (tenant.Status != TenantStatus.Ready)
+      if (tenant.Status != TenantStatus.Active)
       {
         httpContext.Response.StatusCode = StatusCodes.Status423Locked;
         var payload = JsonSerializer.Serialize(new { errors = $"Tenant '{slug}' is not ready. Status={tenant.Status}" });
