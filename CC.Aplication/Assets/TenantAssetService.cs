@@ -246,8 +246,14 @@ public sealed class TenantAssetService : IAssetService
       return;
     }
 
-    await DeleteInternalAssetAsync(db, asset, ct);
+    var deleted = await DeleteInternalAssetAsync(db, asset, ct);
     await db.SaveChangesAsync(ct);
+
+    if (!deleted)
+    {
+      throw new InvalidOperationException(
+          $"Physical deletion failed for asset {assetId}. The file still exists in storage.");
+    }
   }
 
   public async Task<int> PurgeByEntityAsync(Guid tenantId, string module, string entityType, string entityId, CancellationToken ct = default)

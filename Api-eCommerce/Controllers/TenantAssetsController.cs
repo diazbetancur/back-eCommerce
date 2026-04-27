@@ -125,8 +125,18 @@ public class TenantAssetsController : ControllerBase
       return Problem(statusCode: StatusCodes.Status400BadRequest, title: TenantNotResolvedMessage);
     }
 
-    await _assetService.DeleteSingleAsync(_tenantAccessor.TenantInfo.Id, assetId, ct);
-    return NoContent();
+    try
+    {
+      await _assetService.DeleteSingleAsync(_tenantAccessor.TenantInfo.Id, assetId, ct);
+      return NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+      return Problem(
+          statusCode: StatusCodes.Status500InternalServerError,
+          title: "Error al eliminar asset",
+          detail: ex.Message);
+    }
   }
 
   [HttpPost("{assetId:guid}/set-primary")]
